@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import MainLayout from '@/components/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { DashboardStats, ProspectList, AgentConfig, CallLog } from '@/types';
 import { Phone, List, FileText, User, Calendar, Clock, AlertCircle } from 'lucide-react';
 
@@ -39,14 +39,30 @@ const Dashboard = () => {
 
       setIsLoading(true);
       try {
-        // Fetch stats
-        const { data: statsData, error: statsError } = await supabase
+        // Fetch stats for each status type separately instead of using group
+        const { data: pendingData, error: pendingError } = await supabase
           .from('prospects')
-          .select('status, count(*)', { count: 'exact' })
+          .select('count', { count: 'exact' })
           .eq('user_id', profile.id)
-          .group('status');
+          .eq('status', 'Pending');
           
-        if (statsError) throw statsError;
+        if (pendingError) throw pendingError;
+        
+        const { data: completedData, error: completedError } = await supabase
+          .from('prospects')
+          .select('count', { count: 'exact' })
+          .eq('user_id', profile.id)
+          .eq('status', 'Completed');
+          
+        if (completedError) throw completedError;
+        
+        // Get total prospects count
+        const { count: totalCount, error: totalError } = await supabase
+          .from('prospects')
+          .select('*', { count: 'exact' })
+          .eq('user_id', profile.id);
+          
+        if (totalError) throw totalError;
         
         // Get current date in UTC format
         const today = new Date().toISOString().split('T')[0];
@@ -77,17 +93,13 @@ const Dashboard = () => {
           ? validDurations.reduce((sum, duration) => sum + duration, 0) / validDurations.length
           : 0;
         
-        const totalProspects = statsData.reduce((sum, item) => sum + parseInt(item.count), 0);
-        const pendingProspects = statsData.find(item => item.status === 'Pending')?.count || 0;
-        const completedProspects = statsData.find(item => item.status === 'Completed')?.count || 0;
-        
         setStats({
           totalCalls,
           callsToday,
           callsThisWeek,
-          totalProspects,
-          pendingProspects: parseInt(pendingProspects as string),
-          completedProspects: parseInt(completedProspects as string),
+          totalProspects: totalCount || 0,
+          pendingProspects: pendingData?.count || 0,
+          completedProspects: completedData?.count || 0,
           averageCallDuration
         });
         
