@@ -98,8 +98,8 @@ const Dashboard = () => {
           callsToday,
           callsThisWeek,
           totalProspects: totalCount || 0,
-          pendingProspects: pendingData?.count || 0,
-          completedProspects: completedData?.count || 0,
+          pendingProspects: pendingData?.[0]?.count || 0,
+          completedProspects: completedData?.[0]?.count || 0,
           averageCallDuration
         });
         
