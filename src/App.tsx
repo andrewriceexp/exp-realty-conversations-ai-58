@@ -18,6 +18,7 @@ import Dashboard from "@/pages/Dashboard";
 import ProfileSetup from "@/pages/ProfileSetup";
 import NotFound from "@/pages/NotFound";
 import AIPromptTester from "@/components/AIPromptTester";
+import TextToSpeechTester from "@/components/TextToSpeechTester";
 
 const queryClient = new QueryClient();
 
@@ -49,10 +50,16 @@ const App = () => (
               </ProtectedRoute>
             } />
             
-            {/* AI Integration Test */}
+            {/* AI Integration Tests */}
             <Route path="/ai-test" element={
               <ProtectedRoute>
                 <AIPromptTester />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/tts-test" element={
+              <ProtectedRoute>
+                <TextToSpeechTester />
               </ProtectedRoute>
             } />
             

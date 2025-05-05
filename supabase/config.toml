@@ -1,1 +1,27 @@
+
 project_id = "uttebgyhijrdcjiczxrg"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+
+[functions.generate-with-ai]
+verify_jwt = true
+
+[functions.generate-speech]
+verify_jwt = true
