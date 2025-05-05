@@ -13,6 +13,7 @@ type AuthContextType = {
   signUp: (email: string, password: string, full_name: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (profile: Partial<Profile>) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>; // Added resetPassword function
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -161,6 +162,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Add resetPassword function implementation
+  const resetPassword = async (email: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        setError(error.message);
+        toast({
+          title: "Password Reset Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        throw error;
+      }
+      
+      toast({
+        title: "Password Reset Email Sent",
+        description: "Check your email for a password reset link",
+      });
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateProfile = async (profileData: Partial<Profile>) => {
     if (!user) {
       toast({
@@ -214,6 +247,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signUp,
         signOut,
         updateProfile,
+        resetPassword, // Add resetPassword to the context
       }}
     >
       {children}

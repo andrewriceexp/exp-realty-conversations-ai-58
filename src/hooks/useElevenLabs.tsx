@@ -113,7 +113,7 @@ export function useElevenLabs() {
       toast({
         title: "No audio to play",
         description: "Please generate speech first",
-        variant: "warning"
+        variant: "default" // Changed from "warning" to "default"
       });
     }
   };
