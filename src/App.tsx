@@ -17,6 +17,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import ProfileSetup from "@/pages/ProfileSetup";
 import NotFound from "@/pages/NotFound";
+import AIPromptTester from "@/components/AIPromptTester";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,13 @@ const App = () => (
             <Route path="/profile" element={
               <ProtectedRoute>
                 <ProfileSetup />
+              </ProtectedRoute>
+            } />
+            
+            {/* AI Integration Test */}
+            <Route path="/ai-test" element={
+              <ProtectedRoute>
+                <AIPromptTester />
               </ProtectedRoute>
             } />
             
