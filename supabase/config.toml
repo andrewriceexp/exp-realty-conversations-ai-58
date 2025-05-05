@@ -25,3 +25,7 @@ verify_jwt = true
 
 [functions.generate-speech]
 verify_jwt = true
+
+[functions.elevenlabs-voices]
+verify_jwt = true
+

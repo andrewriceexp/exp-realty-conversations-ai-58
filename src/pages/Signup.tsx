@@ -1,20 +1,29 @@
 
 import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 const signupSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
+  fullName: z.string().min(2, 'Full name is required'),
+  email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
-}).refine(data => data.password === data.confirmPassword, {
+  confirmPassword: z.string().min(6, 'Confirm your password'),
+}).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
@@ -22,13 +31,15 @@ const signupSchema = z.object({
 type SignupFormValues = z.infer<typeof signupSchema>;
 
 const Signup = () => {
-  const { signUp } = useAuth();
+  const { signUp, loading, error } = useAuth();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(error);
+  const [success, setSuccess] = useState(false);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
+      fullName: '',
       email: '',
       password: '',
       confirmPassword: '',
@@ -36,52 +47,110 @@ const Signup = () => {
   });
 
   const onSubmit = async (values: SignupFormValues) => {
+    setAuthError(null);
     try {
-      setIsLoading(true);
-      await signUp(values.email, values.password);
-      navigate('/login', { 
-        state: { 
-          message: 'Account created! Please check your email to verify your account.' 
-        } 
-      });
-    } catch (error) {
-      console.error('Signup error:', error);
-      setIsLoading(false);
+      await signUp(values.email, values.password, values.fullName);
+      setSuccess(true);
+      // Navigate to login page after a delay to allow the user to read the success message
+      setTimeout(() => navigate('/login', { replace: true }), 3000);
+    } catch (err) {
+      // Error is handled by the AuthContext
     }
   };
 
+  if (success) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md">
+          <Card>
+            <CardHeader>
+              <CardTitle>Registration Successful</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md bg-green-50 p-4 text-sm text-green-700">
+                <p>Your account has been created successfully!</p>
+                <p className="mt-2">Please check your email to verify your account.</p>
+                <p className="mt-2">You will be redirected to the login page shortly...</p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-center">
+              <Button
+                onClick={() => navigate('/login', { replace: true })}
+                variant="outline"
+              >
+                Go to Login
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md mb-8">
-        <div className="text-center mb-6">
-          <div className="flex justify-center">
-            <img src="/placeholder.svg" alt="eXp Realty Logo" className="h-12 mb-6" />
-          </div>
-          <h1 className="text-2xl font-bold text-exp-blue">eXp Realty Voice AI</h1>
-          <p className="text-sm text-gray-600 mt-1">Automated Prospecting Tool</p>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">eXp Voice AI</h1>
+          <p className="mt-2 text-gray-600">Create your prospecting account</p>
         </div>
         
         <Card>
           <CardHeader>
-            <CardTitle>Create Account</CardTitle>
-            <CardDescription>Sign up to start your automated prospecting journey</CardDescription>
+            <CardTitle>Create a new account</CardTitle>
+            <CardDescription>
+              Join eXp Voice AI and start prospecting smarter
+            </CardDescription>
           </CardHeader>
+          
           <CardContent>
+            {authError && (
+              <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+                {authError}
+              </div>
+            )}
+            
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="fullName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>Full Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="you@example.com" {...field} disabled={isLoading} />
+                        <Input
+                          placeholder="John Smith"
+                          autoComplete="name"
+                          disabled={loading}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email address</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="your@email.com"
+                          autoComplete="email"
+                          disabled={loading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
                 <FormField
                   control={form.control}
                   name="password"
@@ -89,12 +158,19 @@ const Signup = () => {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          disabled={loading}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="confirmPassword"
@@ -102,25 +178,35 @@ const Signup = () => {
                     <FormItem>
                       <FormLabel>Confirm Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} />
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          disabled={loading}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full exp-gradient" disabled={isLoading}>
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
+                
+                <Button
+                  type="submit"
+                  className="w-full exp-gradient"
+                  disabled={loading}
+                >
+                  {loading ? 'Creating Account...' : 'Create Account'}
                 </Button>
               </form>
             </Form>
           </CardContent>
-          <CardFooter className="flex justify-center">
-            <div className="text-sm text-center">
-              Already have an account?{' '}
-              <Link to="/login" className="text-exp-blue hover:underline">
-                Sign in
-              </Link>
-            </div>
+          
+          <CardFooter className="text-center text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-exp-blue hover:underline">
+              Sign in
+            </Link>
           </CardFooter>
         </Card>
       </div>
