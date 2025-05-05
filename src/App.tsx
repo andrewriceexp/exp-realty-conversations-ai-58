@@ -16,6 +16,7 @@ import ResetPassword from "@/pages/ResetPassword";
 // App Pages
 import Dashboard from "@/pages/Dashboard";
 import ProfileSetup from "@/pages/ProfileSetup";
+import ProspectManagement from "@/pages/ProspectManagement";
 import NotFound from "@/pages/NotFound";
 import AIPromptTester from "@/components/AIPromptTester";
 import TextToSpeechTester from "@/components/TextToSpeechTester";
@@ -47,6 +48,13 @@ const App = () => (
             <Route path="/profile" element={
               <ProtectedRoute>
                 <ProfileSetup />
+              </ProtectedRoute>
+            } />
+            
+            {/* Prospect Management */}
+            <Route path="/prospects" element={
+              <ProtectedRoute>
+                <ProspectManagement />
               </ProtectedRoute>
             } />
             
