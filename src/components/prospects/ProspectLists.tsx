@@ -61,10 +61,13 @@ const ProspectLists = ({ onSelectList }: ProspectListsProps) => {
         .from("prospect_lists")
         .select(`
           id, 
+          user_id,
           list_name, 
           description, 
-          created_at, 
           original_filename,
+          supabase_storage_path,
+          created_at,
+          updated_at,
           prospects:prospects(count)
         `)
         .eq("user_id", user?.id)
@@ -76,7 +79,7 @@ const ProspectLists = ({ onSelectList }: ProspectListsProps) => {
       const transformedData = data.map((list) => ({
         ...list,
         prospect_count: Array.isArray(list.prospects) ? list.prospects.length : 0
-      }));
+      })) as ProspectList[];
 
       setLists(transformedData);
     } catch (error: any) {
@@ -118,7 +121,12 @@ const ProspectLists = ({ onSelectList }: ProspectListsProps) => {
         description: `The list "${formData.list_name}" was created successfully.`,
       });
 
-      setLists([{ ...data, prospect_count: 0 }, ...lists]);
+      const newList = {
+        ...data,
+        prospect_count: 0
+      } as ProspectList;
+
+      setLists([newList, ...lists]);
       setFormData({ list_name: "", description: "" });
       setIsDialogOpen(false);
     } catch (error: any) {
@@ -237,12 +245,10 @@ const ProspectLists = ({ onSelectList }: ProspectListsProps) => {
             <p>Create a new list to get started with managing your prospects.</p>
           </CardContent>
           <CardFooter>
-            <DialogTrigger asChild>
-              <Button onClick={() => setIsDialogOpen(true)}>
-                <List className="mr-2 h-4 w-4" />
-                Create Your First List
-              </Button>
-            </DialogTrigger>
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <List className="mr-2 h-4 w-4" />
+              Create Your First List
+            </Button>
           </CardFooter>
         </Card>
       ) : (

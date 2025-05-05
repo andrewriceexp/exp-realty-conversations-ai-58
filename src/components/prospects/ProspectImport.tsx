@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -24,9 +24,9 @@ const ProspectImport = ({ onSuccess }: ProspectImportProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  useState(() => {
+  useEffect(() => {
     fetchProspectLists();
-  });
+  }, []);
 
   const fetchProspectLists = async () => {
     try {
@@ -34,13 +34,13 @@ const ProspectImport = ({ onSuccess }: ProspectImportProps) => {
       
       const { data, error } = await supabase
         .from("prospect_lists")
-        .select("id, list_name")
+        .select("id, list_name, description, original_filename, supabase_storage_path, created_at, updated_at, user_id")
         .eq("user_id", user?.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       
-      setLists(data);
+      setLists(data as ProspectList[]);
     } catch (error: any) {
       toast({
         title: "Error fetching prospect lists",
