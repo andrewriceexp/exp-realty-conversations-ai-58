@@ -149,6 +149,60 @@ export type Database = {
           },
         ]
       }
+      campaigns: {
+        Row: {
+          agent_config_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          prospect_list_id: string | null
+          scheduled_start: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_config_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          prospect_list_id?: string | null
+          scheduled_start?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_config_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          prospect_list_id?: string | null
+          scheduled_start?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_agent_config_id_fkey"
+            columns: ["agent_config_id"]
+            isOneToOne: false
+            referencedRelation: "agent_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_prospect_list_id_fkey"
+            columns: ["prospect_list_id"]
+            isOneToOne: false
+            referencedRelation: "prospect_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           a2p_10dlc_registered: boolean

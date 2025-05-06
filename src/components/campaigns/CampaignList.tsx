@@ -7,6 +7,7 @@ import { useCampaigns } from "@/hooks/useCampaigns";
 import CreateCampaignDialog from "./CreateCampaignDialog";
 import EmptyCampaignListState from "./EmptyCampaignListState";
 import CampaignListTable from "./CampaignListTable";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface CampaignListProps {
   onSelectCampaign: (campaign: Campaign) => void;
@@ -14,7 +15,7 @@ interface CampaignListProps {
 
 const CampaignList = ({ onSelectCampaign }: CampaignListProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { campaigns, loading, addCampaign, deleteCampaign } = useCampaigns();
+  const { campaigns, loading, addCampaign, deleteCampaign, updateCampaignStatus } = useCampaigns();
 
   return (
     <div className="space-y-4">
@@ -27,8 +28,10 @@ const CampaignList = ({ onSelectCampaign }: CampaignListProps) => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center p-4">
-          <p>Loading campaigns...</p>
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
         </div>
       ) : campaigns.length === 0 ? (
         <EmptyCampaignListState onCreateClick={() => setIsDialogOpen(true)} />
@@ -37,6 +40,7 @@ const CampaignList = ({ onSelectCampaign }: CampaignListProps) => {
           campaigns={campaigns} 
           onSelectCampaign={onSelectCampaign}
           onDeleteCampaign={deleteCampaign}
+          onUpdateStatus={updateCampaignStatus}
         />
       )}
 

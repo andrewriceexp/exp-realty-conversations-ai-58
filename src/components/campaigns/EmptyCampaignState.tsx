@@ -21,12 +21,29 @@ const EmptyCampaignState = () => {
       </CardHeader>
       <CardContent>
         <p>Voice AI campaigns allow you to automatically call prospects using your configured AI voice agent.</p>
+        <div className="mt-4 space-y-4">
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary mr-3">
+              1
+            </div>
+            <p className="text-sm">Create a prospect list by importing contacts</p>
+          </div>
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary mr-3">
+              2
+            </div>
+            <p className="text-sm">Configure an AI voice agent with your preferred settings</p>
+          </div>
+          <div className="flex items-center">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary mr-3">
+              3
+            </div>
+            <p className="text-sm">Create a campaign and select when to start calls</p>
+          </div>
+        </div>
       </CardContent>
       <CardFooter>
-        <Button disabled>
-          <Phone className="mr-2 h-4 w-4" />
-          Select a Campaign
-        </Button>
+        <p className="text-xs text-muted-foreground">Select a campaign from the list on the left to view its details and progress.</p>
       </CardFooter>
     </Card>
   );
