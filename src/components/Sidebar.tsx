@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, Menu, LayoutDashboard, Users, ListChecks, BarChart2, Settings, Bot, UserCircle2, X } from 'lucide-react';
 
@@ -17,7 +17,7 @@ interface SidebarProps {
 
 export default function Sidebar({ className }: SidebarProps) {
   const { user, profile, signOut } = useAuth();
-  const { isMobile } = useMobile();
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,10 +6,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Prospect, CallLog } from '@/types';
+import { ProspectList, Prospect, CallLog } from '@/types';
 import ProspectActions from './ProspectActions';
 
-const ProspectDetails = () => {
+interface ProspectDetailsProps {
+  list: ProspectList;
+}
+
+const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   const { id } = useParams();
   const { user } = useAuth();
   const [prospect, setProspect] = useState<Prospect | null>(null);
