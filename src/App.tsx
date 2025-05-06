@@ -18,6 +18,7 @@ import Dashboard from "@/pages/Dashboard";
 import ProfileSetup from "@/pages/ProfileSetup";
 import ProspectManagement from "@/pages/ProspectManagement";
 import CampaignManagement from "@/pages/CampaignManagement";
+import Analytics from "@/pages/Analytics";
 import NotFound from "@/pages/NotFound";
 import AIPromptTester from "@/components/AIPromptTester";
 import TextToSpeechTester from "@/components/TextToSpeechTester";
@@ -63,6 +64,13 @@ const App = () => (
             <Route path="/campaigns" element={
               <ProtectedRoute>
                 <CampaignManagement />
+              </ProtectedRoute>
+            } />
+            
+            {/* Analytics */}
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <Analytics />
               </ProtectedRoute>
             } />
             
