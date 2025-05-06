@@ -1,364 +1,346 @@
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import MainLayout from '@/components/MainLayout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/AuthContext';
+import { CalendarIcon, PhoneCall, Users, ListChecks, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Users, 
-  Phone, 
-  Calendar, 
-  Clock, 
-  ChevronRight,
-  ListChecks, 
-  Bot,
-  Settings
-} from 'lucide-react';
-import { DashboardStats, ProspectStatus } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import PreLaunchChecklist from '@/components/PreLaunchChecklist';
+import { useToast } from '@/hooks/use-toast';
 
+// Dashboard component to show overview of the system
 const Dashboard = () => {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalCalls: 0,
-    callsToday: 0,
-    callsThisWeek: 0,
+  const [stats, setStats] = useState({
     totalProspects: 0,
+    totalCalls: 0,
     pendingProspects: 0,
-    completedProspects: 0,
-    averageCallDuration: 0,
+    activeCampaigns: 0
   });
-  const [agentConfigCount, setAgentConfigCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [recentCalls, setRecentCalls] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
+  // Fetch dashboard data
   useEffect(() => {
-    if (user) {
-      fetchDashboardStats();
-      fetchAgentConfigCount();
-    }
-  }, [user]);
-
-  const fetchDashboardStats = async () => {
-    try {
-      setLoading(true);
-
-      // Get today and start of week dates
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday as start of week
-
-      // Get total calls
-      const { count: totalCalls, error: callsError } = await supabase
-        .from('call_logs')
-        .select('id', { count: 'exact', head: false })
-        .eq('user_id', user?.id);
-
-      // Get calls today
-      const { count: callsToday, error: todayError } = await supabase
-        .from('call_logs')
-        .select('id', { count: 'exact', head: false })
-        .eq('user_id', user?.id)
-        .gte('started_at', today.toISOString());
-
-      // Get calls this week
-      const { count: callsThisWeek, error: weekError } = await supabase
-        .from('call_logs')
-        .select('id', { count: 'exact', head: false })
-        .eq('user_id', user?.id)
-        .gte('started_at', startOfWeek.toISOString());
-
-      // Get prospect totals
-      const { data: prospects, error: prospectsError } = await supabase
-        .from('prospects')
-        .select('status')
-        .eq('user_id', user?.id);
-
-      // Get average call duration
-      const { data: callDurations, error: durationsError } = await supabase
-        .from('call_logs')
-        .select('call_duration_seconds')
-        .eq('user_id', user?.id)
-        .not('call_duration_seconds', 'is', null);
-
-      if (callsError || todayError || weekError || prospectsError || durationsError) {
-        console.error('Error fetching stats:', callsError || todayError || weekError || prospectsError || durationsError);
-        return;
+    if (!user) return;
+    
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get prospect counts
+        const { count: totalProspects, error: prospectsError } = await supabase
+          .from('prospects')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+          
+        if (prospectsError) throw prospectsError;
+        
+        // Get pending prospect count
+        const { count: pendingProspects, error: pendingError } = await supabase
+          .from('prospects')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('status', 'Pending');
+          
+        if (pendingError) throw pendingError;
+        
+        // Get call count
+        const { count: totalCalls, error: callsError } = await supabase
+          .from('call_logs')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+          
+        if (callsError) throw callsError;
+        
+        // Get active campaigns
+        const { count: activeCampaigns, error: campaignsError } = await supabase
+          .from('campaigns')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('status', 'Active');
+          
+        if (campaignsError) throw campaignsError;
+        
+        // Get recent calls
+        const { data: recentCallsData, error: recentError } = await supabase
+          .from('call_logs')
+          .select(`
+            id,
+            call_status,
+            started_at,
+            call_duration_seconds,
+            recording_url,
+            prospects!inner(id, first_name, last_name, phone_number)
+          `)
+          .eq('user_id', user.id)
+          .order('started_at', { ascending: false })
+          .limit(5);
+          
+        if (recentError) throw recentError;
+        
+        setStats({
+          totalProspects: totalProspects || 0,
+          pendingProspects: pendingProspects || 0,
+          totalCalls: totalCalls || 0,
+          activeCampaigns: activeCampaigns || 0
+        });
+        
+        setRecentCalls(recentCallsData || []);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        toast({
+          title: "Error loading dashboard data",
+          description: "Please try refreshing the page",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
       }
-
-      // Calculate prospect stats
-      const totalProspects = prospects?.length || 0;
-      const pendingProspects = prospects?.filter(p => p.status === 'Pending').length || 0;
-      const completedProspects = prospects?.filter(p => p.status === 'Completed').length || 0;
-
-      // Calculate average call duration
-      let averageCallDuration = 0;
-      if (callDurations && callDurations.length > 0) {
-        const totalDuration = callDurations.reduce((sum, call) => {
-          return sum + (call.call_duration_seconds || 0);
-        }, 0);
-        averageCallDuration = Math.round(totalDuration / callDurations.length);
-      }
-
-      setStats({
-        totalCalls: totalCalls || 0,
-        callsToday: callsToday || 0,
-        callsThisWeek: callsThisWeek || 0,
-        totalProspects,
-        pendingProspects,
-        completedProspects,
-        averageCallDuration,
-      });
-
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
+    };
+    
+    fetchDashboardData();
+  }, [user, toast]);
+  
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: 'numeric', 
+      minute: 'numeric' 
+    }).format(date);
   };
-
-  const fetchAgentConfigCount = async () => {
-    try {
-      const { count, error } = await supabase
-        .from('agent_configs')
-        .select('id', { count: 'exact', head: false })
-        .eq('user_id', user?.id);
-
-      if (error) {
-        console.error('Error fetching agent configs count:', error);
-        return;
-      }
-
-      setAgentConfigCount(count || 0);
-    } catch (error) {
-      console.error('Error fetching agent configs count:', error);
-    }
-  };
-
-  const formatTime = (seconds: number): string => {
+  
+  const formatDuration = (seconds: number) => {
+    if (!seconds) return 'N/A';
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Check if profile needs setup
-  const needsProfileSetup = profile && (!profile.twilio_account_sid || !profile.twilio_phone_number);
-
   return (
-    <MainLayout>
-      <div className="container mx-auto py-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-        </div>
-
-        {needsProfileSetup && (
-          <Card className="mb-6 border-yellow-200 bg-yellow-50">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-medium text-yellow-800">Complete Your Profile Setup</h3>
-                <p className="text-yellow-700">
-                  Configure your Twilio credentials to start making calls to prospects.
-                </p>
-              </div>
-              <Button onClick={() => navigate('/profile')}>
-                Complete Setup
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Total Calls</CardTitle>
-              <CardDescription>All time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <Phone className="w-8 h-8 text-blue-500 mr-2" />
-                <span className="text-3xl font-bold">{stats.totalCalls}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="pt-0 text-xs text-muted-foreground">
-              <div>
-                Today: {stats.callsToday} | This week: {stats.callsThisWeek}
-              </div>
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Prospects</CardTitle>
-              <CardDescription>Total prospects</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <Users className="w-8 h-8 text-green-500 mr-2" />
-                <span className="text-3xl font-bold">{stats.totalProspects}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="pt-0 text-xs text-muted-foreground">
-              <div>
-                Pending: {stats.pendingProspects} | Completed: {stats.completedProspects}
-              </div>
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Avg. Call Duration</CardTitle>
-              <CardDescription>All calls</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <Clock className="w-8 h-8 text-purple-500 mr-2" />
-                <span className="text-3xl font-bold">{formatTime(stats.averageCallDuration)}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="pt-0 text-xs text-muted-foreground">
-              <div>Minutes:seconds</div>
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Agent Configs</CardTitle>
-              <CardDescription>AI voice agents</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center">
-                <Bot className="w-8 h-8 text-orange-500 mr-2" />
-                <span className="text-3xl font-bold">{agentConfigCount}</span>
-              </div>
-            </CardContent>
-            <CardFooter className="pt-0 text-xs text-muted-foreground">
-              <div>
-                {agentConfigCount === 0 ? 'No agents configured yet' : 'Configured and ready'}
-              </div>
-            </CardFooter>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Manage your prospecting activities</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-4">
-              <Button 
-                variant="outline" 
-                className="flex justify-between w-full"
-                onClick={() => navigate('/prospects')}
-              >
-                <div className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  <span>Manage Prospects</span>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="flex justify-between w-full"
-                onClick={() => navigate('/campaigns')}
-              >
-                <div className="flex items-center">
-                  <ListChecks className="w-5 h-5 mr-2" />
-                  <span>Manage Campaigns</span>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className="flex justify-between w-full"
-                onClick={() => navigate('/agent-config')}
-              >
-                <div className="flex items-center">
-                  <Bot className="w-5 h-5 mr-2" />
-                  <span>Configure AI Agents</span>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="flex justify-between w-full"
-                onClick={() => navigate('/profile')}
-              >
-                <div className="flex items-center">
-                  <Settings className="w-5 h-5 mr-2" />
-                  <span>Profile Settings</span>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Next Steps</CardTitle>
-              <CardDescription>Complete these tasks to get started</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <div className={`w-5 h-5 rounded-full ${needsProfileSetup ? 'bg-yellow-500' : 'bg-green-500'} mr-3 mt-1 flex-shrink-0`}></div>
-                  <div>
-                    <h3 className="font-medium">Setup Twilio Integration</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {needsProfileSetup 
-                        ? 'Configure your Twilio credentials to enable outbound calling.'
-                        : 'Twilio integration is configured and ready.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className={`w-5 h-5 rounded-full ${stats.totalProspects === 0 ? 'bg-yellow-500' : 'bg-green-500'} mr-3 mt-1 flex-shrink-0`}></div>
-                  <div>
-                    <h3 className="font-medium">Import Prospects</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {stats.totalProspects === 0 
-                        ? 'Upload your first prospect list to start making calls.'
-                        : `You have ${stats.totalProspects} prospects ready for calling.`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className={`w-5 h-5 rounded-full ${agentConfigCount === 0 ? 'bg-yellow-500' : 'bg-green-500'} mr-3 mt-1 flex-shrink-0`}></div>
-                  <div>
-                    <h3 className="font-medium">Setup AI Agent</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {agentConfigCount === 0 
-                        ? 'Create your first AI agent with custom prompts and voice.'
-                        : `You have ${agentConfigCount} AI agent${agentConfigCount > 1 ? 's' : ''} configured.`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start">
-                  <div className={`w-5 h-5 rounded-full ${stats.totalCalls === 0 ? 'bg-yellow-500' : 'bg-green-500'} mr-3 mt-1 flex-shrink-0`}></div>
-                  <div>
-                    <h3 className="font-medium">Make Your First Call</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {stats.totalCalls === 0 
-                        ? 'Start your first AI-powered call to a prospect.'
-                        : `You've made ${stats.totalCalls} call${stats.totalCalls > 1 ? 's' : ''} so far.`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+    <div className="container mx-auto p-4 space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <Button onClick={() => navigate('/campaigns/new')}>New Campaign</Button>
       </div>
-    </MainLayout>
+      
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="setup">Launch Setup</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatsCard 
+              title="Total Prospects" 
+              value={stats.totalProspects} 
+              icon={<Users className="h-5 w-5" />}
+              description="Prospects in your database" 
+              loading={loading}
+            />
+            <StatsCard 
+              title="Pending Calls" 
+              value={stats.pendingProspects} 
+              icon={<PhoneCall className="h-5 w-5" />}
+              description="Prospects awaiting calls" 
+              loading={loading}
+            />
+            <StatsCard 
+              title="Total Calls Made" 
+              value={stats.totalCalls} 
+              icon={<PhoneCall className="h-5 w-5" />}
+              description="Completed voice interactions" 
+              loading={loading}
+            />
+            <StatsCard 
+              title="Active Campaigns" 
+              value={stats.activeCampaigns} 
+              icon={<ListChecks className="h-5 w-5" />}
+              description="Campaigns currently running" 
+              loading={loading}
+            />
+          </div>
+
+          {/* Recent Activity */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Recent Calls</CardTitle>
+              <CardDescription>Your latest prospect interactions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-4">Loading recent calls...</div>
+              ) : recentCalls.length > 0 ? (
+                <div className="divide-y">
+                  {recentCalls.map((call) => (
+                    <div key={call.id} className="py-3 flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">
+                          {call.prospects.first_name} {call.prospects.last_name}
+                        </p>
+                        <div className="flex items-center text-sm text-muted-foreground gap-2">
+                          <CalendarIcon className="h-3 w-3" /> 
+                          {formatDate(call.started_at)}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <CallStatusBadge status={call.call_status} />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {formatDuration(call.call_duration_seconds)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <PhoneCall className="mx-auto h-12 w-12 opacity-30 mb-2" />
+                  <p>No calls have been made yet</p>
+                  <Button 
+                    variant="link" 
+                    className="mt-2"
+                    onClick={() => navigate('/prospects')}
+                  >
+                    Go to prospects to make your first call
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+            {recentCalls.length > 0 && (
+              <CardFooter className="flex justify-end border-t pt-4">
+                <Button variant="outline" size="sm" onClick={() => navigate('/analytics')}>
+                  View All Call Activity
+                </Button>
+              </CardFooter>
+            )}
+          </Card>
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <QuickActionCard 
+              title="Import Prospects" 
+              description="Upload a CSV file with prospect information"
+              buttonText="Import Now"
+              onClick={() => navigate('/prospects/import')}
+            />
+            <QuickActionCard 
+              title="Configure AI Agent" 
+              description="Customize your AI voice assistant behavior"
+              buttonText="Configure"
+              onClick={() => navigate('/agent-config')}
+            />
+            <QuickActionCard 
+              title="Launch Campaign" 
+              description="Start a new automated calling campaign"
+              buttonText="Create Campaign"
+              onClick={() => navigate('/campaigns/new')}
+            />
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="setup">
+          <PreLaunchChecklist />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+// Stats Card Component
+const StatsCard = ({ 
+  title, 
+  value, 
+  icon, 
+  description, 
+  loading 
+}: { 
+  title: string; 
+  value: number; 
+  icon: React.ReactNode;
+  description: string;
+  loading: boolean;
+}) => {
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold mt-1">
+              {loading ? '—' : value}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">{description}</p>
+          </div>
+          <div className="p-2 bg-muted rounded-md">
+            {icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Quick Action Card Component
+const QuickActionCard = ({ 
+  title, 
+  description, 
+  buttonText, 
+  onClick 
+}: { 
+  title: string; 
+  description: string; 
+  buttonText: string; 
+  onClick: () => void;
+}) => {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardFooter>
+        <Button onClick={onClick} className="w-full">{buttonText}</Button>
+      </CardFooter>
+    </Card>
+  );
+};
+
+// Call Status Badge Component
+const CallStatusBadge = ({ status }: { status: string }) => {
+  let color = "bg-gray-100 text-gray-800";
+  
+  switch (status?.toLowerCase()) {
+    case "completed":
+      color = "bg-green-100 text-green-800";
+      break;
+    case "failed":
+      color = "bg-red-100 text-red-800";
+      break;
+    case "busy":
+    case "no-answer":
+      color = "bg-yellow-100 text-yellow-800";
+      break;
+    case "initiated":
+    case "ringing":
+      color = "bg-blue-100 text-blue-800";
+      break;
+    case "answered":
+      color = "bg-purple-100 text-purple-800";
+      break;
+  }
+  
+  return (
+    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${color}`}>
+      {status || "Unknown"}
+    </span>
   );
 };
 

@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, Menu, LayoutDashboard, Users, ListChecks, BarChart2, Settings, Bot, UserCircle2, X } from 'lucide-react';
+import { LogOut, Menu, LayoutDashboard, Users, ListChecks, BarChart2, Settings, Bot, UserCircle2, X, HelpCircle } from 'lucide-react';
 
 interface SidebarProps {
   className?: string;
@@ -54,11 +54,12 @@ export default function Sidebar({ className }: SidebarProps) {
 
         <ScrollArea className="flex-1 py-2">
           <div className="px-2 space-y-1">
-            <NavItem href="/" icon={LayoutDashboard} text="Dashboard" pathname={location.pathname} />
+            <NavItem href="/dashboard" icon={LayoutDashboard} text="Dashboard" pathname={location.pathname} />
             <NavItem href="/prospects" icon={Users} text="Prospects" pathname={location.pathname} />
             <NavItem href="/campaigns" icon={ListChecks} text="Campaigns" pathname={location.pathname} />
             <NavItem href="/agent-config" icon={Bot} text="AI Agents" pathname={location.pathname} />
             <NavItem href="/analytics" icon={BarChart2} text="Analytics" pathname={location.pathname} />
+            <NavItem href="/help" icon={HelpCircle} text="Help" pathname={location.pathname} />
           </div>
         </ScrollArea>
       </div>
