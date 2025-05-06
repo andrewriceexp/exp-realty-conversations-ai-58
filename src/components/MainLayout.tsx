@@ -1,7 +1,6 @@
 
 import Sidebar from '@/components/Sidebar';
-import { Toaster } from '@/components/ui/toaster';
-import { Toaster as Sonner } from '@/components/ui/sonner';
+import { Outlet } from 'react-router-dom';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -16,8 +15,6 @@ const MainLayout = ({ children }: MainLayoutProps) => {
           {children}
         </div>
       </main>
-      <Toaster />
-      <Sonner />
     </div>
   );
 };

@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Outlet } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -42,7 +42,13 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             
-            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            <Route element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Outlet />
+                </MainLayout>
+              </ProtectedRoute>
+            }>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/profile" element={<ProfileSetup />} />
               <Route path="/prospects/*" element={<ProspectManagement />} />
