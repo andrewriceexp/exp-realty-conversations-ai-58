@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/MainLayout';
@@ -10,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
@@ -109,11 +108,15 @@ const AgentConfigPage = () => {
       setIsSaving(true);
       
       const isNew = !currentConfig.id;
+      
+      // Remove created_at and updated_at from the payload
+      const { created_at, updated_at, ...configToSave } = currentConfig;
+      
       const { data, error } = isNew
         ? await supabase
             .from('agent_configs')
             .insert([{ 
-              ...currentConfig,
+              ...configToSave,
               user_id: user?.id,
             }])
             .select()
