@@ -1,4 +1,3 @@
-
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -80,6 +79,28 @@ export interface CallLog {
   prospect_phone?: string;
   config_name?: string;
 }
+
+// Campaign type from Supabase campaigns table
+export interface Campaign {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  prospect_list_id: string;
+  agent_config_id: string;
+  status: CampaignStatus;
+  scheduled_start: string | null;
+  created_at: string;
+  updated_at: string;
+  
+  // Added for UI convenience - populated via joins
+  prospect_list_name?: string;
+  agent_config_name?: string;
+  prospect_count?: number;
+}
+
+// Campaign status type
+export type CampaignStatus = 'Draft' | 'Scheduled' | 'Running' | 'Paused' | 'Completed' | 'Cancelled';
 
 // Enums
 export type ProspectStatus = 'Pending' | 'Calling' | 'Completed' | 'Failed' | 'Do Not Call';
