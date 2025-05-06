@@ -1,0 +1,143 @@
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Phone, Loader2 } from 'lucide-react';
+import { useTwilioCall } from '@/hooks/useTwilioCall';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { AgentConfig } from '@/types';
+
+interface ProspectActionsProps {
+  prospectId: string;
+  prospectName: string;
+}
+
+const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedConfigId, setSelectedConfigId] = useState<string>('');
+  const [configs, setConfigs] = useState<AgentConfig[]>([]);
+  const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
+  const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
+  const { user } = useAuth();
+
+  const openCallDialog = async () => {
+    setIsLoadingConfigs(true);
+    try {
+      const { data, error } = await supabase
+        .from('agent_configs')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      setConfigs(data || []);
+      if (data && data.length > 0) {
+        setSelectedConfigId(data[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading agent configurations:', error);
+    } finally {
+      setIsLoadingConfigs(false);
+      setIsDialogOpen(true);
+    }
+  };
+
+  const handleMakeCall = async () => {
+    if (!selectedConfigId || !user?.id) return;
+    
+    const response = await makeCall({
+      prospectId,
+      agentConfigId: selectedConfigId,
+      userId: user.id
+    });
+    
+    if (response.success) {
+      setIsDialogOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={openCallDialog}>
+        <Phone className="mr-2 h-4 w-4" /> Call
+      </Button>
+      
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Call {prospectName || 'Prospect'}</DialogTitle>
+            <DialogDescription>
+              Select an agent configuration to use for this call
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {isLoadingConfigs ? (
+              <div className="flex justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : configs.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-muted-foreground">No agent configurations available.</p>
+                <p className="text-sm mt-2">
+                  <Button 
+                    variant="link" 
+                    onClick={() => window.location.href = '/agent-config'}
+                  >
+                    Create one now
+                  </Button>
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="config">Agent Configuration</Label>
+                <Select
+                  value={selectedConfigId}
+                  onValueChange={setSelectedConfigId}
+                  disabled={configs.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a configuration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {configs.map(config => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.config_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleMakeCall} 
+              disabled={isCallingLoading || !selectedConfigId}
+            >
+              {isCallingLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Calling...
+                </>
+              ) : (
+                <>
+                  <Phone className="mr-2 h-4 w-4" /> Make Call
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+export default ProspectActions;

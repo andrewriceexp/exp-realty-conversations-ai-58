@@ -1,0 +1,247 @@
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// TwiML helper functions
+const twiml = {
+  VoiceResponse: function() {
+    let content = '<?xml version="1.0" encoding="UTF-8"?><Response>';
+    
+    return {
+      say: function(text, options = {}) {
+        const voice = options.voice || 'alice';
+        content += `<Say voice="${voice}">${text}</Say>`;
+        return this;
+      },
+      pause: function(options = {}) {
+        const length = options.length || 1;
+        content += `<Pause length="${length}"/>`;
+        return this;
+      },
+      record: function(options = {}) {
+        content += '<Record';
+        for (const [key, value] of Object.entries(options)) {
+          content += ` ${key}="${value}"`;
+        }
+        content += '/>';
+        return this;
+      },
+      gather: function(options = {}) {
+        content += '<Gather';
+        for (const [key, value] of Object.entries(options)) {
+          content += ` ${key}="${value}"`;
+        }
+        content += '>';
+        return {
+          say: function(text, sayOptions = {}) {
+            const voice = sayOptions.voice || 'alice';
+            content += `<Say voice="${voice}">${text}</Say>`;
+            return this;
+          },
+          endGather: function() {
+            content += '</Gather>';
+            return twiml.VoiceResponse();
+          }
+        };
+      },
+      hangup: function() {
+        content += '<Hangup/>';
+        return this;
+      },
+      toString: function() {
+        return content + '</Response>';
+      }
+    };
+  }
+};
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Parse URL and get query parameters
+    const url = new URL(req.url);
+    const callLogId = url.searchParams.get('call_log_id');
+    const prospectId = url.searchParams.get('prospect_id');
+    const agentConfigId = url.searchParams.get('agent_config_id');
+    const userId = url.searchParams.get('user_id');
+    
+    // Check path to see if this is a status callback
+    const isStatusCallback = url.pathname.endsWith('/status');
+    
+    if (isStatusCallback) {
+      return handleStatusCallback(req, callLogId);
+    }
+    
+    // Initialize Supabase client
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+    
+    // Retrieve the agent configuration
+    const { data: agentConfig, error: agentConfigError } = await supabaseClient
+      .from('agent_configs')
+      .select('*')
+      .eq('id', agentConfigId)
+      .single();
+      
+    if (agentConfigError) {
+      console.error('Error fetching agent config:', agentConfigError);
+      // Return a simple TwiML response in case of error
+      const response = twiml.VoiceResponse()
+        .say("I'm sorry, there was an error with the AI agent configuration. Please try again later.")
+        .hangup();
+        
+      return new Response(response.toString(), { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
+    // Retrieve prospect information
+    const { data: prospect, error: prospectError } = await supabaseClient
+      .from('prospects')
+      .select('first_name, last_name, phone_number, property_address')
+      .eq('id', prospectId)
+      .single();
+      
+    if (prospectError) {
+      console.error('Error fetching prospect:', prospectError);
+      const response = twiml.VoiceResponse()
+        .say("I'm sorry, there was an error retrieving your information. Please try again later.")
+        .hangup();
+        
+      return new Response(response.toString(), { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
+    // For this initial version, we'll use a simple prompt-based approach
+    // In a more advanced version, this would be replaced with more sophisticated AI dialog management
+    
+    // Generate a greeting based on the prospect's information
+    let greeting = "Hello";
+    
+    if (prospect.first_name) {
+      greeting += `, ${prospect.first_name}`;
+    }
+    
+    greeting += ". This is an AI assistant calling on behalf of eXp Realty. ";
+    greeting += "I'm reaching out to discuss your property needs. Would you be interested in speaking with one of our agents about ";
+    
+    if (prospect.property_address) {
+      greeting += `your property at ${prospect.property_address}?`;
+    } else {
+      greeting += "real estate opportunities in your area?";
+    }
+    
+    // Create a TwiML response
+    const response = twiml.VoiceResponse()
+      .say(greeting)
+      .pause({ length: 1 })
+      .gather({
+        input: 'speech',
+        action: `${url.origin}/twilio-process-response?call_log_id=${callLogId}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`,
+        method: 'POST',
+        timeout: 5,
+        speechTimeout: 'auto'
+      })
+      .say("I'm listening for your response. Please let me know if you'd be interested in speaking with an agent.")
+      .endGather()
+      .say("I didn't catch that. Thank you for your time. Goodbye.")
+      .hangup();
+    
+    // Update the call log with "Answered" status if this webhook was triggered
+    await supabaseClient
+      .from('call_logs')
+      .update({
+        call_status: 'Answered'
+      })
+      .eq('id', callLogId);
+    
+    return new Response(response.toString(), { 
+      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+    });
+  } catch (error) {
+    console.error('Error in twilio-call-webhook function:', error);
+    
+    // Return a simple TwiML response in case of error
+    const response = twiml.VoiceResponse()
+      .say("I'm sorry, there was an error processing this call. Please try again later.")
+      .hangup();
+      
+    return new Response(response.toString(), { 
+      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+    });
+  }
+});
+
+// Handle status callbacks from Twilio
+async function handleStatusCallback(req: Request, callLogId: string | null): Promise<Response> {
+  try {
+    // Initialize Supabase client
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+    
+    // Parse the form data from Twilio
+    const formData = await req.formData();
+    const callSid = formData.get('CallSid')?.toString();
+    const callStatus = formData.get('CallStatus')?.toString();
+    const callDuration = formData.get('CallDuration')?.toString();
+    const recordingUrl = formData.get('RecordingUrl')?.toString();
+    
+    console.log(`Status update for call ${callSid}: ${callStatus}`);
+    
+    if (callLogId && callStatus) {
+      const updateData: any = {
+        call_status: callStatus.charAt(0).toUpperCase() + callStatus.slice(1) // Capitalize first letter
+      };
+      
+      // Add fields conditionally
+      if (callDuration) {
+        updateData.call_duration_seconds = parseInt(callDuration, 10);
+      }
+      
+      if (recordingUrl) {
+        updateData.recording_url = recordingUrl;
+      }
+      
+      // If call is completed or failed, update the ended_at field
+      if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus)) {
+        updateData.ended_at = new Date().toISOString();
+      }
+      
+      // Update the call log with the status
+      const { error } = await supabaseClient
+        .from('call_logs')
+        .update(updateData)
+        .eq('id', callLogId);
+        
+      if (error) {
+        console.error('Error updating call log:', error);
+      }
+    }
+    
+    return new Response('Status received', { 
+      headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
+    });
+  } catch (error) {
+    console.error('Error in status callback handler:', error);
+    return new Response('Error processing status callback', { 
+      status: 500,
+      headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
+    });
+  }
+}

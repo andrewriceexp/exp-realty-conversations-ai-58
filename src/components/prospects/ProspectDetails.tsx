@@ -1,270 +1,222 @@
 
-import { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/contexts/AuthContext";
-import { Prospect, ProspectList } from "@/types";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Edit, MoreHorizontal, Search, Trash } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { Prospect, CallLog } from '@/types';
+import ProspectActions from './ProspectActions';
 
-interface ProspectDetailsProps {
-  list: ProspectList;
-}
-
-const ProspectDetails = ({ list }: ProspectDetailsProps) => {
-  const [prospects, setProspects] = useState<Prospect[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const { toast } = useToast();
+const ProspectDetails = () => {
+  const { id } = useParams();
   const { user } = useAuth();
+  const [prospect, setProspect] = useState<Prospect | null>(null);
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchProspects();
-  }, [list.id]);
+    fetchProspectData();
+  }, [id]);
 
-  const fetchProspects = async () => {
+  const fetchProspectData = async () => {
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase
-        .from("prospects")
-        .select("*")
-        .eq("list_id", list.id)
-        .eq("user_id", user?.id)
-        .order("created_at", { ascending: false });
+      if (!id || !user) return;
 
-      if (error) throw error;
+      // Fetch prospect details
+      const { data: prospectData, error: prospectError } = await supabase
+        .from('prospects')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (prospectError) throw prospectError;
+      setProspect(prospectData);
+
+      // Fetch call logs for this prospect
+      const { data: callLogsData, error: callLogsError } = await supabase
+        .from('call_logs')
+        .select(`
+          *,
+          agent_configs:agent_config_id (config_name)
+        `)
+        .eq('prospect_id', id)
+        .eq('user_id', user.id)
+        .order('started_at', { ascending: false });
+
+      if (callLogsError) throw callLogsError;
       
-      setProspects(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Error fetching prospects",
-        description: error.message,
-        variant: "destructive",
-      });
+      // Transform the data to include the config name
+      const transformedCallLogs = callLogsData.map(log => ({
+        ...log,
+        config_name: log.agent_configs ? log.agent_configs.config_name : 'Unknown'
+      }));
+      
+      setCallLogs(transformedCallLogs);
+    } catch (error) {
+      console.error('Error fetching prospect data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStatusChange = async (prospectId: string, newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from("prospects")
-        .update({ status: newStatus })
-        .eq("id", prospectId)
-        .eq("user_id", user?.id);
-
-      if (error) throw error;
-      
-      setProspects(
-        prospects.map((prospect) =>
-          prospect.id === prospectId
-            ? { ...prospect, status: newStatus as any }
-            : prospect
-        )
-      );
-      
-      toast({
-        title: "Status updated",
-        description: `Prospect status changed to ${newStatus}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error updating status",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
   };
 
-  const handleDeleteProspect = async (prospectId: string) => {
-    if (!confirm("Are you sure you want to delete this prospect?")) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("prospects")
-        .delete()
-        .eq("id", prospectId)
-        .eq("user_id", user?.id);
-
-      if (error) throw error;
-      
-      setProspects(prospects.filter((prospect) => prospect.id !== prospectId));
-      
-      toast({
-        title: "Prospect deleted",
-        description: "The prospect has been removed from the list.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error deleting prospect",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const formatPhoneNumber = (phoneNumber: string) => {
-    const cleaned = phoneNumber.replace(/\D/g, "");
-    if (cleaned.length === 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-    } else if (cleaned.length === 11 && cleaned.startsWith("1")) {
-      return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-    }
-    return phoneNumber;
-  };
-
-  const filteredProspects = prospects.filter((prospect) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      (prospect.first_name?.toLowerCase().includes(searchLower) || false) ||
-      (prospect.last_name?.toLowerCase().includes(searchLower) || false) ||
-      prospect.phone_number.includes(searchQuery) ||
-      (prospect.property_address?.toLowerCase().includes(searchLower) || false)
-    );
-  });
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "Pending":
-        return "outline";
-      case "Calling":
-        return "default";
-      case "Completed":
-        return "secondary";
-      case "Failed":
-        return "destructive";
-      case "Do Not Call":
-        return "destructive";
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'bg-yellow-500 hover:bg-yellow-600';
+      case 'calling':
+        return 'bg-blue-500 hover:bg-blue-600';
+      case 'completed':
+        return 'bg-green-500 hover:bg-green-600';
+      case 'failed':
+        return 'bg-red-500 hover:bg-red-600';
+      case 'do not call':
+        return 'bg-gray-500 hover:bg-gray-600';
       default:
-        return "outline";
+        return 'bg-gray-500 hover:bg-gray-600';
     }
   };
+
+  const formatCallDuration = (seconds: number | null) => {
+    if (!seconds) return 'N/A';
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-1/3" />
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
+  if (!prospect) {
+    return <div>Prospect not found.</div>;
+  }
+
+  const prospectName = [prospect.first_name, prospect.last_name]
+    .filter(Boolean)
+    .join(' ') || 'Unnamed Prospect';
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h2 className="text-xl font-semibold">{list.list_name}</h2>
-          <p className="text-muted-foreground">
-            {list.description || "No description provided"}
-          </p>
-        </div>
-        
-        <div className="flex w-full sm:w-auto">
-          <div className="relative w-full sm:w-[300px]">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search prospects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8"
-            />
-          </div>
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold">{prospectName}</h2>
+        <div className="flex items-center space-x-2">
+          <Badge className={getStatusColor(prospect.status)}>{prospect.status}</Badge>
+          <ProspectActions 
+            prospectId={prospect.id} 
+            prospectName={prospectName} 
+          />
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center p-8">
-          <p>Loading prospects...</p>
-        </div>
-      ) : prospects.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-center">
-          <h3 className="font-semibold">No prospects in this list</h3>
-          <p className="text-muted-foreground mt-1">
-            Import prospects or create prospects manually.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProspects.map((prospect) => (
-                <TableRow key={prospect.id}>
-                  <TableCell className="font-medium">
-                    {prospect.first_name || ""} {prospect.last_name || ""}
-                    {!prospect.first_name && !prospect.last_name && "(No name)"}
-                  </TableCell>
-                  <TableCell>{formatPhoneNumber(prospect.phone_number)}</TableCell>
-                  <TableCell>{prospect.property_address || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(prospect.status)}>
-                      {prospect.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteProspect(prospect.id)}
-                          className="text-destructive"
-                        >
-                          <Trash className="mr-2 h-4 w-4" />
-                          Delete Prospect
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Set Status</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleStatusChange(prospect.id, "Pending")}>
-                          Pending
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(prospect.id, "Calling")}>
-                          Calling
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(prospect.id, "Completed")}>
-                          Completed
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(prospect.id, "Failed")}>
-                          Failed
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(prospect.id, "Do Not Call")}>
-                          Do Not Call
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+      <Card>
+        <CardHeader>
+          <CardTitle>Prospect Details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center gap-2">
+              <PhoneIcon className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium">{prospect.phone_number}</span>
+            </div>
+            {prospect.property_address && (
+              <div className="flex items-center gap-2">
+                <MapPinIcon className="h-5 w-5 text-muted-foreground" />
+                <span>{prospect.property_address}</span>
+              </div>
+            )}
+            {prospect.last_call_attempted && (
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-muted-foreground" />
+                <span>Last contacted: {formatDate(prospect.last_call_attempted)}</span>
+              </div>
+            )}
+            {prospect.notes && (
+              <div className="flex items-start gap-2 md:col-span-2">
+                <ClipboardListIcon className="h-5 w-5 text-muted-foreground mt-1" />
+                <span>{prospect.notes}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Call History</CardTitle>
+          <CardDescription>Previous interactions with this prospect</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {callLogs.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              No calls have been made to this prospect yet.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {callLogs.map((log) => (
+                <Card key={log.id} className="border border-gray-200">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-blue-500">{log.call_status}</Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {formatDate(log.started_at)}
+                        </span>
+                      </div>
+                      <div className="text-sm">
+                        Duration: {formatCallDuration(log.call_duration_seconds)}
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm mb-2">
+                      Agent config: <span className="font-medium">{log.config_name}</span>
+                    </div>
+                    
+                    {log.transcript && (
+                      <div className="mt-2">
+                        <h4 className="text-sm font-medium mb-1">Transcript:</h4>
+                        <p className="text-sm bg-muted p-2 rounded">{log.transcript}</p>
+                      </div>
+                    )}
+                    
+                    {log.summary && (
+                      <div className="mt-2">
+                        <h4 className="text-sm font-medium mb-1">Summary:</h4>
+                        <p className="text-sm">{log.summary}</p>
+                      </div>
+                    )}
+                    
+                    {log.recording_url && (
+                      <div className="mt-2">
+                        <h4 className="text-sm font-medium mb-1">Recording:</h4>
+                        <audio controls src={log.recording_url} className="w-full">
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
