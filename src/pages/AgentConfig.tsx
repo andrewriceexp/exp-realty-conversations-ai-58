@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '@/components/MainLayout';
@@ -109,8 +110,13 @@ const AgentConfigPage = () => {
       
       const isNew = !currentConfig.id;
       
-      // Remove created_at and updated_at from the payload
-      const { created_at, updated_at, ...configToSave } = currentConfig;
+      // Remove created_at, updated_at, and id (if it's an empty string) from the payload
+      const { created_at, updated_at, ...configWithPossibleEmptyId } = currentConfig;
+      
+      // For new configs, remove the empty id
+      const configToSave = isNew 
+        ? { ...configWithPossibleEmptyId, id: undefined }  // Remove id completely for new configs
+        : configWithPossibleEmptyId;
       
       const { data, error } = isNew
         ? await supabase
