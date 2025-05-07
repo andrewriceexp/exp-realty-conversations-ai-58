@@ -27,24 +27,36 @@ export function useTwilioCall() {
     setError(null);
     
     try {
-      const { data, error } = await supabase.functions.invoke('twilio-make-call', {
+      console.log('Initiating call with options:', options);
+      
+      const { data, error: invokeError } = await supabase.functions.invoke('twilio-make-call', {
         body: options,
       });
       
-      if (error) throw new Error(error.message);
+      console.log('Edge function response:', data);
       
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to initiate call');
+      if (invokeError) {
+        console.error('Edge function error:', invokeError);
+        throw new Error(`Edge Function error: ${invokeError.message}`);
       }
       
-      toast({
-        title: "Call initiated",
-        description: "The AI agent is now calling the prospect.",
-      });
+      if (!data || data.error) {
+        throw new Error(data?.error || 'Failed to initiate call');
+      }
       
-      return data;
+      if (data.success) {
+        toast({
+          title: "Call initiated",
+          description: "The AI agent is now calling the prospect.",
+        });
+        
+        return data;
+      } else {
+        throw new Error(data.error || 'Failed to initiate call');
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to make call';
+      console.error('Call error:', errorMessage);
       setError(errorMessage);
       toast({
         title: "Call failed",

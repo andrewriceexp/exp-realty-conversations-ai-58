@@ -8,21 +8,37 @@ const twilioClient = (accountSid: string, authToken: string) => {
   const client = {
     calls: {
       create: async (params: any) => {
-        const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams(params).toString(),
-        });
+        console.log("Creating call with params:", JSON.stringify(params));
         
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(JSON.stringify(error));
+        try {
+          const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams(params).toString(),
+          });
+          
+          const responseText = await response.text();
+          console.log(`Twilio API Response Status: ${response.status}`);
+          
+          if (!response.ok) {
+            console.error(`Twilio API Error: ${responseText}`);
+            throw new Error(`Twilio API Error: ${response.status} - ${responseText}`);
+          }
+          
+          try {
+            return JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("Error parsing Twilio response:", parseError);
+            console.log("Raw response:", responseText);
+            throw new Error("Invalid response format from Twilio API");
+          }
+        } catch (error) {
+          console.error("Error making Twilio API call:", error);
+          throw error;
         }
-        
-        return response.json();
       }
     }
   };
@@ -42,9 +58,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log("Received twilio-make-call request");
+
   try {
     // Get request payload
     const { prospectId, agentConfigId, userId } = await req.json();
+    
+    console.log("Request params:", { prospectId, agentConfigId, userId });
     
     if (!prospectId || !agentConfigId || !userId) {
       return new Response(
@@ -70,6 +90,7 @@ serve(async (req) => {
       .single();
       
     if (profileError) {
+      console.error("Profile error:", profileError);
       return new Response(
         JSON.stringify({ error: `Failed to get user profile: ${profileError.message}` }),
         { 
@@ -78,6 +99,8 @@ serve(async (req) => {
         }
       );
     }
+    
+    console.log("Profile fetched, checking Twilio credentials");
     
     if (!profileData.twilio_account_sid || !profileData.twilio_auth_token || !profileData.twilio_phone_number) {
       return new Response(
@@ -97,6 +120,7 @@ serve(async (req) => {
       .single();
       
     if (prospectError) {
+      console.error("Prospect error:", prospectError);
       return new Response(
         JSON.stringify({ error: `Failed to get prospect: ${prospectError.message}` }),
         { 
@@ -105,6 +129,8 @@ serve(async (req) => {
         }
       );
     }
+    
+    console.log("Prospect fetched, creating call log");
     
     // Create a call log entry before initiating the call
     const { data: callLogData, error: callLogError } = await supabaseClient
@@ -121,6 +147,7 @@ serve(async (req) => {
       .single();
       
     if (callLogError) {
+      console.error("Call log error:", callLogError);
       return new Response(
         JSON.stringify({ error: `Failed to create call log: ${callLogError.message}` }),
         { 
@@ -136,6 +163,8 @@ serve(async (req) => {
     const twilioPhoneNumber = profileData.twilio_phone_number;
     const twilio = twilioClient(twilioAccountSid, twilioAuthToken);
     
+    console.log("Call log created, preparing webhook URLs");
+    
     // Calculate the absolute URL for the webhook
     const baseUrl = Deno.env.get('SUPABASE_URL') || '';
     const projectRef = baseUrl.split('https://')[1]?.split('.')[0] || '';
@@ -143,18 +172,32 @@ serve(async (req) => {
     
     // Add query parameters with context info
     const webhookWithParams = `${webhookUrl}?call_log_id=${callLogData.id}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
+    const statusWebhook = `${webhookUrl}/status?call_log_id=${callLogData.id}`;
+    
+    console.log("Webhook URL:", webhookWithParams);
+    console.log("Status webhook URL:", statusWebhook);
     
     try {
+      // Format the phone number to E.164 format if needed
+      let formattedPhoneNumber = prospectData.phone_number;
+      if (!formattedPhoneNumber.startsWith('+')) {
+        formattedPhoneNumber = `+1${formattedPhoneNumber.replace(/\D/g, '')}`;
+      }
+      
+      console.log(`Initiating Twilio call to ${formattedPhoneNumber} from ${twilioPhoneNumber}`);
+      
       // Initiate the call via Twilio
       const call = await twilio.calls.create({
         url: webhookWithParams,
-        to: prospectData.phone_number,
+        to: formattedPhoneNumber,
         from: twilioPhoneNumber,
-        statusCallback: `${webhookUrl}/status?call_log_id=${callLogData.id}`,
+        statusCallback: statusWebhook,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         statusCallbackMethod: 'POST',
         record: 'true',
       });
+      
+      console.log("Twilio call initiated successfully:", call.sid);
       
       // Update the call log with the Twilio SID
       await supabaseClient
@@ -197,7 +240,10 @@ serve(async (req) => {
         .eq('id', callLogData.id);
       
       return new Response(
-        JSON.stringify({ error: `Twilio error: ${twilioError.message}` }),
+        JSON.stringify({ 
+          error: `Twilio error: ${twilioError.message}`,
+          success: false
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -207,7 +253,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in twilio-make-call function:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Unknown error occurred' }),
+      JSON.stringify({ 
+        error: error.message || 'Unknown error occurred',
+        success: false
+      }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

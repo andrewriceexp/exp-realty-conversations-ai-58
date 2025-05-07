@@ -9,6 +9,7 @@ import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProspectActionsProps {
   prospectId: string;
@@ -22,24 +23,35 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
   const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const openCallDialog = async () => {
     setIsLoadingConfigs(true);
     try {
+      console.log('Fetching agent configurations');
       const { data, error } = await supabase
         .from('agent_configs')
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading agent configurations:', error);
+        throw error;
+      }
       
+      console.log(`Fetched ${data?.length || 0} agent configurations`);
       setConfigs(data || []);
       if (data && data.length > 0) {
         setSelectedConfigId(data[0].id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading agent configurations:', error);
+      toast({
+        title: 'Error loading configurations',
+        description: error.message || 'Failed to load agent configurations',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoadingConfigs(false);
       setIsDialogOpen(true);
@@ -47,20 +59,46 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   };
 
   const handleMakeCall = async () => {
-    if (!selectedConfigId || !user?.id) return;
+    if (!selectedConfigId || !user?.id) {
+      toast({
+        title: 'Missing information',
+        description: 'Please select an agent configuration',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     try {
+      console.log('Making call with:', {
+        prospectId,
+        agentConfigId: selectedConfigId,
+        userId: user.id
+      });
+      
       const response = await makeCall({
         prospectId,
         agentConfigId: selectedConfigId,
         userId: user.id
       });
       
+      console.log('Call response:', response);
+      
       if (response.success) {
         setIsDialogOpen(false);
+        toast({
+          title: 'Call initiated',
+          description: `Call to ${prospectName} initiated successfully.`,
+        });
+      } else {
+        throw new Error(response.error || 'Unknown error initiating call');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error making call:", error);
+      toast({
+        title: 'Call failed',
+        description: error.message || 'An error occurred while trying to make the call',
+        variant: 'destructive',
+      });
     }
   };
 
