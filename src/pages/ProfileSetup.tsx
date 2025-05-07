@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -33,6 +33,13 @@ const ProfileSetup = () => {
   const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [hasAuthToken, setHasAuthToken] = useState(false);
+  
+  useEffect(() => {
+    if (profile) {
+      setHasAuthToken(!!profile.twilio_auth_token);
+    }
+  }, [profile]);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -40,7 +47,7 @@ const ProfileSetup = () => {
       full_name: profile?.full_name || '',
       exp_realty_id: profile?.exp_realty_id || '',
       twilio_account_sid: profile?.twilio_account_sid || '',
-      twilio_auth_token: '',
+      twilio_auth_token: '',  // Always start with an empty auth token field
       twilio_phone_number: profile?.twilio_phone_number || '',
       a2p_10dlc_registered: profile?.a2p_10dlc_registered || false,
     },
@@ -50,11 +57,18 @@ const ProfileSetup = () => {
     try {
       setIsLoading(true);
       
-      // Only update the auth token if one was provided
-      const updateData: any = {...values};
-      if (!values.twilio_auth_token) {
+      // Create update object
+      const updateData: any = { ...values };
+      
+      // Only update the auth token if one was provided (not empty)
+      if (!updateData.twilio_auth_token) {
         delete updateData.twilio_auth_token;
       }
+      
+      console.log('Submitting profile update with data:', { 
+        ...updateData, 
+        twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined 
+      });
       
       await updateProfile(updateData);
       navigate('/');

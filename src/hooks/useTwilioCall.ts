@@ -105,7 +105,6 @@ export function useTwilioCall() {
         title: errorTitle,
         description: errorDescription,
         variant: variant,
-        // We don't include the action here, we'll handle the UI in the components
       });
       
       return {

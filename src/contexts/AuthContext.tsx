@@ -13,7 +13,7 @@ type AuthContextType = {
   signUp: (email: string, password: string, full_name: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (profile: Partial<Profile>) => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; // Added resetPassword function
+  resetPassword: (email: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,6 +60,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log("Fetching profile for user:", userId);
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -71,6 +72,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
+      console.log("Profile fetched:", data);
       setProfile(data);
     } catch (err) {
       console.error("Error in profile fetch:", err);
@@ -207,12 +209,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       
+      console.log("Updating profile with data:", { ...profileData, id: user.id });
+      
+      // Note: We specifically do NOT delete the twilio_auth_token field here anymore
+      // If it's empty that's fine, but we want to allow the endpoint to handle that logic
+      
       const { error } = await supabase
         .from("profiles")
         .update(profileData)
         .eq("id", user.id);
 
       if (error) {
+        console.error("Profile update error:", error);
         toast({
           title: "Profile Update Failed",
           description: error.message,
@@ -221,7 +229,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
 
-      // Refresh the profile
+      // Refresh the profile to get the updated data
       await fetchProfile(user.id);
       
       toast({
