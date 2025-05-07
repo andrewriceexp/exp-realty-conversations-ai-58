@@ -88,15 +88,13 @@ export interface Campaign {
   description: string | null;
   prospect_list_id: string;
   agent_config_id: string;
-  status: CampaignStatus;
+  status: "Draft" | "Scheduled" | "Running" | "Paused" | "Completed" | "Cancelled";
   scheduled_start: string | null;
   created_at: string;
   updated_at: string;
-  
-  // Added for UI convenience - populated via joins
   prospect_list_name?: string;
   agent_config_name?: string;
-  prospect_count?: number;
+  calls_made?: number;
 }
 
 // Campaign status type

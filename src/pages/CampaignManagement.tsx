@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Clock } from "lucide-react";
 import { formatDistance } from "date-fns";
 import { useCampaigns } from "@/hooks/useCampaigns";
-import MainLayout from "@/components/MainLayout";
+import CampaignCaller from "@/components/campaigns/CampaignCaller";
 
 const CampaignManagement = () => {
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
@@ -164,7 +164,18 @@ const CampaignManagement = () => {
                 </div>
               </div>
               
-              <div className="border-t pt-4">
+              {selectedCampaign.status === 'Running' && (
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-medium mb-2">Campaign Calling</h3>
+                  <CampaignCaller 
+                    campaignId={selectedCampaign.id}
+                    prospectListId={selectedCampaign.prospect_list_id}
+                    agentConfigId={selectedCampaign.agent_config_id}
+                  />
+                </div>
+              )}
+
+              <div className="border-t pt-4 mt-4">
                 <h3 className="text-lg font-medium mb-2">Campaign Progress</h3>
                 <div className="text-center py-6 text-muted-foreground">
                   <p>Campaign progress tracking and call logs will be displayed here.</p>

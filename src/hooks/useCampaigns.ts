@@ -43,7 +43,8 @@ export const useCampaigns = () => {
         created_at: item.created_at,
         updated_at: item.updated_at,
         prospect_list_name: item.prospect_lists?.list_name || "",
-        agent_config_name: item.agent_configs?.config_name || ""
+        agent_config_name: item.agent_configs?.config_name || "",
+        calls_made: item.calls_made || 0
       }));
       
       setCampaigns(formattedCampaigns);
