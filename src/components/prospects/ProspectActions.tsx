@@ -49,14 +49,18 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const handleMakeCall = async () => {
     if (!selectedConfigId || !user?.id) return;
     
-    const response = await makeCall({
-      prospectId,
-      agentConfigId: selectedConfigId,
-      userId: user.id
-    });
-    
-    if (response.success) {
-      setIsDialogOpen(false);
+    try {
+      const response = await makeCall({
+        prospectId,
+        agentConfigId: selectedConfigId,
+        userId: user.id
+      });
+      
+      if (response.success) {
+        setIsDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error making call:", error);
     }
   };
 

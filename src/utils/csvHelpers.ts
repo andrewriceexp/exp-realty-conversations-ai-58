@@ -39,3 +39,31 @@ export const downloadFile = (content: string, fileName: string, contentType: str
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Parses a CSV string into an array of arrays
+ */
+export const parseCSV = (csvText: string): {headers: string[], rows: string[][]} => {
+  const rows = csvText.split('\n').filter(row => row.trim());
+  const headers = rows[0].split(',').map(header => header.trim().toLowerCase());
+  
+  const dataRows = rows.slice(1).map(row => {
+    return row.split(',').map(cell => cell.trim());
+  });
+  
+  return { headers, rows: dataRows };
+};
+
+/**
+ * Validates a CSV file has the required headers
+ */
+export const validateCSVHeaders = (headers: string[]): {valid: boolean, message?: string} => {
+  if (!headers.includes('phone_number')) {
+    return {
+      valid: false,
+      message: "CSV must include a 'phone_number' column"
+    };
+  }
+  
+  return { valid: true };
+};
