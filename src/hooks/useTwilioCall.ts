@@ -40,14 +40,18 @@ export function useTwilioCall() {
         throw new Error(`Edge Function error: ${invokeError.message}`);
       }
       
-      if (!data || data.error) {
-        throw new Error(data?.error || 'Failed to initiate call');
+      if (!data) {
+        throw new Error('No response from Edge Function');
+      }
+      
+      if (data.error) {
+        throw new Error(data.error);
       }
       
       if (data.success) {
         toast({
           title: "Call initiated",
-          description: "The AI agent is now calling the prospect.",
+          description: data.message || "The AI agent is now calling the prospect.",
         });
         
         return data;

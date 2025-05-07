@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Phone, Loader2 } from 'lucide-react';
+import { Phone, Loader2, AlertCircle } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ProspectActionsProps {
   prospectId: string;
@@ -21,11 +22,13 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [selectedConfigId, setSelectedConfigId] = useState<string>('');
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
   const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
 
   const openCallDialog = async () => {
+    setCallError(null);
     setIsLoadingConfigs(true);
     try {
       console.log('Fetching agent configurations');
@@ -59,6 +62,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   };
 
   const handleMakeCall = async () => {
+    setCallError(null);
+    
     if (!selectedConfigId || !user?.id) {
       toast({
         title: 'Missing information',
@@ -94,11 +99,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       }
     } catch (error: any) {
       console.error("Error making call:", error);
-      toast({
-        title: 'Call failed',
-        description: error.message || 'An error occurred while trying to make the call',
-        variant: 'destructive',
-      });
+      setCallError(error.message || 'An error occurred while trying to make the call');
     }
   };
 
@@ -118,6 +119,13 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            {callError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{callError}</AlertDescription>
+              </Alert>
+            )}
+            
             {isLoadingConfigs ? (
               <div className="flex justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

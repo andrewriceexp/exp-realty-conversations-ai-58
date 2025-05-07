@@ -82,19 +82,30 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
     
-    // Get the user's profile for Twilio credentials
+    // Get the user's profile for Twilio credentials - use maybeSingle() instead of single()
     const { data: profileData, error: profileError } = await supabaseClient
       .from('profiles')
       .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
       
     if (profileError) {
       console.error("Profile error:", profileError);
       return new Response(
-        JSON.stringify({ error: `Failed to get user profile: ${profileError.message}` }),
+        JSON.stringify({ error: `Database error while fetching profile: ${profileError.message}` }),
         { 
           status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    if (!profileData) {
+      console.error("No profile found for user ID:", userId);
+      return new Response(
+        JSON.stringify({ error: 'Profile not found. Please complete your profile setup with Twilio credentials.' }),
+        { 
+          status: 404, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
@@ -112,12 +123,12 @@ serve(async (req) => {
       );
     }
     
-    // Get the prospect details
+    // Get the prospect details - use maybeSingle() here too
     const { data: prospectData, error: prospectError } = await supabaseClient
       .from('prospects')
       .select('phone_number, first_name, last_name, property_address')
       .eq('id', prospectId)
-      .single();
+      .maybeSingle();
       
     if (prospectError) {
       console.error("Prospect error:", prospectError);
@@ -125,6 +136,17 @@ serve(async (req) => {
         JSON.stringify({ error: `Failed to get prospect: ${prospectError.message}` }),
         { 
           status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    if (!prospectData) {
+      console.error("No prospect found with ID:", prospectId);
+      return new Response(
+        JSON.stringify({ error: 'Prospect not found.' }),
+        { 
+          status: 404, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
