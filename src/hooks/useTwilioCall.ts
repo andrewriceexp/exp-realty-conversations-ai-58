@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { Link } from 'react-router-dom';
 
 export interface CallOptions {
   prospectId: string;
@@ -39,6 +38,15 @@ export function useTwilioCall() {
       
       if (invokeError) {
         console.error('Edge function error:', invokeError);
+        
+        // Check if this is a response from our edge function
+        if (typeof invokeError === 'object' && invokeError.message?.includes('non-2xx status code')) {
+          // This likely contains our error response, extract from the data if available
+          if (data && data.error) {
+            throw new Error(data.error);
+          }
+        }
+        
         throw new Error(`Edge Function error: ${invokeError.message}`);
       }
       
@@ -60,24 +68,24 @@ export function useTwilioCall() {
       } else {
         throw new Error(data.error || 'Failed to initiate call');
       }
-    } catch (err) {
+    } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to make call';
       console.error('Call error:', errorMessage);
       
       let errorTitle = "Call failed";
       let errorDescription = errorMessage;
       let variant = "destructive" as const;
+      let errorCode = '';
       
-      // Get error response if available
-      const errorResponse = err instanceof Error && 
-        typeof (err as any).response === 'object' ? 
-        (err as any).response?.data : null;
+      // Try to extract error code if available
+      if (err instanceof Error && typeof (err as any).code === 'string') {
+        errorCode = (err as any).code;
+      }
       
-      // Check for specific error codes
-      const errorCode = errorResponse?.code || '';
-      
-      if (errorMessage.includes('Profile setup incomplete') || 
-          errorMessage.includes('Twilio configuration is incomplete') ||
+      // Check for profile setup issues
+      if (errorMessage.includes('Profile setup') || 
+          errorMessage.includes('Twilio configuration') ||
+          errorMessage.includes('Please visit your profile settings') ||
           errorCode === 'PROFILE_NOT_FOUND' ||
           errorCode === 'TWILIO_CONFIG_INCOMPLETE') {
         errorTitle = "Profile setup required";
@@ -89,8 +97,7 @@ export function useTwilioCall() {
         title: errorTitle,
         description: errorDescription,
         variant: variant,
-        // Remove the JSX in the .ts file and just use undefined
-        // We'll handle the link UI in the component that uses this hook
+        // We don't include the action here, we'll handle the UI in the components
       });
       
       return {

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -70,7 +69,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: 'Missing required parameters',
-          success: false 
+          success: false,
+          code: 'MISSING_PARAMETERS'
         }),
         { 
           status: 400, 
@@ -85,7 +85,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
     
-    // Get the user's profile for Twilio credentials - use maybeSingle() instead of single()
+    // Get the user's profile for Twilio credentials
     const { data: profileData, error: profileError } = await supabaseClient
       .from('profiles')
       .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
@@ -116,7 +116,7 @@ serve(async (req) => {
           code: 'PROFILE_NOT_FOUND'
         }),
         { 
-          status: 404, 
+          status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
@@ -138,7 +138,7 @@ serve(async (req) => {
       );
     }
     
-    // Get the prospect details - use maybeSingle() here too
+    // Get the prospect details
     const { data: prospectData, error: prospectError } = await supabaseClient
       .from('prospects')
       .select('phone_number, first_name, last_name, property_address')
@@ -311,7 +311,7 @@ serve(async (req) => {
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+      }
     );
   }
 });
