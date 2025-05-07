@@ -5,6 +5,7 @@ import MainLayout from "@/components/MainLayout";
 import ProspectLists from "@/components/prospects/ProspectLists";
 import ProspectImport from "@/components/prospects/ProspectImport";
 import ProspectDetails from "@/components/prospects/ProspectDetails";
+import SheetExample from "@/components/prospects/SheetExample";
 import { ProspectList } from "@/types";
 
 const ProspectManagement = () => {
@@ -27,9 +28,10 @@ const ProspectManagement = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="lists">Lists</TabsTrigger>
             <TabsTrigger value="import">Import</TabsTrigger>
+            <TabsTrigger value="sheet-example">Sheet Example</TabsTrigger>
             <TabsTrigger value="details" disabled={!selectedList}>
               {selectedList ? `List: ${selectedList.list_name}` : "List Details"}
             </TabsTrigger>
@@ -39,6 +41,9 @@ const ProspectManagement = () => {
           </TabsContent>
           <TabsContent value="import" className="py-4">
             <ProspectImport onSuccess={() => setActiveTab("lists")} />
+          </TabsContent>
+          <TabsContent value="sheet-example" className="py-4">
+            <SheetExample />
           </TabsContent>
           <TabsContent value="details" className="py-4">
             {selectedList && <ProspectDetails list={selectedList} />}
