@@ -1,10 +1,13 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAgentConfigs } from "@/hooks/useAgentConfigs";
 import { useProspectLists } from "@/hooks/useProspectLists";
 import ImportProspectsSheet from "./ImportProspectsSheet";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import { generateSampleCsv, downloadFile } from "@/utils/csvHelpers";
 
 const SheetExample = () => {
   const { toast } = useToast();
@@ -26,6 +29,16 @@ const SheetExample = () => {
     });
   };
 
+  const handleDownloadSample = () => {
+    const csvContent = generateSampleCsv();
+    downloadFile(csvContent, "prospect_sample.csv", "text/csv");
+    
+    toast({
+      title: "Sample CSV downloaded",
+      description: "A sample CSV file has been downloaded to your device.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -37,13 +50,19 @@ const SheetExample = () => {
 
       <Card>
         <CardContent className="p-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-4">
             <p>Click the button to open the import sheet</p>
-            <ImportProspectsSheet 
-              agentConfigs={configs}
-              prospectLists={lists}
-              onImport={handleImport}
-            />
+            <div className="flex gap-2">
+              <ImportProspectsSheet 
+                agentConfigs={configs}
+                prospectLists={lists}
+                onImport={handleImport}
+              />
+              <Button variant="outline" onClick={handleDownloadSample}>
+                <Download className="mr-2 h-4 w-4" />
+                Sample CSV
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

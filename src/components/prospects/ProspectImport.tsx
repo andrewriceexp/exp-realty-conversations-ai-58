@@ -9,7 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProspectList } from "@/types";
-import { Upload } from "lucide-react";
+import { Upload, Download } from "lucide-react";
+import { generateSampleCsv, downloadFile } from "@/utils/csvHelpers";
+import AddProspectManually from "./AddProspectManually";
 
 interface ProspectImportProps {
   onSuccess: () => void;
@@ -67,6 +69,16 @@ const ProspectImport = ({ onSuccess }: ProspectImportProps) => {
       
       setFile(selectedFile);
     }
+  };
+
+  const handleDownloadSample = () => {
+    const csvContent = generateSampleCsv();
+    downloadFile(csvContent, "prospect_sample.csv", "text/csv");
+    
+    toast({
+      title: "Sample CSV downloaded",
+      description: "A sample CSV file has been downloaded to your device.",
+    });
   };
 
   const handleImport = async () => {
@@ -284,6 +296,27 @@ const ProspectImport = ({ onSuccess }: ProspectImportProps) => {
             )}
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={handleImport} 
+              disabled={!file || !selectedListId || isLoading} 
+              className="flex-1"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isLoading ? "Importing..." : "Import Prospects"}
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={handleDownloadSample}
+              type="button"
+              className="flex-1"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Sample CSV
+            </Button>
+          </div>
+
           <div className="bg-muted p-4 rounded-md">
             <h3 className="font-medium mb-2">CSV Format Requirements</h3>
             <p className="text-sm text-muted-foreground mb-2">
@@ -298,14 +331,12 @@ const ProspectImport = ({ onSuccess }: ProspectImportProps) => {
             </ul>
           </div>
 
-          <Button 
-            onClick={handleImport} 
-            disabled={!file || !selectedListId || isLoading} 
-            className="w-full"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {isLoading ? "Importing..." : "Import Prospects"}
-          </Button>
+          {selectedListId && (
+            <div className="pt-2">
+              <p className="text-sm font-medium mb-2">Or add prospects manually:</p>
+              <AddProspectManually listId={selectedListId} onSuccess={onSuccess} />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
