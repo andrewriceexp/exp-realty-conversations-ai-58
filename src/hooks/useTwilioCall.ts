@@ -39,11 +39,15 @@ export function useTwilioCall() {
       if (invokeError) {
         console.error('Edge function error:', invokeError);
         
-        // Check if this is a response from our edge function
+        // This is crucial for extracting the actual error from Supabase Edge Function
         if (typeof invokeError === 'object' && invokeError.message?.includes('non-2xx status code')) {
-          // This likely contains our error response, extract from the data if available
+          // If we have data, it means the edge function returned an error response
           if (data && data.error) {
-            throw new Error(data.error);
+            const err = new Error(data.error);
+            if (data.code) {
+              (err as any).code = data.code;
+            }
+            throw err;
           }
         }
         
@@ -55,7 +59,11 @@ export function useTwilioCall() {
       }
       
       if (data.error) {
-        throw new Error(data.error);
+        const err = new Error(data.error);
+        if (data.code) {
+          (err as any).code = data.code;
+        }
+        throw err;
       }
       
       if (data.success) {
@@ -77,7 +85,7 @@ export function useTwilioCall() {
       let variant = "destructive" as const;
       let errorCode = '';
       
-      // Try to extract error code if available
+      // Extract error code if available
       if (err instanceof Error && typeof (err as any).code === 'string') {
         errorCode = (err as any).code;
       }
