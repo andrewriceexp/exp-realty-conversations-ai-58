@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Phone, Loader2, AlertCircle } from 'lucide-react';
+import { Phone, Loader2, AlertCircle, Settings } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Link } from 'react-router-dom';
 
 interface ProspectActionsProps {
   prospectId: string;
@@ -23,12 +24,14 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
 
   const openCallDialog = async () => {
     setCallError(null);
+    setErrorCode(null);
     setIsLoadingConfigs(true);
     try {
       console.log('Fetching agent configurations');
@@ -63,6 +66,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
 
   const handleMakeCall = async () => {
     setCallError(null);
+    setErrorCode(null);
     
     if (!selectedConfigId || !user?.id) {
       toast({
@@ -95,12 +99,23 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
           description: `Call to ${prospectName} initiated successfully.`,
         });
       } else {
+        // Store the error code if available
+        setErrorCode(response.code || null);
         throw new Error(response.error || 'Unknown error initiating call');
       }
     } catch (error: any) {
       console.error("Error making call:", error);
       setCallError(error.message || 'An error occurred while trying to make the call');
     }
+  };
+
+  const isProfileError = () => {
+    return errorCode === 'PROFILE_NOT_FOUND' || 
+           errorCode === 'TWILIO_CONFIG_INCOMPLETE' || 
+           (callError && (
+             callError.includes('Profile') || 
+             callError.includes('Twilio configuration')
+           ));
   };
 
   return (
@@ -122,7 +137,16 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
             {callError && (
               <Alert variant="destructive" className="mb-4">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{callError}</AlertDescription>
+                <AlertDescription>
+                  {callError}
+                  {isProfileError() && (
+                    <div className="mt-2">
+                      <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                        <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+                      </Link>
+                    </div>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
             

@@ -68,7 +68,10 @@ serve(async (req) => {
     
     if (!prospectId || !agentConfigId || !userId) {
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters' }),
+        JSON.stringify({ 
+          error: 'Missing required parameters',
+          success: false 
+        }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -92,7 +95,11 @@ serve(async (req) => {
     if (profileError) {
       console.error("Profile error:", profileError);
       return new Response(
-        JSON.stringify({ error: `Database error while fetching profile: ${profileError.message}` }),
+        JSON.stringify({ 
+          error: `Database error while fetching profile: ${profileError.message}`,
+          success: false,
+          code: 'DB_ERROR' 
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -103,7 +110,11 @@ serve(async (req) => {
     if (!profileData) {
       console.error("No profile found for user ID:", userId);
       return new Response(
-        JSON.stringify({ error: 'Profile not found. Please complete your profile setup with Twilio credentials.' }),
+        JSON.stringify({ 
+          error: 'Profile setup incomplete. Please visit your profile settings and add your Twilio credentials.',
+          success: false,
+          code: 'PROFILE_NOT_FOUND'
+        }),
         { 
           status: 404, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -115,7 +126,11 @@ serve(async (req) => {
     
     if (!profileData.twilio_account_sid || !profileData.twilio_auth_token || !profileData.twilio_phone_number) {
       return new Response(
-        JSON.stringify({ error: 'Twilio configuration is incomplete. Please update your profile.' }),
+        JSON.stringify({ 
+          error: 'Twilio configuration is incomplete. Please update your profile with your Twilio Account SID, Auth Token, and Phone Number.',
+          success: false,
+          code: 'TWILIO_CONFIG_INCOMPLETE'
+        }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -133,7 +148,11 @@ serve(async (req) => {
     if (prospectError) {
       console.error("Prospect error:", prospectError);
       return new Response(
-        JSON.stringify({ error: `Failed to get prospect: ${prospectError.message}` }),
+        JSON.stringify({ 
+          error: `Failed to get prospect: ${prospectError.message}`,
+          success: false,
+          code: 'PROSPECT_ERROR'
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -144,7 +163,11 @@ serve(async (req) => {
     if (!prospectData) {
       console.error("No prospect found with ID:", prospectId);
       return new Response(
-        JSON.stringify({ error: 'Prospect not found.' }),
+        JSON.stringify({ 
+          error: 'Prospect not found.',
+          success: false,
+          code: 'PROSPECT_NOT_FOUND'
+        }),
         { 
           status: 404, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -171,7 +194,11 @@ serve(async (req) => {
     if (callLogError) {
       console.error("Call log error:", callLogError);
       return new Response(
-        JSON.stringify({ error: `Failed to create call log: ${callLogError.message}` }),
+        JSON.stringify({ 
+          error: `Failed to create call log: ${callLogError.message}`,
+          success: false,
+          code: 'CALL_LOG_ERROR'
+        }),
         { 
           status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -264,7 +291,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           error: `Twilio error: ${twilioError.message}`,
-          success: false
+          success: false,
+          code: 'TWILIO_API_ERROR'
         }),
         { 
           status: 500, 
@@ -277,12 +305,13 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: error.message || 'Unknown error occurred',
-        success: false
+        success: false,
+        code: 'UNKNOWN_ERROR'
       }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+        }
     );
   }
 });

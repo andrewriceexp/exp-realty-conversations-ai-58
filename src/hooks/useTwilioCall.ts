@@ -15,6 +15,7 @@ export interface CallResponse {
   callLogId?: string;
   message?: string;
   error?: string;
+  code?: string;
 }
 
 export function useTwilioCall() {
@@ -61,16 +62,40 @@ export function useTwilioCall() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to make call';
       console.error('Call error:', errorMessage);
+      
+      let errorTitle = "Call failed";
+      let errorDescription = errorMessage;
+      let variant = "destructive" as const;
+      
+      // Get error response if available
+      const errorResponse = err instanceof Error && 
+        typeof (err as any).response === 'object' ? 
+        (err as any).response?.data : null;
+      
+      // Check for specific error codes
+      const errorCode = errorResponse?.code || '';
+      
+      if (errorMessage.includes('Profile setup incomplete') || 
+          errorMessage.includes('Twilio configuration is incomplete') ||
+          errorCode === 'PROFILE_NOT_FOUND' ||
+          errorCode === 'TWILIO_CONFIG_INCOMPLETE') {
+        errorTitle = "Profile setup required";
+        errorDescription = "Please complete your profile setup with Twilio credentials before making calls.";
+      }
+      
       setError(errorMessage);
       toast({
-        title: "Call failed",
-        description: errorMessage,
-        variant: "destructive"
+        title: errorTitle,
+        description: errorDescription,
+        variant: variant,
+        action: errorMessage.includes('Profile') || errorMessage.includes('Twilio configuration') ? 
+          <a href="/profile-setup" className="underline">Update Profile</a> : undefined
       });
       
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        code: errorCode
       };
     } finally {
       setIsLoading(false);
