@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Route, Routes, Outlet } from 'react-router-dom
 import { AuthProvider } from './contexts/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProtectedRoute from './components/ProtectedRoute';
-import MainLayout from './components/MainLayout';
 
 import Index from './pages/Index';
 import Login from './pages/Login';
@@ -19,6 +18,7 @@ import AgentConfig from './pages/AgentConfig';
 import Analytics from './pages/Analytics';
 import Help from './pages/Help';
 import { Toaster } from '@/components/ui/toaster';
+import MainLayout from './components/MainLayout';
 
 // Create a client
 const queryClient = new QueryClient({
