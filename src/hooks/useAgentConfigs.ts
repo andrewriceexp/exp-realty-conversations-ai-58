@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { AgentConfig } from '@/types';
 import { supabase } from '@/lib/supabase';
@@ -74,54 +73,54 @@ export const useAgentConfigs = () => {
       
       const isNew = !currentConfig.id;
       
-      // Remove created_at, updated_at, and id (if it's an empty string) from the payload
-      const { created_at, updated_at, ...configWithPossibleEmptyId } = currentConfig;
-      
-      // For new configs, remove the empty id
-      const configToSave = isNew 
-        ? { ...configWithPossibleEmptyId, id: undefined }  // Remove id completely for new configs
-        : configWithPossibleEmptyId;
-      
-      const { data, error } = isNew
-        ? await supabase
-            .from('agent_configs')
-            .insert([{ 
-              ...configToSave,
-              user_id: user?.id,
-            }])
-            .select()
-        : await supabase
-            .from('agent_configs')
-            .update({ 
-              config_name: currentConfig.config_name,
-              system_prompt: currentConfig.system_prompt,
-              goal_extraction_prompt: currentConfig.goal_extraction_prompt,
-              voice_provider: currentConfig.voice_provider,
-              voice_id: currentConfig.voice_id,
-              llm_provider: currentConfig.llm_provider,
-              llm_model: currentConfig.llm_model,
-              temperature: currentConfig.temperature,
-            })
-            .eq('id', currentConfig.id)
-            .select();
-            
-      if (error) throw error;
-      
-      toast({
-        title: isNew ? 'Config Created' : 'Config Updated',
-        description: `Successfully ${isNew ? 'created' : 'updated'} "${currentConfig.config_name}"`,
-      });
-      
-      if (data) {
-        if (isNew) {
+      // For new configs, we need to exclude the empty id field completely
+      // so that the database will generate a UUID automatically
+      if (isNew) {
+        // Destructure all fields except id for a new config
+        const { id, created_at, updated_at, ...configWithoutId } = currentConfig;
+        
+        const { data, error } = await supabase
+          .from('agent_configs')
+          .insert([{ 
+            ...configWithoutId,
+            user_id: user?.id,
+          }])
+          .select();
+          
+        if (error) throw error;
+        
+        toast({
+          title: 'Config Created',
+          description: `Successfully created "${currentConfig.config_name}"`,
+        });
+        
+        if (data) {
           setConfigs([...(data as AgentConfig[]), ...configs]);
           setCurrentConfig(data[0]);
-        } else {
+        }
+      } else {
+        // For existing configs, we keep the id but remove timestamps
+        const { created_at, updated_at, ...configToUpdate } = currentConfig;
+        
+        const { data, error } = await supabase
+          .from('agent_configs')
+          .update(configToUpdate)
+          .eq('id', currentConfig.id)
+          .select();
+            
+        if (error) throw error;
+        
+        toast({
+          title: 'Config Updated',
+          description: `Successfully updated "${currentConfig.config_name}"`,
+        });
+        
+        if (data) {
           setConfigs(configs.map(c => c.id === currentConfig.id ? { ...currentConfig } : c));
         }
       }
       
-      fetchConfigs();
+      fetchConfigs(); // Refresh the list after save
     } catch (error: any) {
       console.error('Error saving agent config:', error);
       toast({
