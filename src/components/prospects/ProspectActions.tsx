@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -158,7 +157,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                   {callError}
                   {isProfileError() && (
                     <div className="mt-2">
-                      <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                      <Link to="/profile" className="flex items-center text-sm font-medium underline">
                         <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
                       </Link>
                     </div>

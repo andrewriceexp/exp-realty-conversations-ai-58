@@ -34,6 +34,7 @@ const ProfileSetup = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [hasAuthToken, setHasAuthToken] = useState(false);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
   
   useEffect(() => {
     if (profile) {
@@ -56,6 +57,7 @@ const ProfileSetup = () => {
   const onSubmit = async (values: ProfileFormValues) => {
     try {
       setIsLoading(true);
+      setUpdateSuccess(false);
       
       // Create update object
       const updateData: any = { ...values };
@@ -71,7 +73,12 @@ const ProfileSetup = () => {
       });
       
       await updateProfile(updateData);
-      navigate('/');
+      
+      // Reset the auth token field
+      form.setValue('twilio_auth_token', '');
+      
+      // Set success state instead of navigating away
+      setUpdateSuccess(true);
     } catch (error) {
       console.error('Profile update error:', error);
     } finally {
@@ -83,6 +90,14 @@ const ProfileSetup = () => {
     <MainLayout>
       <div className="max-w-3xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Profile Setup</h1>
+        
+        {updateSuccess && (
+          <Alert className="mb-6 bg-green-50 border-green-200 text-green-800">
+            <AlertDescription>
+              Profile successfully updated! Your Twilio credentials have been saved.
+            </AlertDescription>
+          </Alert>
+        )}
         
         <Alert className="mb-6 bg-blue-50 border-blue-200 text-blue-800">
           <AlertDescription>
@@ -160,18 +175,18 @@ const ProfileSetup = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>
-                            {profile?.twilio_auth_token ? 'Update Twilio Auth Token (Optional)' : 'Twilio Auth Token'}
+                            {hasAuthToken ? 'Update Twilio Auth Token (Optional)' : 'Twilio Auth Token'}
                           </FormLabel>
                           <FormControl>
                             <Input 
                               type="password" 
-                              placeholder={profile?.twilio_auth_token ? '••••••••' : 'Enter your Auth Token'} 
+                              placeholder={hasAuthToken ? '••••••••' : 'Enter your Auth Token'} 
                               {...field} 
                               disabled={isLoading} 
                             />
                           </FormControl>
                           <FormDescription className="text-xs">
-                            {profile?.twilio_auth_token 
+                            {hasAuthToken 
                               ? 'Leave blank to keep current token' 
                               : 'Find this in your Twilio Dashboard'}
                           </FormDescription>
@@ -235,9 +250,25 @@ const ProfileSetup = () => {
                   </div>
                 </div>
                 
-                <Button type="submit" className="w-full exp-gradient" disabled={isLoading}>
-                  {isLoading ? 'Saving...' : 'Save Profile'}
-                </Button>
+                <div className="flex gap-4">
+                  <Button 
+                    type="submit" 
+                    className="flex-1 exp-gradient" 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Saving...' : 'Save Profile'}
+                  </Button>
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={() => navigate('/dashboard')} 
+                    disabled={isLoading}
+                    className="flex-1"
+                  >
+                    Go to Dashboard
+                  </Button>
+                </div>
               </form>
             </Form>
           </CardContent>
