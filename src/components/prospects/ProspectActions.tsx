@@ -106,6 +106,23 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
     } catch (error: any) {
       console.error("Error making call:", error);
       setCallError(error.message || 'An error occurred while trying to make the call');
+      
+      // If this is a profile setup error, we need to show a toast with a link
+      if (error.message?.includes('Profile setup') || 
+          error.message?.includes('Twilio configuration') ||
+          error.code === 'PROFILE_NOT_FOUND' ||
+          error.code === 'TWILIO_CONFIG_INCOMPLETE') {
+        toast({
+          title: "Profile setup required",
+          description: "Please complete your profile setup with Twilio credentials before making calls.",
+          variant: "destructive",
+          action: (
+            <Link to="/profile-setup" className="underline bg-background text-foreground px-2 py-1 rounded hover:bg-muted">
+              Update Profile
+            </Link>
+          )
+        });
+      }
     }
   };
 

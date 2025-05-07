@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { Link } from 'react-router-dom';
 
 export interface CallOptions {
   prospectId: string;
@@ -88,8 +89,8 @@ export function useTwilioCall() {
         title: errorTitle,
         description: errorDescription,
         variant: variant,
-        action: errorMessage.includes('Profile') || errorMessage.includes('Twilio configuration') ? 
-          <a href="/profile-setup" className="underline">Update Profile</a> : undefined
+        // Remove the JSX in the .ts file and just use undefined
+        // We'll handle the link UI in the component that uses this hook
       });
       
       return {
