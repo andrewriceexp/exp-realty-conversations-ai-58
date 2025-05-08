@@ -209,14 +209,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       
-      console.log("Updating profile with data:", { ...profileData, id: user.id });
+      console.log("Updating profile with data:", { 
+        ...profileData, 
+        id: user.id,
+        twilio_auth_token: profileData.twilio_auth_token ? '****' : undefined 
+      });
       
-      // Note: We specifically do NOT delete the twilio_auth_token field here anymore
-      // If it's empty that's fine, but we want to allow the endpoint to handle that logic
+      // Create a clean update object
+      const updateObj = { ...profileData, id: user.id };
+      
+      // If twilio_auth_token is empty string, don't update it
+      if (updateObj.twilio_auth_token === '') {
+        delete updateObj.twilio_auth_token;
+      }
       
       const { error } = await supabase
         .from("profiles")
-        .update(profileData)
+        .update(updateObj)
         .eq("id", user.id);
 
       if (error) {
@@ -255,7 +264,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signUp,
         signOut,
         updateProfile,
-        resetPassword, // Add resetPassword to the context
+        resetPassword,
       }}
     >
       {children}

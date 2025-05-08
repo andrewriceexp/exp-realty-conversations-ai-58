@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import MainLayout from '@/components/MainLayout';
+import { Textarea } from '@/components/ui/textarea';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Full name is required'),
@@ -35,10 +36,14 @@ const ProfileSetup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   
   useEffect(() => {
     if (profile) {
+      // Don't check profile?.twilio_auth_token directly as it won't be returned 
+      // from the API for security reasons. Instead check if it exists in the database.
       setHasAuthToken(!!profile.twilio_auth_token);
+      console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
     }
   }, [profile]);
 
@@ -54,10 +59,25 @@ const ProfileSetup = () => {
     },
   });
 
+  useEffect(() => {
+    // Reset form with profile values when profile loads or changes
+    if (profile) {
+      form.reset({
+        full_name: profile.full_name || '',
+        exp_realty_id: profile.exp_realty_id || '',
+        twilio_account_sid: profile.twilio_account_sid || '',
+        twilio_auth_token: '', // Keep this empty
+        twilio_phone_number: profile.twilio_phone_number || '',
+        a2p_10dlc_registered: profile.a2p_10dlc_registered || false,
+      });
+    }
+  }, [profile, form]);
+
   const onSubmit = async (values: ProfileFormValues) => {
     try {
       setIsLoading(true);
       setUpdateSuccess(false);
+      setDebugInfo('');
       
       // Create update object
       const updateData: any = { ...values };
@@ -65,6 +85,9 @@ const ProfileSetup = () => {
       // Only update the auth token if one was provided (not empty)
       if (!updateData.twilio_auth_token) {
         delete updateData.twilio_auth_token;
+        setDebugInfo('Auth token field was empty, not updating token');
+      } else {
+        setDebugInfo(`Auth token provided (${updateData.twilio_auth_token.length} characters), updating token`);
       }
       
       console.log('Submitting profile update with data:', { 
@@ -76,6 +99,12 @@ const ProfileSetup = () => {
       
       // Reset the auth token field
       form.setValue('twilio_auth_token', '');
+      
+      // Update state to reflect that we now have an auth token stored
+      // if one was provided in this update
+      if (values.twilio_auth_token) {
+        setHasAuthToken(true);
+      }
       
       // Set success state instead of navigating away
       setUpdateSuccess(true);
