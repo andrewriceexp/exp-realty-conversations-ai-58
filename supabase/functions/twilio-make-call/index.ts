@@ -292,8 +292,10 @@ serve(async (req) => {
     
     console.log("Prospect fetched, creating call log");
     
-    // Create a call log entry before initiating the call
-    const { data: callLogData, error: callLogError } = await supabaseClient
+    // Create a call log entry before initiating the call - USING ADMIN CLIENT TO BYPASS RLS
+    console.log("Attempting to create call log using admin client");
+    
+    const { data: callLogData, error: callLogError } = await supabaseAdmin
       .from('call_logs')
       .insert({
         prospect_id: prospectId,
@@ -308,6 +310,22 @@ serve(async (req) => {
       
     if (callLogError) {
       console.error("Call log error:", callLogError);
+      
+      // Check if it's an RLS error
+      if (callLogError.code === '42501' || callLogError.message?.includes('violates row-level security policy')) {
+        console.log("This appears to be an RLS policy violation. Checking call_logs table permissions...");
+        
+        // Debug RLS policies
+        try {
+          const { data: rlsData, error: rlsError } = await supabaseAdmin
+            .rpc('get_policies', { table_name: 'call_logs' });
+            
+          console.log("RLS policies for call_logs:", rlsData || "No policies found", "Error:", rlsError);
+        } catch (e) {
+          console.error("Error checking RLS policies:", e);
+        }
+      }
+      
       return new Response(
         JSON.stringify({ 
           error: `Failed to create call log: ${callLogError.message}`,
@@ -321,6 +339,8 @@ serve(async (req) => {
       );
     }
     
+    console.log("Call log created successfully:", callLogData);
+
     // Create Twilio client
     const twilioAccountSid = profileData.twilio_account_sid;
     const twilioAuthToken = profileData.twilio_auth_token;
@@ -363,16 +383,18 @@ serve(async (req) => {
       
       console.log("Twilio call initiated successfully:", call.sid);
       
-      // Update the call log with the Twilio SID
-      await supabaseClient
+      // Update the call log with the Twilio SID - USING ADMIN CLIENT
+      console.log("Updating call log with Twilio SID using admin client");
+      await supabaseAdmin
         .from('call_logs')
         .update({
           twilio_call_sid: call.sid
         })
         .eq('id', callLogData.id);
       
-      // Update prospect status to "Calling"
-      await supabaseClient
+      // Update prospect status to "Calling" - USING ADMIN CLIENT
+      console.log("Updating prospect status to 'Calling' using admin client");
+      await supabaseAdmin
         .from('prospects')
         .update({
           status: 'Calling',
@@ -394,8 +416,9 @@ serve(async (req) => {
     } catch (twilioError) {
       console.error('Twilio error:', twilioError);
       
-      // Update the call log to mark as failed
-      await supabaseClient
+      // Update the call log to mark as failed - USING ADMIN CLIENT
+      console.log("Updating call log to 'Failed' using admin client");
+      await supabaseAdmin
         .from('call_logs')
         .update({
           call_status: 'Failed',

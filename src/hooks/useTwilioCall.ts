@@ -43,11 +43,28 @@ export function useTwilioCall() {
         if (typeof invokeError === 'object' && invokeError.message?.includes('non-2xx status code')) {
           // If we have data, it means the edge function returned an error response
           if (data && data.error) {
+            console.log('Edge function returned an error response:', data);
             const err = new Error(data.error);
             if (data.code) {
               (err as any).code = data.code;
             }
             throw err;
+          } else {
+            // Try to extract more details from the error if possible
+            console.log('Attempting to extract more error details...');
+            let errorDetails = "Unknown edge function error";
+            
+            try {
+              // Some errors might have more details in a nested format
+              if (invokeError.context && typeof invokeError.context === 'object') {
+                console.log('Error context:', invokeError.context);
+                errorDetails = JSON.stringify(invokeError.context);
+              }
+            } catch (e) {
+              console.error('Failed to extract error details:', e);
+            }
+            
+            throw new Error(`Edge Function error: ${errorDetails}`);
           }
         }
         
@@ -55,10 +72,12 @@ export function useTwilioCall() {
       }
       
       if (!data) {
+        console.error('No data received from edge function');
         throw new Error('No response from Edge Function');
       }
       
       if (data.error) {
+        console.error('Error data from edge function:', data);
         const err = new Error(data.error);
         if (data.code) {
           (err as any).code = data.code;
@@ -78,7 +97,7 @@ export function useTwilioCall() {
       }
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to make call';
-      console.error('Call error:', errorMessage);
+      console.error('Call error:', err);
       
       let errorTitle = "Call failed";
       let errorDescription = errorMessage;
@@ -98,6 +117,15 @@ export function useTwilioCall() {
           errorCode === 'TWILIO_CONFIG_INCOMPLETE') {
         errorTitle = "Profile setup required";
         errorDescription = "Please complete your profile setup with Twilio credentials before making calls.";
+      }
+      
+      // Check for RLS policy violations
+      if (errorMessage.includes('row-level security policy') || 
+          errorMessage.includes('violates row-level security') ||
+          errorCode === 'CALL_LOG_ERROR') {
+        errorTitle = "Database permission error";
+        errorDescription = "There was an issue with database permissions. Please contact support.";
+        console.log('RLS policy violation detected. Error details:', err);
       }
       
       setError(errorMessage);
