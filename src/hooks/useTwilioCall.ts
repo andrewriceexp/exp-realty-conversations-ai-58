@@ -109,8 +109,13 @@ export function useTwilioCall() {
         errorCode = (err as any).code;
       }
       
+      // Check for specific error types
+      if (errorCode === 'MISSING_PHONE_NUMBER' || errorMessage.includes('phone number')) {
+        errorTitle = "Invalid phone number";
+        errorDescription = "The prospect doesn't have a valid phone number. Please update the prospect's information.";
+      } 
       // Check for profile setup issues
-      if (errorMessage.includes('Profile setup') || 
+      else if (errorMessage.includes('Profile setup') || 
           errorMessage.includes('Twilio configuration') ||
           errorMessage.includes('Please visit your profile settings') ||
           errorCode === 'PROFILE_NOT_FOUND' ||
@@ -118,14 +123,18 @@ export function useTwilioCall() {
         errorTitle = "Profile setup required";
         errorDescription = "Please complete your profile setup with Twilio credentials before making calls.";
       }
-      
       // Check for RLS policy violations
-      if (errorMessage.includes('row-level security policy') || 
+      else if (errorMessage.includes('row-level security policy') || 
           errorMessage.includes('violates row-level security') ||
           errorCode === 'CALL_LOG_ERROR') {
         errorTitle = "Database permission error";
         errorDescription = "There was an issue with database permissions. Please contact support.";
         console.log('RLS policy violation detected. Error details:', err);
+      }
+      // Twilio API errors
+      else if (errorCode === 'TWILIO_API_ERROR' || errorMessage.includes('Twilio error')) {
+        errorTitle = "Twilio API error";
+        errorDescription = errorMessage.replace('Twilio error: ', '');
       }
       
       setError(errorMessage);

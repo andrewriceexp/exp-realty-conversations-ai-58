@@ -290,6 +290,24 @@ serve(async (req) => {
       );
     }
     
+    // Validate that the prospect has a phone number
+    if (!prospectData.phone_number) {
+      console.error("Prospect has no phone number:", prospectId);
+      return new Response(
+        JSON.stringify({ 
+          error: `Prospect has no phone number. Please update the prospect with a valid phone number.`,
+          success: false,
+          code: 'MISSING_PHONE_NUMBER'
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    console.log("Prospect fetched with phone_number:", prospectData.phone_number);
+    
     console.log("Prospect fetched, creating call log");
     
     // Create a call log entry before initiating the call - USING ADMIN CLIENT TO BYPASS RLS
@@ -362,16 +380,27 @@ serve(async (req) => {
     console.log("Status webhook URL:", statusWebhook);
     
     try {
-      // Format the phone number to E.164 format if needed
-      let formattedPhoneNumber = prospectData.phone_number;
+      // Format the phone number to E.164 format
+      let formattedPhoneNumber = prospectData.phone_number.trim();
+      
+      // Remove any non-numeric characters
+      formattedPhoneNumber = formattedPhoneNumber.replace(/\D/g, '');
+      
+      // Check if number has country code
+      if (!formattedPhoneNumber.startsWith('1') && formattedPhoneNumber.length === 10) {
+        formattedPhoneNumber = '1' + formattedPhoneNumber;
+      }
+      
+      // Add + prefix if missing
       if (!formattedPhoneNumber.startsWith('+')) {
-        formattedPhoneNumber = `+1${formattedPhoneNumber.replace(/\D/g, '')}`;
+        formattedPhoneNumber = '+' + formattedPhoneNumber;
       }
       
       console.log(`Initiating Twilio call to ${formattedPhoneNumber} from ${twilioPhoneNumber}`);
+      console.log(`Raw phone number: "${prospectData.phone_number}", Formatted: "${formattedPhoneNumber}"`);
       
-      // Initiate the call via Twilio
-      const call = await twilio.calls.create({
+      // Detailed logging of Twilio parameters
+      const twilioParams = {
         url: webhookWithParams,
         to: formattedPhoneNumber,
         from: twilioPhoneNumber,
@@ -379,7 +408,11 @@ serve(async (req) => {
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         statusCallbackMethod: 'POST',
         record: 'true',
-      });
+      };
+      console.log("Twilio parameters:", JSON.stringify(twilioParams));
+      
+      // Initiate the call via Twilio
+      const call = await twilio.calls.create(twilioParams);
       
       console.log("Twilio call initiated successfully:", call.sid);
       
