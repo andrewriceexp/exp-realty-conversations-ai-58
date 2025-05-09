@@ -196,33 +196,90 @@ serve(async (req) => {
       );
     }
     
-    // Get the prospect details
-    const { data: prospectData, error: prospectError } = await supabaseClient
-      .from('prospects')
-      .select('phone_number, first_name, last_name, property_address')
-      .eq('id', prospectId)
-      .maybeSingle();
-      
-    if (prospectError) {
-      console.error("Prospect error:", prospectError);
-      return new Response(
-        JSON.stringify({ 
-          error: `Failed to get prospect: ${prospectError.message}`,
-          success: false,
-          code: 'PROSPECT_ERROR'
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    // Get the prospect details using first the regular client, then admin client if needed
+    let prospectData = null;
+    let prospectError = null;
+    
+    // First attempt - try with regular client
+    try {
+      console.log("Attempting to fetch prospect with regular client for ID:", prospectId);
+      const { data, error } = await supabaseClient
+        .from('prospects')
+        .select('phone_number, first_name, last_name, property_address')
+        .eq('id', prospectId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Regular client prospect fetch error:", error);
+        prospectError = error;
+      } else if (data) {
+        console.log("Prospect found with regular client");
+        prospectData = data;
+      } else {
+        console.log("No prospect found with regular client, will try admin client");
+      }
+    } catch (err) {
+      console.error("Error during regular prospect fetch:", err);
+    }
+    
+    // Second attempt - if first failed, try with admin client
+    if (!prospectData) {
+      try {
+        console.log("Attempting to fetch prospect with admin client for ID:", prospectId);
+        const { data, error } = await supabaseAdmin
+          .from('prospects')
+          .select('phone_number, first_name, last_name, property_address')
+          .eq('id', prospectId)
+          .maybeSingle();
+          
+        if (error) {
+          console.error("Admin client prospect fetch error:", error);
+          prospectError = error;
+        } else if (data) {
+          console.log("Prospect found with admin client");
+          prospectData = data;
+        } else {
+          console.log("No prospect found with admin client either");
+          
+          // Debug query to check if the prospects table has any data at all and if it has this specific ID
+          const { data: debugData, error: debugError } = await supabaseAdmin
+            .from('prospects')
+            .select('id')
+            .limit(5);
+            
+          if (debugError) {
+            console.error("Debug query error:", debugError);
+          } else {
+            console.log("Debug query sample IDs:", debugData);
+            
+            // Check if there are any prospects at all
+            const { count, error: countError } = await supabaseAdmin
+              .from('prospects')
+              .select('*', { count: 'exact', head: true });
+              
+            console.log("Total prospect count:", count, "Error:", countError);
+            
+            // Check if this specific prospect exists in any form
+            const { data: specificCheck, error: specificError } = await supabaseAdmin
+              .from('prospects')
+              .select('id')
+              .filter('id', 'ilike', `%${prospectId.slice(0, 8)}%`)
+              .limit(5);
+              
+            console.log("Similar ID check:", specificCheck, "Error:", specificError);
+          }
         }
-      );
+      } catch (err) {
+        console.error("Error during admin prospect fetch:", err);
+        prospectError = err;
+      }
     }
     
     if (!prospectData) {
       console.error("No prospect found with ID:", prospectId);
       return new Response(
         JSON.stringify({ 
-          error: 'Prospect not found.',
+          error: `Prospect not found. The prospect with ID ${prospectId} does not exist or has been deleted.`,
           success: false,
           code: 'PROSPECT_NOT_FOUND'
         }),
