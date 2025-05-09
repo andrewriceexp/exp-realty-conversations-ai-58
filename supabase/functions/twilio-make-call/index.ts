@@ -80,7 +80,7 @@ serve(async (req) => {
       );
     }
     
-    // Initialize Supabase client
+    // Initialize Supabase client with anon key
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -88,16 +88,25 @@ serve(async (req) => {
         auth: { persistSession: false }
       }
     );
-
-    console.log("Initialized Supabase client");
     
-    // Try multiple queries to find profile with both direct query and service role
+    // Initialize Supabase client with service role key for admin access
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: { persistSession: false }
+      }
+    );
+
+    console.log("Initialized Supabase clients");
+    
+    // Try to get profile - first with regular client, then with admin if needed
     let profileData = null;
     let profileError = null;
     
+    // First attempt - try with regular client
     try {
-      // First attempt: standard query with anon key
-      console.log("Attempting to fetch profile with ID:", userId);
+      console.log("Attempting to fetch profile with regular client for ID:", userId);
       const { data, error } = await supabaseClient
         .from('profiles')
         .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
@@ -105,29 +114,53 @@ serve(async (req) => {
         .maybeSingle();
         
       if (error) {
-        console.error("First profile fetch error:", error);
+        console.error("Regular client profile fetch error:", error);
         profileError = error;
       } else if (data) {
-        console.log("Profile found on first attempt");
+        console.log("Profile found with regular client");
         profileData = data;
       } else {
-        console.log("No profile found on first attempt, trying RLS debug");
-        
-        // Debug query to check if the profiles table has any data
-        const { data: debugData, error: debugError } = await supabaseClient
-          .from('profiles')
-          .select('count')
-          .limit(1);
-          
-        if (debugError) {
-          console.error("Debug query error:", debugError);
-        } else {
-          console.log("Debug query results:", debugData);
-        }
+        console.log("No profile found with regular client, will try admin client");
       }
     } catch (err) {
-      console.error("Error during profile fetch:", err);
-      profileError = err;
+      console.error("Error during regular profile fetch:", err);
+    }
+    
+    // Second attempt - if first failed, try with admin client
+    if (!profileData) {
+      try {
+        console.log("Attempting to fetch profile with admin client for ID:", userId);
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (error) {
+          console.error("Admin client profile fetch error:", error);
+          profileError = error;
+        } else if (data) {
+          console.log("Profile found with admin client");
+          profileData = data;
+        } else {
+          console.log("No profile found with admin client either");
+          
+          // Debug query to check if the profiles table has any data at all
+          const { data: debugData, error: debugError } = await supabaseAdmin
+            .from('profiles')
+            .select('count')
+            .limit(1);
+            
+          if (debugError) {
+            console.error("Debug query error:", debugError);
+          } else {
+            console.log("Debug query results:", debugData);
+          }
+        }
+      } catch (err) {
+        console.error("Error during admin profile fetch:", err);
+        profileError = err;
+      }
     }
     
     // If we still don't have profile data, return a useful error
