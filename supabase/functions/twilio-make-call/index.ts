@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -82,38 +83,62 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        auth: { persistSession: false }
+      }
     );
+
+    console.log("Initialized Supabase client");
     
-    // Get the user's profile for Twilio credentials
-    const { data: profileData, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
-      .eq('id', userId)
-      .maybeSingle();
-      
-    if (profileError) {
-      console.error("Profile error:", profileError);
-      return new Response(
-        JSON.stringify({ 
-          error: `Database error while fetching profile: ${profileError.message}`,
-          success: false,
-          code: 'DB_ERROR' 
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    // Try multiple queries to find profile with both direct query and service role
+    let profileData = null;
+    let profileError = null;
+    
+    try {
+      // First attempt: standard query with anon key
+      console.log("Attempting to fetch profile with ID:", userId);
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("First profile fetch error:", error);
+        profileError = error;
+      } else if (data) {
+        console.log("Profile found on first attempt");
+        profileData = data;
+      } else {
+        console.log("No profile found on first attempt, trying RLS debug");
+        
+        // Debug query to check if the profiles table has any data
+        const { data: debugData, error: debugError } = await supabaseClient
+          .from('profiles')
+          .select('count')
+          .limit(1);
+          
+        if (debugError) {
+          console.error("Debug query error:", debugError);
+        } else {
+          console.log("Debug query results:", debugData);
         }
-      );
+      }
+    } catch (err) {
+      console.error("Error during profile fetch:", err);
+      profileError = err;
     }
     
+    // If we still don't have profile data, return a useful error
     if (!profileData) {
-      console.error("No profile found for user ID:", userId);
+      console.error("Profile not found for user ID:", userId, "Error:", profileError);
       return new Response(
         JSON.stringify({ 
-          error: 'Profile setup incomplete. Please visit your profile settings and add your Twilio credentials.',
+          error: 'Profile setup incomplete or database error. Please visit your profile settings and verify your Twilio credentials.',
           success: false,
-          code: 'PROFILE_NOT_FOUND'
+          code: 'PROFILE_NOT_FOUND',
+          details: profileError ? String(profileError) : undefined
         }),
         { 
           status: 400, 
