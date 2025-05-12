@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -47,8 +48,15 @@ serve(async (req) => {
     const speechResult = formData.get('SpeechResult')?.toString();
     const confidence = formData.get('Confidence')?.toString();
     const callSid = formData.get('CallSid')?.toString();
+    const digits = formData.get('Digits')?.toString(); // Get DTMF input if any
     
-    console.log(`Speech received: "${speechResult}" (confidence: ${confidence})`);
+    // Log the user input - both speech and DTMF
+    if (speechResult) {
+      console.log(`Speech received: "${speechResult}" (confidence: ${confidence})`);
+    }
+    if (digits) {
+      console.log(`DTMF digits received: "${digits}"`);
+    }
     
     // Initialize Supabase client with anon key (for read operations)
     const supabaseClient = createClient(
@@ -62,23 +70,47 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
-    if (!speechResult) {
-      console.error('No speech result received');
+    // Process DTMF input if no speech was detected
+    let userInput = speechResult || '';
+    if (!speechResult && digits) {
+      // Convert DTMF to text response
+      if (digits === '1') {
+        userInput = 'Yes, I am interested';
+      } else if (digits === '2') {
+        userInput = 'No, I am not interested';
+      } else {
+        userInput = `Pressed ${digits}`;
+      }
+      console.log(`Converted DTMF to text: "${userInput}"`);
+    }
+    
+    if (!userInput) {
+      console.error('No speech or DTMF input received');
       // Increase timeout and add more detailed prompting to help capture speech
       const response = twiml.VoiceResponse()
-        .say("I'm sorry, I couldn't hear you. Let me try again.")
+        .say("I'm sorry, I couldn't hear you. Please speak clearly or use the keypad. Press 1 for yes or 2 for no.")
         .pause({ length: 2 }) // Added a longer pause to give the caller time to prepare
         .gather({
-          input: 'speech',
+          input: 'speech dtmf', // Accept both speech and keypad
           action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
           method: 'POST',
           timeout: 15, // Increased timeout from 7 to 15 seconds
           speechTimeout: 'auto',
-          language: 'en-US' // Explicitly set language
+          language: 'en-US', // Explicitly set language
+          hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
         })
-        .say("Please let me know how I can help you today. I'm listening now.")
-        .endGather()
-        .say("I didn't catch that. Thank you for your time. Goodbye.")
+        .say("Please let me know how I can help you today. You can speak now or press 1 for yes, 2 for no.")
+        .pause({ length: 2 })
+        // One more try before giving up
+        .gather({
+          input: 'speech dtmf',
+          action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
+          method: 'POST',
+          timeout: 10,
+          speechTimeout: 'auto',
+          language: 'en-US'
+        })
+        .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
         .hangup();
         
       return new Response(response.toString(), { 
@@ -145,7 +177,7 @@ serve(async (req) => {
       
       // Add this turn to the transcript history
       const updatedTranscript = transcriptHistory + 
-        `\nProspect: ${speechResult}`;
+        `\nProspect: ${userInput}`;
       
       console.log(`Updating call log transcript: ${callLogId}`);
       try {
@@ -169,7 +201,7 @@ serve(async (req) => {
     // Call OpenAI to generate response
     console.log('Calling OpenAI to generate response');
     const openaiPayload = {
-      prompt: speechResult,
+      prompt: userInput,
       systemPrompt: `You are an AI assistant for eXp Realty named Alex. You are speaking with a prospect named ${prospect?.first_name || 'there'}. 
       Keep responses conversational, friendly, and under 100 words. You are calling about ${prospect?.property_address || 'their property'}. 
       Your goal is to set up an appointment with a real estate agent. If they express interest, thank them and let them know an agent will call them soon.
@@ -233,8 +265,11 @@ serve(async (req) => {
     
     // Process the response to determine if we should end the call
     const lowerResponse = aiResponse.toLowerCase();
+    const userInputLower = userInput.toLowerCase();
     const isEndingCall = lowerResponse.includes('goodbye') || 
                         lowerResponse.includes('thank you for your time') ||
+                        userInputLower.includes('no') || 
+                        userInputLower.includes('not interested') ||
                         parseInt(conversationCount) >= 3; // Limit conversation to 3 turns
     
     console.log(`Is ending call: ${isEndingCall}, conversation count: ${conversationCount}`);
@@ -364,16 +399,26 @@ serve(async (req) => {
           .play(audioUrl)
           .pause({ length: 1 })
           .gather({
-            input: 'speech',
+            input: 'speech dtmf', // Accept both speech and keypad
             action: nextActionUrl,
             method: 'POST',
             timeout: 15, // Increased timeout from 7 to 15 seconds
             speechTimeout: 'auto',
-            language: 'en-US' // Explicitly set language
+            language: 'en-US', // Explicitly set language
+            hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
           })
-          .say("I'm listening for your response.")
-          .endGather()
-          .say("I didn't catch that. Thank you for your time. Goodbye.")
+          .say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.")
+          .pause({ length: 2 })
+          // One more try before giving up
+          .gather({
+            input: 'speech dtmf',
+            action: nextActionUrl,
+            method: 'POST',
+            timeout: 10,
+            speechTimeout: 'auto',
+            language: 'en-US'
+          })
+          .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
           .hangup();
           
       } catch (speechGenError) {
@@ -387,16 +432,26 @@ serve(async (req) => {
           .say(aiResponse)
           .pause({ length: 1 })
           .gather({
-            input: 'speech',
+            input: 'speech dtmf', // Accept both speech and keypad
             action: nextActionUrl,
             method: 'POST',
             timeout: 15, // Increased timeout from 7 to 15 seconds
             speechTimeout: 'auto',
-            language: 'en-US' // Explicitly set language
+            language: 'en-US', // Explicitly set language
+            hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
           })
-          .say("I'm listening for your response.")
-          .endGather()
-          .say("I didn't catch that. Thank you for your time. Goodbye.")
+          .say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.")
+          .pause({ length: 2 })
+          // One more try before giving up
+          .gather({
+            input: 'speech dtmf',
+            action: nextActionUrl,
+            method: 'POST',
+            timeout: 10,
+            speechTimeout: 'auto',
+            language: 'en-US'
+          })
+          .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
           .hangup();
       }
     }

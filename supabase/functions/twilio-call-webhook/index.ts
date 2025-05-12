@@ -130,21 +130,31 @@ serve(async (req) => {
     const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}${callLogId ? `&call_log_id=${callLogId}` : ''}`;
     console.log(`Setting Gather action URL to: ${processResponseUrl}`);
     
-    // Create a TwiML response
+    // Create a TwiML response - Accept both speech AND keypad input
     const response = twiml.VoiceResponse()
       .say(greeting)
       .pause({ length: 1 })
       .gather({
-        input: 'speech',
+        input: 'speech dtmf', // Accept both speech and keypad
         action: processResponseUrl,
         method: 'POST',
         timeout: 15, // Increased timeout from 7 to 15 seconds
         speechTimeout: 'auto',
-        language: 'en-US' // Explicitly set language
+        language: 'en-US', // Explicitly set language
+        hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
       })
-      .say("I'm listening for your response. Please let me know if you'd be interested in speaking with an agent.")
-      .endGather()
-      .say("I didn't catch that. Thank you for your time. Goodbye.")
+      .say("I'm waiting for your response. Please speak or press 1 for yes or 2 for no.")
+      .pause({ length: 2 })
+      // Try one more time before giving up
+      .gather({
+        input: 'speech dtmf', // Second attempt, accepting both inputs
+        action: processResponseUrl,
+        method: 'POST',
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US'
+      })
+      .say("I still didn't catch that. Thank you for your time. Goodbye.")
       .hangup();
     
     // If we have a call_log_id, update the status using admin client
