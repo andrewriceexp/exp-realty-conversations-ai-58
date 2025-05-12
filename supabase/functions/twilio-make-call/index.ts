@@ -7,17 +7,46 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const twilioClient = (accountSid: string, authToken: string) => {
   const client = {
     calls: {
-      create: async (params: any) => {
+      create: async (params: Record<string, any>) => {
         console.log("Creating call with params:", JSON.stringify(params));
         
         try {
+          // Convert parameters to form data format expected by Twilio
+          const formData = new URLSearchParams();
+          
+          // Ensure required parameters are included and properly formatted
+          for (const [key, value] of Object.entries(params)) {
+            if (value !== undefined && value !== null) {
+              if (Array.isArray(value)) {
+                // Handle array parameters like statusCallbackEvent
+                for (const item of value) {
+                  formData.append(`${key}[]`, item);
+                }
+              } else {
+                formData.append(key, value.toString());
+              }
+            }
+          }
+          
+          // Validate key parameters are present
+          if (!formData.has('to') || !formData.get('to')) {
+            throw new Error("Missing required 'to' parameter for Twilio call");
+          }
+          
+          if (!formData.has('from') || !formData.get('from')) {
+            throw new Error("Missing required 'from' parameter for Twilio call");
+          }
+          
+          // Log the actual form data being sent
+          console.log("Sending form data to Twilio:", formData.toString());
+          
           const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
             method: 'POST',
             headers: {
               'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams(params).toString(),
+            body: formData.toString(),
           });
           
           const responseText = await response.text();
@@ -349,25 +378,8 @@ serve(async (req) => {
       console.log("Webhook URL:", webhookWithParams);
       console.log("Status webhook URL:", statusWebhook);
       
-      // Detailed logging of Twilio parameters
-      const twilioParams = {
-        url: webhookWithParams,
-        to: formattedPhoneNumber,
-        from: twilioPhoneNumber,
-        statusCallback: statusWebhook,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-        record: 'true',
-      };
-      console.log("Twilio parameters:", JSON.stringify(twilioParams));
-      
-      // Initiate the call via Twilio
-      const call = await twilio.calls.create(twilioParams);
-      
-      console.log("Twilio call initiated successfully:", call.sid);
-      
-      // Create a call log entry with the Twilio SID - USING ADMIN CLIENT
-      console.log("Creating call log with Twilio SID using admin client");
+      // First, create a call log entry with pending status
+      console.log("Creating call log with pending status using admin client");
       const { data: callLogData, error: callLogError } = await supabaseAdmin
         .from('call_logs')
         .insert({
@@ -375,7 +387,7 @@ serve(async (req) => {
           user_id: userId,
           agent_config_id: agentConfigId,
           call_status: 'Initiated',
-          twilio_call_sid: call.sid, // Use the actual SID we received from Twilio
+          twilio_call_sid: 'pending', // Use 'pending' as placeholder
           started_at: new Date().toISOString()
         })
         .select()
@@ -398,6 +410,38 @@ serve(async (req) => {
       }
       
       console.log("Call log created successfully:", callLogData);
+
+      // Detailed logging of Twilio parameters
+      const twilioParams = {
+        url: webhookWithParams,
+        to: formattedPhoneNumber,
+        from: twilioPhoneNumber,
+        statusCallback: statusWebhook,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+        record: 'true',
+      };
+      
+      console.log("Twilio parameters:", JSON.stringify(twilioParams));
+      
+      // Initiate the call via Twilio
+      const call = await twilio.calls.create(twilioParams);
+      
+      console.log("Twilio call initiated successfully:", call.sid);
+      
+      // Update call log with the actual Twilio SID
+      console.log("Updating call log with Twilio SID using admin client");
+      const { error: updateError } = await supabaseAdmin
+        .from('call_logs')
+        .update({
+          twilio_call_sid: call.sid
+        })
+        .eq('id', callLogData.id);
+        
+      if (updateError) {
+        console.error("Error updating call log with SID:", updateError);
+        // We'll continue since the call was still made successfully
+      }
       
       // Update prospect status to "Calling" - USING ADMIN CLIENT
       console.log("Updating prospect status to 'Calling' using admin client");
@@ -422,6 +466,17 @@ serve(async (req) => {
       );
     } catch (twilioError) {
       console.error('Twilio error:', twilioError);
+      
+      // If we created a call log, update it to Failed status
+      if (callLogData?.id) {
+        await supabaseAdmin
+          .from('call_logs')
+          .update({
+            call_status: 'Failed',
+            ended_at: new Date().toISOString()
+          })
+          .eq('id', callLogData.id);
+      }
       
       return new Response(
         JSON.stringify({ 
