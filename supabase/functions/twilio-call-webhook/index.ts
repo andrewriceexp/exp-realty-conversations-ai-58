@@ -131,31 +131,41 @@ serve(async (req) => {
     console.log(`Setting Gather action URL to: ${processResponseUrl}`);
     
     // Create a TwiML response - Accept both speech AND keypad input
-    const response = twiml.VoiceResponse()
-      .say(greeting)
-      .pause({ length: 1 })
-      .gather({
-        input: 'speech dtmf', // Accept both speech and keypad
-        action: processResponseUrl,
-        method: 'POST',
-        timeout: 15, // Increased timeout from 7 to 15 seconds
-        speechTimeout: 'auto',
-        language: 'en-US', // Explicitly set language
-        hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
-      })
-      .say("I'm waiting for your response. Please speak or press 1 for yes or 2 for no.")
-      .pause({ length: 2 })
-      // Try one more time before giving up
-      .gather({
-        input: 'speech dtmf', // Second attempt, accepting both inputs
-        action: processResponseUrl,
-        method: 'POST',
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US'
-      })
-      .say("I still didn't catch that. Thank you for your time. Goodbye.")
-      .hangup();
+    const response = twiml.VoiceResponse();
+    response.say(greeting);
+    response.pause({ length: 1 });
+    
+    // First attempt to gather input
+    const gather1 = response.gather({
+      input: 'speech dtmf', // Accept both speech and keypad
+      action: processResponseUrl,
+      method: 'POST',
+      timeout: 15, // Increased timeout from 7 to 15 seconds
+      speechTimeout: 'auto',
+      language: 'en-US', // Explicitly set language
+      hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
+    });
+    
+    gather1.say("I'm waiting for your response. Please speak or press 1 for yes or 2 for no.");
+    
+    // Add a pause between gather attempts
+    response.pause({ length: 2 });
+    
+    // Second attempt to gather input
+    const gather2 = response.gather({
+      input: 'speech dtmf', // Second attempt, accepting both inputs
+      action: processResponseUrl,
+      method: 'POST',
+      timeout: 10,
+      speechTimeout: 'auto',
+      language: 'en-US'
+    });
+    
+    gather2.say("I still didn't catch that. Please speak clearly or press a key.");
+    
+    // Final message if no input is detected
+    response.say("Thank you for your time. Goodbye.");
+    response.hangup();
     
     // If we have a call_log_id, update the status using admin client
     if (callLogId) {

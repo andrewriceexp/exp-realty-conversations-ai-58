@@ -86,32 +86,43 @@ serve(async (req) => {
     
     if (!userInput) {
       console.error('No speech or DTMF input received');
-      // Increase timeout and add more detailed prompting to help capture speech
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, I couldn't hear you. Please speak clearly or use the keypad. Press 1 for yes or 2 for no.")
-        .pause({ length: 2 }) // Added a longer pause to give the caller time to prepare
-        .gather({
-          input: 'speech dtmf', // Accept both speech and keypad
-          action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
-          method: 'POST',
-          timeout: 15, // Increased timeout from 7 to 15 seconds
-          speechTimeout: 'auto',
-          language: 'en-US', // Explicitly set language
-          hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
-        })
-        .say("Please let me know how I can help you today. You can speak now or press 1 for yes, 2 for no.")
-        .pause({ length: 2 })
-        // One more try before giving up
-        .gather({
-          input: 'speech dtmf',
-          action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
-          method: 'POST',
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US'
-        })
-        .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
-        .hangup();
+      
+      // Create a TwiML response for no input detected
+      const response = twiml.VoiceResponse();
+      response.say("I'm sorry, I couldn't hear you. Please speak clearly or use the keypad. Press 1 for yes or 2 for no.");
+      response.pause({ length: 2 }); // Added a longer pause to give the caller time to prepare
+      
+      // First gather attempt
+      const gather1 = response.gather({
+        input: 'speech dtmf', // Accept both speech and keypad
+        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
+        method: 'POST',
+        timeout: 15,
+        speechTimeout: 'auto',
+        language: 'en-US',
+        hints: 'yes,no,maybe,interested,not interested'
+      });
+      
+      gather1.say("Please let me know how I can help you today. You can speak now or press 1 for yes, 2 for no.");
+      
+      // Add a pause between gather attempts
+      response.pause({ length: 2 });
+      
+      // Second gather attempt
+      const gather2 = response.gather({
+        input: 'speech dtmf',
+        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
+        method: 'POST',
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US'
+      });
+      
+      gather2.say("I still couldn't detect your response. Please try once more.");
+      
+      // Final message if still no input
+      response.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
+      response.hangup();
         
       return new Response(response.toString(), { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
@@ -321,20 +332,22 @@ serve(async (req) => {
         // Create TwiML with audio playback
         const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
         console.log('Creating TwiML with audio playback for final response');
-        twimlResponse = twiml.VoiceResponse()
-          .play(audioUrl)
-          .pause({ length: 1 })
-          .say("Thank you for your time. Goodbye.")
-          .hangup();
+        
+        twimlResponse = twiml.VoiceResponse();
+        twimlResponse.play(audioUrl);
+        twimlResponse.pause({ length: 1 });
+        twimlResponse.say("Thank you for your time. Goodbye.");
+        twimlResponse.hangup();
           
       } catch (speechGenError) {
         console.error('Error generating speech:', speechGenError);
         console.log('Falling back to regular TTS for final response');
-        twimlResponse = twiml.VoiceResponse()
-          .say(aiResponse)
-          .pause({ length: 1 })
-          .say("Thank you for your time. Goodbye.")
-          .hangup();
+        
+        twimlResponse = twiml.VoiceResponse();
+        twimlResponse.say(aiResponse);
+        twimlResponse.pause({ length: 1 });
+        twimlResponse.say("Thank you for your time. Goodbye.");
+        twimlResponse.hangup();
       }
       
       // Extract data for the call log
@@ -395,31 +408,42 @@ serve(async (req) => {
         // Create TwiML with audio playback and gather for next turn
         const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
         console.log('Creating TwiML with audio playback for continued conversation');
-        twimlResponse = twiml.VoiceResponse()
-          .play(audioUrl)
-          .pause({ length: 1 })
-          .gather({
-            input: 'speech dtmf', // Accept both speech and keypad
-            action: nextActionUrl,
-            method: 'POST',
-            timeout: 15, // Increased timeout from 7 to 15 seconds
-            speechTimeout: 'auto',
-            language: 'en-US', // Explicitly set language
-            hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
-          })
-          .say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.")
-          .pause({ length: 2 })
-          // One more try before giving up
-          .gather({
-            input: 'speech dtmf',
-            action: nextActionUrl,
-            method: 'POST',
-            timeout: 10,
-            speechTimeout: 'auto',
-            language: 'en-US'
-          })
-          .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
-          .hangup();
+        
+        twimlResponse = twiml.VoiceResponse();
+        twimlResponse.play(audioUrl);
+        twimlResponse.pause({ length: 1 });
+        
+        // First gather attempt
+        const gather1 = twimlResponse.gather({
+          input: 'speech dtmf', // Accept both speech and keypad
+          action: nextActionUrl,
+          method: 'POST',
+          timeout: 15,
+          speechTimeout: 'auto',
+          language: 'en-US',
+          hints: 'yes,no,maybe,interested,not interested'
+        });
+        
+        gather1.say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.");
+        
+        // Add a pause between gather attempts
+        twimlResponse.pause({ length: 2 });
+        
+        // Second gather attempt
+        const gather2 = twimlResponse.gather({
+          input: 'speech dtmf',
+          action: nextActionUrl,
+          method: 'POST',
+          timeout: 10,
+          speechTimeout: 'auto',
+          language: 'en-US'
+        });
+        
+        gather2.say("I still couldn't detect your response. Please try once more.");
+        
+        // Final message if still no input
+        twimlResponse.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
+        twimlResponse.hangup();
           
       } catch (speechGenError) {
         console.error('Error generating speech:', speechGenError);
@@ -428,31 +452,42 @@ serve(async (req) => {
         const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`;
         
         console.log('Falling back to regular TTS for continued conversation');
-        twimlResponse = twiml.VoiceResponse()
-          .say(aiResponse)
-          .pause({ length: 1 })
-          .gather({
-            input: 'speech dtmf', // Accept both speech and keypad
-            action: nextActionUrl,
-            method: 'POST',
-            timeout: 15, // Increased timeout from 7 to 15 seconds
-            speechTimeout: 'auto',
-            language: 'en-US', // Explicitly set language
-            hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
-          })
-          .say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.")
-          .pause({ length: 2 })
-          // One more try before giving up
-          .gather({
-            input: 'speech dtmf',
-            action: nextActionUrl,
-            method: 'POST',
-            timeout: 10,
-            speechTimeout: 'auto',
-            language: 'en-US'
-          })
-          .say("I still couldn't detect your response. Thank you for your time. Goodbye.")
-          .hangup();
+        
+        twimlResponse = twiml.VoiceResponse();
+        twimlResponse.say(aiResponse);
+        twimlResponse.pause({ length: 1 });
+        
+        // First gather attempt
+        const gather1 = twimlResponse.gather({
+          input: 'speech dtmf',
+          action: nextActionUrl,
+          method: 'POST',
+          timeout: 15,
+          speechTimeout: 'auto',
+          language: 'en-US',
+          hints: 'yes,no,maybe,interested,not interested'
+        });
+        
+        gather1.say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.");
+        
+        // Add a pause between gather attempts
+        twimlResponse.pause({ length: 2 });
+        
+        // Second gather attempt
+        const gather2 = twimlResponse.gather({
+          input: 'speech dtmf',
+          action: nextActionUrl,
+          method: 'POST',
+          timeout: 10,
+          speechTimeout: 'auto',
+          language: 'en-US'
+        });
+        
+        gather2.say("I still couldn't detect your response. Please try once more.");
+        
+        // Final message if still no input
+        twimlResponse.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
+        twimlResponse.hangup();
       }
     }
     
