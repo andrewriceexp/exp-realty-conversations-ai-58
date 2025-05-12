@@ -78,7 +78,7 @@ export function useTwilioCall() {
         throw new Error('No response from Edge Function');
       }
       
-      if (data.error) {
+      if (data.error && !data.success) {
         console.error('Error data from edge function:', data);
         const err = new Error(data.error);
         if (data.code) {

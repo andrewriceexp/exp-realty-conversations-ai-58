@@ -28,12 +28,12 @@ const twilioClient = (accountSid: string, authToken: string) => {
             }
           }
           
-          // Validate key parameters are present
-          if (!formData.has('to') || !formData.get('to')) {
+          // Validate key parameters - critical check to prevent the "No 'To' number specified" error
+          if (!params.to || params.to === '') {
             throw new Error("Missing required 'to' parameter for Twilio call");
           }
           
-          if (!formData.has('from') || !formData.get('from')) {
+          if (!params.from || params.from === '') {
             throw new Error("Missing required 'from' parameter for Twilio call");
           }
           
@@ -391,8 +391,16 @@ serve(async (req) => {
       
       console.log("Twilio parameters:", JSON.stringify(twilioParams));
       
-      // Initiate the call via Twilio
-      const call = await twilio.calls.create(twilioParams);
+      // Initiate the call via Twilio - FIX: Make sure we're passing all required parameters properly
+      const call = await twilio.calls.create({
+        url: webhookWithParams,
+        to: formattedPhoneNumber,
+        from: twilioPhoneNumber,
+        statusCallback: statusWebhook,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+        record: 'true',
+      });
       
       console.log("Twilio call initiated successfully:", call.sid);
       
