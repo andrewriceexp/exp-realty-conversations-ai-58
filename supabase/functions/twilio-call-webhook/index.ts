@@ -138,7 +138,7 @@ serve(async (req) => {
         input: 'speech',
         action: processResponseUrl,
         method: 'POST',
-        timeout: 7, // Increased timeout
+        timeout: 15, // Increased timeout from 7 to 15 seconds
         speechTimeout: 'auto',
         language: 'en-US' // Explicitly set language
       })

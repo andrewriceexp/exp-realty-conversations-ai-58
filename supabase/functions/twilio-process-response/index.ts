@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -68,11 +67,12 @@ serve(async (req) => {
       // Increase timeout and add more detailed prompting to help capture speech
       const response = twiml.VoiceResponse()
         .say("I'm sorry, I couldn't hear you. Let me try again.")
+        .pause({ length: 2 }) // Added a longer pause to give the caller time to prepare
         .gather({
           input: 'speech',
           action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
           method: 'POST',
-          timeout: 7, // Increased timeout
+          timeout: 15, // Increased timeout from 7 to 15 seconds
           speechTimeout: 'auto',
           language: 'en-US' // Explicitly set language
         })
@@ -367,7 +367,7 @@ serve(async (req) => {
             input: 'speech',
             action: nextActionUrl,
             method: 'POST',
-            timeout: 7, // Increased timeout
+            timeout: 15, // Increased timeout from 7 to 15 seconds
             speechTimeout: 'auto',
             language: 'en-US' // Explicitly set language
           })
@@ -390,7 +390,7 @@ serve(async (req) => {
             input: 'speech',
             action: nextActionUrl,
             method: 'POST',
-            timeout: 7, // Increased timeout
+            timeout: 15, // Increased timeout from 7 to 15 seconds
             speechTimeout: 'auto',
             language: 'en-US' // Explicitly set language
           })
