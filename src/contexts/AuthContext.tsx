@@ -14,6 +14,8 @@ type AuthContextType = {
   signOut: () => Promise<void>;
   updateProfile: (profile: Partial<Profile>) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  secureSessionCheck: () => boolean;
+  clearAuthState: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,11 +27,60 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Clean up auth state completely (useful for logout or auth issues)
+  const clearAuthState = () => {
+    // Remove Supabase items from storage
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    // Also clear from sessionStorage if it might be used
+    Object.keys(sessionStorage || {}).forEach(key => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    
+    // Reset state
+    setUser(null);
+    setProfile(null);
+    setError(null);
+  };
+
+  // Security check for session validity
+  const secureSessionCheck = () => {
+    if (!user) return false;
+    
+    // Check if session is expired
+    const tokenData = localStorage.getItem('supabase.auth.token');
+    if (!tokenData) return false;
+    
+    try {
+      const { expiresAt } = JSON.parse(tokenData);
+      const now = Math.floor(Date.now() / 1000);
+      return expiresAt > now;
+    } catch (err) {
+      console.error('Error checking token expiry:', err);
+      return false;
+    }
+  };
+
   useEffect(() => {
     // First set up the auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_, session) => {
+      (event, session) => {
+        console.log('Auth state change event:', event);
         setUser(session?.user ?? null);
+        
+        // Log authentication events securely
+        if (event === 'SIGNED_IN') {
+          console.log('User signed in:', session?.user?.id);
+        } else if (event === 'SIGNED_OUT') {
+          console.log('User signed out');
+          setProfile(null);
+        }
         
         // Don't fetch profile here to avoid recursion risk
         if (session?.user) {
@@ -84,6 +135,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       setError(null);
       
+      // Clean up any existing auth state before signing in
+      // This helps prevent "auth limbo" states
+      clearAuthState();
+      
+      // Try a global signout first to clear any existing sessions
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (e) {
+        // Continue even if this fails
+        console.log('Global sign out before sign-in failed:', e);
+      }
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -96,6 +159,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           description: error.message,
           variant: "destructive",
         });
+        
+        // Log failed sign-in attempt (for security monitoring)
+        console.warn('Failed sign-in attempt:', { email, timestamp: new Date().toISOString() });
+      } else {
+        // Log successful sign-in (for security monitoring)
+        console.log('Successful sign-in:', { email, timestamp: new Date().toISOString() });
       }
     } catch (err: any) {
       setError(err.message);
@@ -113,6 +182,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       setError(null);
+      
+      // Clear existing auth state
+      clearAuthState();
       
       const { error } = await supabase.auth.signUp({
         email,
@@ -136,6 +208,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           title: "Registration Successful",
           description: "Please check your email to verify your account.",
         });
+        
+        // Log successful registration (for security monitoring)
+        console.log('New user registration:', { email, timestamp: new Date().toISOString() });
       }
     } catch (err: any) {
       setError(err.message);
@@ -152,7 +227,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
+      
+      // First log the sign-out event (for security monitoring)
+      console.log('User sign-out:', { userId: user?.id, timestamp: new Date().toISOString() });
+      
+      // Clean up all auth state
+      clearAuthState();
+      
+      // Then trigger the actual sign-out
+      await supabase.auth.signOut({ scope: 'global' });
+      
+      // Force page reload for a clean state
+      // Uncomment if you want to ensure clean state after logout
+      // window.location.href = '/login';
     } catch (err: any) {
       toast({
         title: "Sign Out Error",
@@ -184,6 +271,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
       
+      // Log password reset request (for security monitoring)
+      console.log('Password reset requested:', { email, timestamp: new Date().toISOString() });
+      
       toast({
         title: "Password Reset Email Sent",
         description: "Check your email for a password reset link",
@@ -214,6 +304,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         id: user.id,
         twilio_auth_token: profileData.twilio_auth_token ? '****' : undefined 
       });
+      
+      // Log profile update (for security monitoring)
+      console.log('Profile update:', { userId: user.id, timestamp: new Date().toISOString() });
       
       // Create a clean update object
       const updateObj = { ...profileData, id: user.id };
@@ -265,6 +358,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signOut,
         updateProfile,
         resetPassword,
+        secureSessionCheck,
+        clearAuthState,
       }}
     >
       {children}

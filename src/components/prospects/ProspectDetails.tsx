@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
+import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon, ShieldIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProspectList, Prospect, CallLog, ProspectStatus, CallStatus } from '@/types';
@@ -18,6 +17,11 @@ import {
   isAnonymizationEnabled, 
   setAnonymizationEnabled 
 } from '@/utils/anonymizationUtils';
+import {
+  logSecurityAudit,
+  sanitizeUserInput,
+  validateResourceAccess
+} from '@/utils/securityUtils';
 
 interface ProspectDetailsProps {
   list: ProspectList;
@@ -45,6 +49,9 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
     try {
       setLoading(true);
       if (!list?.id || !user) return;
+
+      // Log security audit for access to prospect list
+      logSecurityAudit(user.id, 'view_prospect_list', 'prospect_list', list.id);
 
       // Fetch prospects for this list
       const { data: prospectsData, error: prospectsError } = await supabase
@@ -83,6 +90,9 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
     try {
       if (!user) return;
 
+      // Log security audit for access to call logs
+      logSecurityAudit(user.id, 'view_call_logs', 'prospect', prospectId);
+
       // Fetch call logs for this prospect
       const { data: callLogsData, error: callLogsError } = await supabase
         .from('call_logs')
@@ -111,6 +121,21 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   };
 
   const handleProspectSelect = (prospect: Prospect) => {
+    if (!user) return;
+    
+    // Validate that the current user has access to this prospect
+    if (!validateResourceAccess(user, prospect.user_id)) {
+      toast({
+        title: "Access denied",
+        description: "You do not have permission to view this prospect.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Log security audit for accessing specific prospect details
+    logSecurityAudit(user.id, 'view_prospect_detail', 'prospect', prospect.id);
+    
     setSelectedProspect(prospect);
     fetchCallLogs(prospect.id);
   };
@@ -153,12 +178,21 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
         ? "Prospect information is now displayed in its original form." 
         : "Prospect information is now anonymized for privacy.",
     });
+    
+    // Log this security-relevant action
+    if (user) {
+      logSecurityAudit(
+        user.id, 
+        anonymizeData ? 'disable_data_anonymization' : 'enable_data_anonymization', 
+        'user_preference'
+      );
+    }
   };
 
   // Helper function to display name with anonymization support
   const displayName = (firstName: string | null, lastName: string | null): string => {
     const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Unnamed';
-    if (!anonymizeData) return fullName;
+    if (!anonymizeData) return sanitizeUserInput(fullName);
     
     return [
       firstName ? anonymizeName(firstName) : null,
@@ -168,13 +202,13 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
 
   // Helper function to display phone with anonymization support
   const displayPhone = (phone: string): string => {
-    return anonymizeData ? anonymizePhoneNumber(phone) : phone;
+    return anonymizeData ? anonymizePhoneNumber(phone) : sanitizeUserInput(phone);
   };
 
   // Helper function to display address with anonymization support
   const displayAddress = (address: string | null): string => {
     if (!address) return '—';
-    return anonymizeData ? anonymizeAddress(address) : address;
+    return anonymizeData ? anonymizeAddress(address) : sanitizeUserInput(address);
   };
 
   if (loading) {
@@ -223,6 +257,10 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
               )}
             </label>
           </div>
+          <div className="flex items-center gap-2">
+            <ShieldIcon className="h-4 w-4 text-green-500" />
+            <span className="text-xs text-green-500">Enhanced Security</span>
+          </div>
           <Badge className="bg-blue-500">{prospects.length} Prospects</Badge>
         </div>
       </div>
@@ -230,8 +268,16 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
       {!selectedProspect ? (
         <Card>
           <CardHeader>
-            <CardTitle>Prospect List</CardTitle>
-            <CardDescription>All contacts in this list</CardDescription>
+            <div className="flex justify-between">
+              <div>
+                <CardTitle>Prospect List</CardTitle>
+                <CardDescription>All contacts in this list</CardDescription>
+              </div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <ShieldIcon className="h-3.5 w-3.5" /> 
+                <span>Data protected by Row Level Security</span>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
