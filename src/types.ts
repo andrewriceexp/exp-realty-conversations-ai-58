@@ -69,7 +69,7 @@ export interface CallLog {
   call_duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
-  extracted_data: Record<string, any> | null;
+  extracted_data: any | null; // Changed from Record<string, any> to any to be compatible with Json type
   summary: string | null;
   cost: number | null;
   started_at: string;

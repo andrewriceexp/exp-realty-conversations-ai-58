@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -95,10 +96,11 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
 
       if (callLogsError) throw callLogsError;
       
-      // Transform the data with proper typing to include the config name
+      // Transform the data with proper typing
       const transformedCallLogs: CallLog[] = callLogsData.map(log => ({
         ...log,
         call_status: log.call_status as CallStatus,
+        // The extracted_data is already compatible with our updated type
         config_name: log.agent_configs ? log.agent_configs.config_name : 'Unknown'
       }));
       
