@@ -240,8 +240,8 @@ serve(async (req) => {
       // Generate the final speech audio with ElevenLabs
       const elevenLabsPayload = {
         text: aiResponse,
-        voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah's voice
-        model: "eleven_multilingual_v2"
+        voiceId: agentConfig?.voice_id || "EXAVITQu4vr4xnSDxMaL", // Use agent config or default to Sarah's voice
+        model: agentConfig?.tts_model || "eleven_multilingual_v2"
       };
       
       try {
@@ -266,7 +266,7 @@ serve(async (req) => {
         // Create TwiML with audio playback
         const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
         twimlResponse = twiml.VoiceResponse()
-          .say(aiResponse) // Fallback for audio playback issues
+          .play(audioUrl)
           .pause({ length: 1 })
           .say("Thank you for your time. Goodbye.")
           .hangup();
@@ -305,8 +305,8 @@ serve(async (req) => {
         // Generate the speech audio with ElevenLabs
         const elevenLabsPayload = {
           text: aiResponse,
-          voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah's voice
-          model: "eleven_multilingual_v2"
+          voiceId: agentConfig?.voice_id || "EXAVITQu4vr4xnSDxMaL", // Use agent config or default to Sarah's voice
+          model: agentConfig?.tts_model || "eleven_multilingual_v2"
         };
         
         // Call ElevenLabs for text-to-speech
@@ -319,8 +319,9 @@ serve(async (req) => {
         }
         
         // Create TwiML with audio playback and gather for next turn
+        const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
         twimlResponse = twiml.VoiceResponse()
-          .say(aiResponse) // Fallback if audio playback has issues
+          .play(audioUrl)
           .gather({
             input: 'speech',
             action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`,
