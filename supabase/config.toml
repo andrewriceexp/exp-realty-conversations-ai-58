@@ -3,3 +3,6 @@ project_id = "uttebgyhijrdcjiczxrg"
 
 [functions.twilio-call-webhook]
 verify_jwt = false
+
+[functions.twilio-process-response]
+verify_jwt = false

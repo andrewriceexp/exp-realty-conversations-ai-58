@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 
 // TwiML helper functions
 const twiml = {
@@ -62,15 +63,99 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
+// Function to validate Twilio requests
+async function validateTwilioRequest(req: Request, url: string): Promise<boolean> {
+  console.log("Validating Twilio request");
+  
+  try {
+    const twilioSignature = req.headers.get('x-twilio-signature');
+    
+    if (!twilioSignature) {
+      console.error("Missing X-Twilio-Signature header");
+      return false;
+    }
+    
+    // Get Twilio auth token from environment variable
+    const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    
+    if (!twilioAuthToken) {
+      console.error("Missing TWILIO_AUTH_TOKEN environment variable");
+      return false;
+    }
+    
+    // For POST requests, we need to validate with the request body
+    let params = {};
+    if (req.method === 'POST') {
+      // Clone the request to avoid consuming it
+      const clonedReq = req.clone();
+      
+      // Try to parse the body as form data or JSON
+      try {
+        const contentType = req.headers.get('content-type') || '';
+        if (contentType.includes('application/x-www-form-urlencoded') ||
+            contentType.includes('multipart/form-data')) {
+          const formData = await clonedReq.formData();
+          formData.forEach((value, key) => {
+            params[key] = value;
+          });
+        } else if (contentType.includes('application/json')) {
+          params = await clonedReq.json();
+        }
+      } catch (error) {
+        console.error("Error parsing request body:", error);
+      }
+    }
+    
+    // Create validation signature
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => {
+        return acc + key + params[key];
+      }, url);
+      
+    const hmac = createHmac('sha1', twilioAuthToken);
+    hmac.update(data);
+    const calculatedSignature = hmac.digest('base64');
+    
+    console.log(`Received Twilio signature: ${twilioSignature}`);
+    console.log(`Calculated signature: ${calculatedSignature}`);
+    
+    const isValid = twilioSignature === calculatedSignature;
+    console.log(`Signature validation ${isValid ? 'PASSED' : 'FAILED'}`);
+    
+    return isValid;
+  } catch (error) {
+    console.error("Error validating Twilio request:", error);
+    return false;
+  }
+}
+
 serve(async (req) => {
+  // Very early logging
+  console.log(`--- twilio-process-response: INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Parse URL and get query parameters
+    // Parse URL to get the full URL and query parameters
     const url = new URL(req.url);
+    const fullUrl = url.origin + url.pathname;
+    
+    // Validate Twilio request
+    const isValidRequest = await validateTwilioRequest(req, fullUrl);
+    
+    if (!isValidRequest) {
+      console.error("Twilio request validation failed");
+      return new Response("Twilio signature validation failed", {
+        status: 403,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders }
+      });
+    }
+
+    // Parse URL and get query parameters
     const callLogId = url.searchParams.get('call_log_id');
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
@@ -174,12 +259,20 @@ serve(async (req) => {
         `\nProspect: ${speechResult}`;
       
       // Using supabaseAdmin for the update
-      await supabaseAdmin
-        .from('call_logs')
-        .update({
-          transcript: updatedTranscript
-        })
-        .eq('id', callLogId);
+      try {
+        const { error } = await supabaseAdmin
+          .from('call_logs')
+          .update({
+            transcript: updatedTranscript
+          })
+          .eq('id', callLogId);
+          
+        if (error) {
+          console.error('Error updating call log transcript:', error);
+        }
+      } catch (error) {
+        console.error('Exception updating call log transcript:', error);
+      }
     }
     
     // Call OpenAI to generate response
@@ -227,12 +320,20 @@ serve(async (req) => {
         `\nAI: ${aiResponse}`;
       
       // Using supabaseAdmin for the update
-      await supabaseAdmin
-        .from('call_logs')
-        .update({
-          transcript: updatedTranscript
-        })
-        .eq('id', callLogId);
+      try {
+        const { error } = await supabaseAdmin
+          .from('call_logs')
+          .update({
+            transcript: updatedTranscript
+          })
+          .eq('id', callLogId);
+          
+        if (error) {
+          console.error('Error updating call log with AI response:', error);
+        }
+      } catch (error) {
+        console.error('Exception updating call log with AI response:', error);
+      }
     }
     
     // Process the response to determine if we should end the call
@@ -263,13 +364,21 @@ serve(async (req) => {
         }
         
         // Update prospect status - Using supabaseAdmin
-        await supabaseAdmin
-          .from('prospects')
-          .update({
-            status: 'Completed',
-            notes: `CALL COMPLETED: Last response: "${speechResult}"`
-          })
-          .eq('id', prospectId);
+        try {
+          const { error } = await supabaseAdmin
+            .from('prospects')
+            .update({
+              status: 'Completed',
+              notes: `CALL COMPLETED: Last response: "${speechResult}"`
+            })
+            .eq('id', prospectId);
+            
+          if (error) {
+            console.error('Error updating prospect status:', error);
+          }
+        } catch (error) {
+          console.error('Exception updating prospect status:', error);
+        }
           
         // Create TwiML with audio playback
         const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
@@ -298,13 +407,21 @@ serve(async (req) => {
       
       // Update call log with the final data - Using supabaseAdmin
       if (callLogId) {
-        await supabaseAdmin
-          .from('call_logs')
-          .update({
-            extracted_data: extractedData,
-            summary: "Call completed. Review transcript for details."
-          })
-          .eq('id', callLogId);
+        try {
+          const { error } = await supabaseAdmin
+            .from('call_logs')
+            .update({
+              extracted_data: extractedData,
+              summary: "Call completed. Review transcript for details."
+            })
+            .eq('id', callLogId);
+            
+          if (error) {
+            console.error('Error updating call log with final data:', error);
+          }
+        } catch (error) {
+          console.error('Exception updating call log with final data:', error);
+        }
       }
       
     } else {
@@ -326,13 +443,17 @@ serve(async (req) => {
           throw new Error(speechError?.message || 'No audio content returned');
         }
         
+        // Make sure the action URL includes the full domain
+        const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`;
+        console.log(`Setting next Gather action URL to: ${nextActionUrl}`);
+        
         // Create TwiML with audio playback and gather for next turn
         const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
         twimlResponse = twiml.VoiceResponse()
           .play(audioUrl)
           .gather({
             input: 'speech',
-            action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`,
+            action: nextActionUrl,
             method: 'POST',
             timeout: 5,
             speechTimeout: 'auto'
@@ -345,10 +466,13 @@ serve(async (req) => {
       } catch (speechGenError) {
         console.error('Error generating speech:', speechGenError);
         // Fallback to regular TTS if ElevenLabs fails
+        // Make sure the action URL includes the full domain
+        const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`;
+        
         twimlResponse = twiml.VoiceResponse()
           .gather({
             input: 'speech',
-            action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`,
+            action: nextActionUrl,
             method: 'POST',
             timeout: 5,
             speechTimeout: 'auto'

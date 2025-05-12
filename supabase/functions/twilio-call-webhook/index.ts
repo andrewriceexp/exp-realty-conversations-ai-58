@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -239,13 +240,17 @@ serve(async (req) => {
       greeting += "real estate opportunities in your area?";
     }
     
+    // Make sure the action URL includes the full domain
+    const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
+    console.log(`Setting Gather action URL to: ${processResponseUrl}`);
+    
     // Create a TwiML response
     const response = twiml.VoiceResponse()
       .say(greeting)
       .pause({ length: 1 })
       .gather({
         input: 'speech',
-        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`,
+        action: processResponseUrl,
         method: 'POST',
         timeout: 5,
         speechTimeout: 'auto'
