@@ -35,7 +35,6 @@ export async function validateTwilioRequest(req: Request, url: string): Promise<
       // Clone the request to avoid consuming it
       const clonedReq = req.clone();
       
-      // Try to parse the body as form data or JSON
       try {
         const contentType = req.headers.get('content-type') || '';
         if (contentType.includes('application/x-www-form-urlencoded') ||
@@ -49,6 +48,7 @@ export async function validateTwilioRequest(req: Request, url: string): Promise<
         }
       } catch (error) {
         console.error("Error parsing request body:", error);
+        // Continue with validation attempt even if body parsing fails
       }
     }
     
