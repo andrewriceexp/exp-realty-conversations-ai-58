@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import MainLayout from '@/components/MainLayout';
+import { ProfileCredentialTester } from '@/components/ProfileCredentialTester';
+import { Spinner } from '@/components/ui/spinner';
+import { toast } from '@/components/ui/use-toast';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Full name is required'),
@@ -107,10 +109,20 @@ const ProfileSetup = () => {
       
       // Set success state
       setUpdateSuccess(true);
+      toast({
+        title: "Profile Updated",
+        description: "Your profile and Twilio credentials have been saved successfully.",
+        variant: "default",
+      });
     } catch (error: any) {
       console.error('Profile update error:', error);
       setErrorMessage(error.message || 'Failed to update profile');
       setUpdateSuccess(false);
+      toast({
+        title: "Update Failed",
+        description: error.message || 'Failed to update profile',
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -234,6 +246,14 @@ const ProfileSetup = () => {
                     />
                   </div>
                   
+                  {/* Add credential tester if accountSid and potentially token are available */}
+                  {form.watch('twilio_account_sid') && (
+                    <ProfileCredentialTester 
+                      accountSid={form.watch('twilio_account_sid')} 
+                      authToken={form.watch('twilio_auth_token') || ''} 
+                    />
+                  )}
+                  
                   <div className="mt-4">
                     <FormField
                       control={form.control}
@@ -294,7 +314,12 @@ const ProfileSetup = () => {
                     className="flex-1 exp-gradient" 
                     disabled={isLoading}
                   >
-                    {isLoading ? 'Saving...' : 'Save Profile'}
+                    {isLoading ? (
+                      <>
+                        <Spinner className="mr-2 h-4 w-4" />
+                        Saving...
+                      </>
+                    ) : 'Save Profile'}
                   </Button>
                   
                   <Button 
