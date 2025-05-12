@@ -360,8 +360,12 @@ serve(async (req) => {
     const webhookUrl = `https://${projectRef}.functions.supabase.co/twilio-call-webhook`;
     
     try {
+      // Initialize formattedPhoneNumber here at the top level so it's accessible throughout the function
+      // This fixes the ReferenceError in the catch block
+      let formattedPhoneNumber = '';
+      
       // Format the phone number to E.164 format
-      let formattedPhoneNumber = prospectData.phone_number.trim();
+      formattedPhoneNumber = prospectData.phone_number.trim();
       
       // Remove any non-numeric characters
       formattedPhoneNumber = formattedPhoneNumber.replace(/\D/g, '');
@@ -508,7 +512,7 @@ serve(async (req) => {
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+      }
     );
   }
 });
