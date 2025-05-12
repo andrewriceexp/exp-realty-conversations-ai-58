@@ -40,6 +40,11 @@ const twilioClient = (accountSid: string, authToken: string) => {
           // Double check the formData has the required parameters
           console.log("Sending form data to Twilio:", formData.toString());
           
+          // !!! CRITICAL DEBUGGING - Last check before API call !!!
+          console.log("!!! IMMEDIATELY BEFORE TWILIO API CALL - Form data contains 'to':", 
+            formData.has('to'), 
+            "Value:", formData.get('to'));
+
           // Make the actual API call to Twilio
           const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
             method: 'POST',
@@ -394,6 +399,16 @@ serve(async (req) => {
 
       // Log the final call parameters for debugging
       console.log("Final Twilio call parameters:", JSON.stringify(callParams));
+      
+      // !!! MOST IMPORTANT DEBUGGING LOG !!! 
+      console.log("!!! IMMEDIATELY BEFORE TWILIO CALL - Call params:", JSON.stringify({
+        to_exists: !!callParams.to,
+        to_value: callParams.to,
+        from_exists: !!callParams.from,
+        from_value: callParams.from,
+        url_exists: !!callParams.url,
+        url_value: callParams.url
+      }, null, 2));
 
       // Make the API call with explicit parameters
       const call = await twilio.calls.create(callParams);
@@ -461,6 +476,15 @@ serve(async (req) => {
     } catch (twilioError) {
       console.error('Twilio error:', twilioError);
       
+      // Add extra debugging information for the error case
+      if (formattedPhoneNumber) {
+        console.error('!!! FAILED CALL PARAMS:', JSON.stringify({
+          to: formattedPhoneNumber,
+          from: twilioPhoneNumber,
+          url: webhookWithParams
+        }, null, 2));
+      }
+      
       return new Response(
         JSON.stringify({ 
           error: `Twilio error: ${twilioError.message}`,
@@ -484,7 +508,7 @@ serve(async (req) => {
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+        }
     );
   }
 });
