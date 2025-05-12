@@ -1,3 +1,4 @@
+
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -88,13 +89,13 @@ export interface Campaign {
   description: string | null;
   prospect_list_id: string;
   agent_config_id: string;
-  status: "Draft" | "Scheduled" | "Running" | "Paused" | "Completed" | "Cancelled";
+  status: CampaignStatus;
   scheduled_start: string | null;
   created_at: string;
   updated_at: string;
+  calls_made?: number | null; // Added to match the new column
   prospect_list_name?: string;
   agent_config_name?: string;
-  calls_made?: number;
 }
 
 // Campaign status type

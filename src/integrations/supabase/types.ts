@@ -152,6 +152,7 @@ export type Database = {
       campaigns: {
         Row: {
           agent_config_id: string | null
+          calls_made: number | null
           created_at: string
           description: string | null
           id: string
@@ -164,6 +165,7 @@ export type Database = {
         }
         Insert: {
           agent_config_id?: string | null
+          calls_made?: number | null
           created_at?: string
           description?: string | null
           id?: string
@@ -176,6 +178,7 @@ export type Database = {
         }
         Update: {
           agent_config_id?: string | null
+          calls_made?: number | null
           created_at?: string
           description?: string | null
           id?: string

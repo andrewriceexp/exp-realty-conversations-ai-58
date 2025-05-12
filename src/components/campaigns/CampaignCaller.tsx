@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { Prospect, ProspectStatus } from '@/types';
 
 interface CampaignCallerProps {
   campaignId: string;
@@ -14,7 +15,7 @@ interface CampaignCallerProps {
 }
 
 const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignCallerProps) => {
-  const [prospects, setProspects] = useState<any[]>([]);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [currentProspectIndex, setCurrentProspectIndex] = useState(0);
@@ -35,14 +36,20 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         .from('prospects')
         .select('*')
         .eq('list_id', prospectListId)
-        .eq('status', 'New') // Only get prospects that haven't been called yet
+        .eq('status', 'Pending') // Only get prospects that haven't been called yet
         .order('created_at', { ascending: true });
 
       if (error) {
         throw error;
       }
 
-      setProspects(data || []);
+      // Type casting to ensure data conforms to Prospect type with correct status enum
+      const typedProspects: Prospect[] = data?.map(prospect => ({
+        ...prospect,
+        status: prospect.status as ProspectStatus
+      })) || [];
+
+      setProspects(typedProspects);
     } catch (error: any) {
       toast({
         title: 'Failed to load prospects',

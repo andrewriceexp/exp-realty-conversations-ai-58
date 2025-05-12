@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { ProspectList, Prospect, CallLog } from '@/types';
+import { ProspectList, Prospect, CallLog, ProspectStatus, CallStatus } from '@/types';
 import ProspectActions from './ProspectActions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
@@ -54,10 +54,17 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
         .order('created_at', { ascending: false });
 
       if (prospectsError) throw prospectsError;
-      setProspects(prospectsData || []);
+      
+      // Ensure we properly cast the status to the ProspectStatus type
+      const typedProspects: Prospect[] = prospectsData?.map(prospect => ({
+        ...prospect,
+        status: prospect.status as ProspectStatus
+      })) || [];
+      
+      setProspects(typedProspects);
       
       // Log for debugging
-      console.log(`Fetched ${prospectsData?.length || 0} prospects for list ${list.id}`);
+      console.log(`Fetched ${typedProspects.length} prospects for list ${list.id}`);
       
     } catch (error: any) {
       console.error('Error fetching prospects:', error);
@@ -88,9 +95,10 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
 
       if (callLogsError) throw callLogsError;
       
-      // Transform the data to include the config name
-      const transformedCallLogs = callLogsData.map(log => ({
+      // Transform the data with proper typing to include the config name
+      const transformedCallLogs: CallLog[] = callLogsData.map(log => ({
         ...log,
+        call_status: log.call_status as CallStatus,
         config_name: log.agent_configs ? log.agent_configs.config_name : 'Unknown'
       }));
       

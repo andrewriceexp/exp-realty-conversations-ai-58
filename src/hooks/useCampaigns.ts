@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Campaign } from "@/types";
+import { Campaign, CampaignStatus } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -31,6 +31,7 @@ export const useCampaigns = () => {
 
       if (error) throw error;
 
+      // Ensure we correctly cast the status to CampaignStatus type
       const formattedCampaigns: Campaign[] = data.map(item => ({
         id: item.id,
         user_id: item.user_id,
@@ -38,13 +39,13 @@ export const useCampaigns = () => {
         description: item.description,
         prospect_list_id: item.prospect_list_id,
         agent_config_id: item.agent_config_id,
-        status: item.status,
+        status: item.status as CampaignStatus,
         scheduled_start: item.scheduled_start,
         created_at: item.created_at,
         updated_at: item.updated_at,
+        calls_made: item.calls_made || 0,
         prospect_list_name: item.prospect_lists?.list_name || "",
-        agent_config_name: item.agent_configs?.config_name || "",
-        calls_made: item.calls_made || 0
+        agent_config_name: item.agent_configs?.config_name || ""
       }));
       
       setCampaigns(formattedCampaigns);
