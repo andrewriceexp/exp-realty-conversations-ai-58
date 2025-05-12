@@ -1,15 +1,22 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon } from 'lucide-react';
+import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProspectList, Prospect, CallLog } from '@/types';
 import ProspectActions from './ProspectActions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { Switch } from '@/components/ui/switch';
+import { 
+  anonymizePhoneNumber, 
+  anonymizeName, 
+  anonymizeAddress, 
+  isAnonymizationEnabled, 
+  setAnonymizationEnabled 
+} from '@/utils/anonymizationUtils';
 
 interface ProspectDetailsProps {
   list: ProspectList;
@@ -21,11 +28,17 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [anonymizeData, setAnonymizeData] = useState(isAnonymizationEnabled());
   const { toast } = useToast();
 
   useEffect(() => {
     fetchProspects();
   }, [list.id]);
+
+  // Update localStorage when anonymization preference changes
+  useEffect(() => {
+    setAnonymizationEnabled(anonymizeData);
+  }, [anonymizeData]);
 
   const fetchProspects = async () => {
     try {
@@ -122,6 +135,38 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
   };
 
+  const toggleAnonymization = () => {
+    setAnonymizeData(prev => !prev);
+    toast({
+      title: anonymizeData ? "Data displayed normally" : "Data anonymized",
+      description: anonymizeData 
+        ? "Prospect information is now displayed in its original form." 
+        : "Prospect information is now anonymized for privacy.",
+    });
+  };
+
+  // Helper function to display name with anonymization support
+  const displayName = (firstName: string | null, lastName: string | null): string => {
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Unnamed';
+    if (!anonymizeData) return fullName;
+    
+    return [
+      firstName ? anonymizeName(firstName) : null,
+      lastName ? anonymizeName(lastName) : null
+    ].filter(Boolean).join(' ') || 'Unnamed';
+  };
+
+  // Helper function to display phone with anonymization support
+  const displayPhone = (phone: string): string => {
+    return anonymizeData ? anonymizePhoneNumber(phone) : phone;
+  };
+
+  // Helper function to display address with anonymization support
+  const displayAddress = (address: string | null): string => {
+    if (!address) return '—';
+    return anonymizeData ? anonymizeAddress(address) : address;
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -146,7 +191,30 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold">{list.list_name}</h2>
-        <Badge className="bg-blue-500">{prospects.length} Prospects</Badge>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center space-x-2">
+            <Switch 
+              checked={anonymizeData} 
+              onCheckedChange={toggleAnonymization} 
+              id="anonymize-data" 
+            />
+            <label 
+              htmlFor="anonymize-data" 
+              className="text-sm font-medium flex items-center gap-1 cursor-pointer"
+            >
+              {anonymizeData ? (
+                <>
+                  <EyeOffIcon className="h-4 w-4" /> Anonymized
+                </>
+              ) : (
+                <>
+                  <EyeIcon className="h-4 w-4" /> Original
+                </>
+              )}
+            </label>
+          </div>
+          <Badge className="bg-blue-500">{prospects.length} Prospects</Badge>
+        </div>
       </div>
       
       {!selectedProspect ? (
@@ -175,9 +243,11 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
                   
                   return (
                     <TableRow key={prospect.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleProspectSelect(prospect)}>
-                      <TableCell className="font-medium">{prospectName}</TableCell>
-                      <TableCell>{prospect.phone_number}</TableCell>
-                      <TableCell>{prospect.property_address || '—'}</TableCell>
+                      <TableCell className="font-medium">
+                        {displayName(prospect.first_name, prospect.last_name)}
+                      </TableCell>
+                      <TableCell>{displayPhone(prospect.phone_number)}</TableCell>
+                      <TableCell>{displayAddress(prospect.property_address || '—')}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(prospect.status)}>{prospect.status}</Badge>
                       </TableCell>
@@ -205,7 +275,7 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
               <Badge className={getStatusColor(selectedProspect.status)}>{selectedProspect.status}</Badge>
               <ProspectActions 
                 prospectId={selectedProspect.id} 
-                prospectName={[selectedProspect.first_name, selectedProspect.last_name].filter(Boolean).join(' ') || 'Unnamed'} 
+                prospectName={displayName(selectedProspect.first_name, selectedProspect.last_name)} 
               />
             </div>
           </div>
@@ -213,19 +283,19 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
           <Card>
             <CardHeader>
               <CardTitle>
-                {[selectedProspect.first_name, selectedProspect.last_name].filter(Boolean).join(' ') || 'Unnamed Prospect'}
+                {displayName(selectedProspect.first_name, selectedProspect.last_name)}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
                   <PhoneIcon className="h-5 w-5 text-muted-foreground" />
-                  <span className="font-medium">{selectedProspect.phone_number}</span>
+                  <span className="font-medium">{displayPhone(selectedProspect.phone_number)}</span>
                 </div>
                 {selectedProspect.property_address && (
                   <div className="flex items-center gap-2">
                     <MapPinIcon className="h-5 w-5 text-muted-foreground" />
-                    <span>{selectedProspect.property_address}</span>
+                    <span>{displayAddress(selectedProspect.property_address)}</span>
                   </div>
                 )}
                 {selectedProspect.last_call_attempted && (
@@ -237,7 +307,7 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
                 {selectedProspect.notes && (
                   <div className="flex items-start gap-2 md:col-span-2">
                     <ClipboardListIcon className="h-5 w-5 text-muted-foreground mt-1" />
-                    <span>{selectedProspect.notes}</span>
+                    <span>{anonymizeData ? '*** Notes hidden for privacy ***' : selectedProspect.notes}</span>
                   </div>
                 )}
               </div>
@@ -278,14 +348,24 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
                         {log.transcript && (
                           <div className="mt-2">
                             <h4 className="text-sm font-medium mb-1">Transcript:</h4>
-                            <p className="text-sm bg-muted p-2 rounded">{log.transcript}</p>
+                            <p className="text-sm bg-muted p-2 rounded">
+                              {anonymizeData 
+                                ? log.transcript.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "***-***-****")
+                                                .replace(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g, "*** ***")
+                                : log.transcript}
+                            </p>
                           </div>
                         )}
                         
                         {log.summary && (
                           <div className="mt-2">
                             <h4 className="text-sm font-medium mb-1">Summary:</h4>
-                            <p className="text-sm">{log.summary}</p>
+                            <p className="text-sm">
+                              {anonymizeData 
+                                ? log.summary.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, "***-***-****")
+                                             .replace(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g, "*** ***")
+                                : log.summary}
+                            </p>
                           </div>
                         )}
                         

@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { anonymizePhoneNumber } from '@/utils/anonymizationUtils';
+import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 export interface CallOptions {
   prospectId: string;
@@ -112,7 +114,11 @@ export function useTwilioCall() {
       // Check for specific error types
       if (errorCode === 'MISSING_PHONE_NUMBER' || errorMessage.includes('phone number')) {
         errorTitle = "Invalid phone number";
-        errorDescription = "The prospect doesn't have a valid phone number. Please update the prospect's information.";
+        // Check if we should anonymize the phone numbers in error messages
+        const shouldAnonymize = isAnonymizationEnabled();
+        errorDescription = shouldAnonymize 
+          ? "The prospect doesn't have a valid phone number. Please update the prospect's information."
+          : "The prospect doesn't have a valid phone number. Please update the prospect's information.";
       } 
       // Check for profile setup issues
       else if (errorMessage.includes('Profile setup') || 
@@ -134,7 +140,19 @@ export function useTwilioCall() {
       // Twilio API errors
       else if (errorCode === 'TWILIO_API_ERROR' || errorMessage.includes('Twilio error')) {
         errorTitle = "Twilio API error";
-        errorDescription = errorMessage.replace('Twilio error: ', '');
+        // Anonymize phone numbers in Twilio error messages if needed
+        const shouldAnonymize = isAnonymizationEnabled();
+        let cleanedMessage = errorMessage.replace('Twilio error: ', '');
+        
+        if (shouldAnonymize) {
+          // Anonymize any phone numbers in the error message
+          cleanedMessage = cleanedMessage.replace(
+            /\+?1?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/g, 
+            (match) => anonymizePhoneNumber(match)
+          );
+        }
+        
+        errorDescription = cleanedMessage;
       }
       
       setError(errorMessage);
