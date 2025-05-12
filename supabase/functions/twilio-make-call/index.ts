@@ -414,14 +414,18 @@ serve(async (req) => {
       if (callLogError) {
         console.error("Call log error:", callLogError);
         
+        // Even if the call log creation fails, we've already initiated the Twilio call
+        // We should still return success but note the logging issue
         return new Response(
           JSON.stringify({ 
+            success: true,
+            message: 'Call initiated successfully, but there was an issue creating the call log.',
+            callSid: call.sid,
             error: `Failed to create call log: ${callLogError.message}`,
-            success: false,
             code: 'CALL_LOG_ERROR'
           }),
           { 
-            status: 500, 
+            status: 200, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         );
