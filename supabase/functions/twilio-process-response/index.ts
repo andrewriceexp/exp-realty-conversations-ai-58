@@ -192,7 +192,7 @@ serve(async (req) => {
       
       console.log(`Updating call log transcript: ${callLogId}`);
       try {
-        // Only update the transcript field, not updated_at
+        // Only update the transcript field
         const { error } = await supabaseAdmin
           .from('call_logs')
           .update({
@@ -258,7 +258,7 @@ serve(async (req) => {
       
       console.log(`Updating call log with AI response: ${callLogId}`);
       try {
-        // Only update the transcript field, not updated_at
+        // Only update the transcript field
         const { error } = await supabaseAdmin
           .from('call_logs')
           .update({
@@ -364,7 +364,7 @@ serve(async (req) => {
       if (callLogId) {
         console.log(`Updating call log with final data: ${callLogId}`);
         try {
-          // Only update these specific fields, not updated_at
+          // Only update these specific fields
           const { error } = await supabaseAdmin
             .from('call_logs')
             .update({

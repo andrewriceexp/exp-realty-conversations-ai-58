@@ -2,8 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
-import { anonymizePhoneNumber } from '@/utils/anonymizationUtils';
-import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
+import { anonymizePhoneNumber, isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 export interface CallOptions {
   prospectId: string;
@@ -92,6 +91,7 @@ export function useTwilioCall() {
         toast({
           title: "Call initiated",
           description: data.message || "The AI agent is now calling the prospect.",
+          variant: "default",
         });
         
         return data;
