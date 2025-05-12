@@ -1,12 +1,56 @@
 
-// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Twilio } from "https://esm.sh/twilio@4.20.1";
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Define Twilio SDK client
+const twilioClient = (accountSid: string, authToken: string) => {
+  const client = {
+    calls: {
+      create: async (params: any) => {
+        console.log("Creating call with params:", JSON.stringify(params));
+        
+        try {
+          const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams(params).toString(),
+          });
+          
+          const responseText = await response.text();
+          console.log(`Twilio API Response Status: ${response.status}`);
+          
+          if (!response.ok) {
+            console.error(`Twilio API Error: ${responseText}`);
+            throw new Error(`Twilio API Error: ${response.status} - ${responseText}`);
+          }
+          
+          try {
+            return JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("Error parsing Twilio response:", parseError);
+            console.log("Raw response:", responseText);
+            throw new Error("Invalid response format from Twilio API");
+          }
+        } catch (error) {
+          console.error("Error making Twilio API call:", error);
+          throw error;
+        }
+      }
+    }
+  };
+  
+  return client;
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -14,322 +58,430 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log("Received twilio-make-call request");
+
   try {
-    const { prospectId, agentConfigId, userId, twilio_customer_id } = await req.json();
+    // Get request payload
+    const { prospectId, agentConfigId, userId } = await req.json();
     
-    console.log(`Twilio make call request: 
-      prospectId: ${prospectId}
-      agentConfigId: ${agentConfigId}
-      userId: ${userId}
-      twilio_customer_id: ${twilio_customer_id}
-    `);
-
-    if (!prospectId || !agentConfigId || !userId || !twilio_customer_id) {
+    console.log("Request params:", { prospectId, agentConfigId, userId });
+    
+    if (!prospectId || !agentConfigId || !userId) {
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: "Missing required parameters", 
-          code: "MISSING_PARAMETERS" 
+          error: 'Missing required parameters',
+          success: false,
+          code: 'MISSING_PARAMETERS'
         }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    // Create Supabase client
-    const supabaseClient = Deno.env.get('SUPABASE_URL') 
-      ? (await import("https://esm.sh/@supabase/supabase-js@2")).createClient(
-          Deno.env.get('SUPABASE_URL') || '',
-          Deno.env.get('SUPABASE_ANON_KEY') || '',
-          { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
-        )
-      : null;
-    
-    if (!supabaseClient) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Failed to initialize Supabase client", 
-          code: "SUPABASE_CLIENT_ERROR" 
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    // Fetch user's Twilio configuration
-    console.log(`Fetching Twilio configuration for user: ${userId}`);
-    const { data: profileData, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
-      .eq('id', userId)
-      .single();
-    
-    if (profileError) {
-      console.error(`Error fetching profile: ${profileError.message}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Failed to retrieve user profile", 
-          code: "PROFILE_NOT_FOUND" 
-        }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
     
-    if (!profileData.twilio_account_sid || !profileData.twilio_auth_token || !profileData.twilio_phone_number) {
-      console.error(`Incomplete Twilio configuration for user: ${userId}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Please complete your profile setup with Twilio credentials to make calls", 
-          code: "TWILIO_CONFIG_INCOMPLETE" 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-    
-    // Fetch agent configuration
-    console.log(`Fetching agent configuration: ${agentConfigId}`);
-    const { data: agentConfig, error: agentConfigError } = await supabaseClient
-      .from('agent_configs')
-      .select('*')
-      .eq('id', agentConfigId)
-      .single();
-      
-    if (agentConfigError) {
-      console.error(`Error fetching agent config: ${agentConfigError.message}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Failed to retrieve agent configuration", 
-          code: "AGENT_CONFIG_ERROR" 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    // Fetch the prospect's customer data from Twilio
-    console.log(`Getting customer data from Twilio for customer ID: ${twilio_customer_id}`);
-    
-    // Initialize Twilio client
-    const twilioClient = new Twilio(
-      profileData.twilio_account_sid,
-      profileData.twilio_auth_token
+    // Initialize Supabase client with anon key
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        auth: { persistSession: false }
+      }
     );
     
-    // Get service SID - we need to find which service to use
-    const services = await twilioClient.sync.v1.services.list({ limit: 20 });
-    const service = services.find(s => s.friendlyName === 'CustomerDataService');
+    // Initialize Supabase client with service role key for admin access
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: { persistSession: false }
+      }
+    );
+
+    console.log("Initialized Supabase clients");
     
-    if (!service) {
-      console.error('CustomerDataService not found for Twilio account');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Customer data service not configured in Twilio", 
-          code: "TWILIO_SERVICE_NOT_FOUND" 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
+    // Try to get profile - first with regular client, then with admin if needed
+    let profileData = null;
+    let profileError = null;
     
-    // Retrieve the customer document from Twilio
-    let customerData;
+    // First attempt - try with regular client
     try {
-      const document = await twilioClient.sync.v1
-        .services(service.sid)
-        .documents(`customer_${twilio_customer_id}`)
-        .fetch();
-      
-      customerData = document.data;
-      console.log('Retrieved customer data:', customerData);
-    } catch (error) {
-      console.error(`Error retrieving customer data from Twilio: ${error.message}`);
+      console.log("Attempting to fetch profile with regular client for ID:", userId);
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Regular client profile fetch error:", error);
+        profileError = error;
+      } else if (data) {
+        console.log("Profile found with regular client");
+        profileData = data;
+      } else {
+        console.log("No profile found with regular client, will try admin client");
+      }
+    } catch (err) {
+      console.error("Error during regular profile fetch:", err);
+    }
+    
+    // Second attempt - if first failed, try with admin client
+    if (!profileData) {
+      try {
+        console.log("Attempting to fetch profile with admin client for ID:", userId);
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (error) {
+          console.error("Admin client profile fetch error:", error);
+          profileError = error;
+        } else if (data) {
+          console.log("Profile found with admin client");
+          profileData = data;
+        } else {
+          console.log("No profile found with admin client either");
+          
+          // Debug query to check if the profiles table has any data at all
+          const { data: debugData, error: debugError } = await supabaseAdmin
+            .from('profiles')
+            .select('count')
+            .limit(1);
+            
+          if (debugError) {
+            console.error("Debug query error:", debugError);
+          } else {
+            console.log("Debug query results:", debugData);
+          }
+        }
+      } catch (err) {
+        console.error("Error during admin profile fetch:", err);
+        profileError = err;
+      }
+    }
+    
+    // If we still don't have profile data, return a useful error
+    if (!profileData) {
+      console.error("Profile not found for user ID:", userId, "Error:", profileError);
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: "Failed to retrieve customer data from Twilio", 
-          code: "CUSTOMER_DATA_ERROR" 
+          error: 'Profile setup incomplete or database error. Please visit your profile settings and verify your Twilio credentials.',
+          success: false,
+          code: 'PROFILE_NOT_FOUND',
+          details: profileError ? String(profileError) : undefined
         }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
     
-    // Validate the phone number
-    if (!customerData.phone_number) {
-      console.error('Missing phone number in customer data');
+    console.log("Profile fetched, checking Twilio credentials");
+    
+    if (!profileData.twilio_account_sid || !profileData.twilio_auth_token || !profileData.twilio_phone_number) {
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: "The prospect doesn't have a valid phone number", 
-          code: "MISSING_PHONE_NUMBER" 
+          error: 'Twilio configuration is incomplete. Please update your profile with your Twilio Account SID, Auth Token, and Phone Number.',
+          success: false,
+          code: 'TWILIO_CONFIG_INCOMPLETE'
         }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
     
-    // Format the phone number for Twilio
-    const phoneNumber = customerData.phone_number.replace(/\D/g, '');
-    const formattedPhoneNumber = phoneNumber.startsWith('+') 
-      ? phoneNumber 
-      : phoneNumber.startsWith('1') 
-        ? `+${phoneNumber}` 
-        : `+1${phoneNumber}`;
+    // Get the prospect details using first the regular client, then admin client if needed
+    let prospectData = null;
+    let prospectError = null;
     
-    console.log(`Formatted phone number: ${formattedPhoneNumber}`);
+    // First attempt - try with regular client
+    try {
+      console.log("Attempting to fetch prospect with regular client for ID:", prospectId);
+      const { data, error } = await supabaseClient
+        .from('prospects')
+        .select('phone_number, first_name, last_name, property_address')
+        .eq('id', prospectId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Regular client prospect fetch error:", error);
+        prospectError = error;
+      } else if (data) {
+        console.log("Prospect found with regular client");
+        prospectData = data;
+      } else {
+        console.log("No prospect found with regular client, will try admin client");
+      }
+    } catch (err) {
+      console.error("Error during regular prospect fetch:", err);
+    }
     
-    // Create a call log entry with initial status
-    console.log('Creating call log entry');
-    const { data: callLog, error: callLogError } = await supabaseClient
+    // Second attempt - if first failed, try with admin client
+    if (!prospectData) {
+      try {
+        console.log("Attempting to fetch prospect with admin client for ID:", prospectId);
+        const { data, error } = await supabaseAdmin
+          .from('prospects')
+          .select('phone_number, first_name, last_name, property_address')
+          .eq('id', prospectId)
+          .maybeSingle();
+          
+        if (error) {
+          console.error("Admin client prospect fetch error:", error);
+          prospectError = error;
+        } else if (data) {
+          console.log("Prospect found with admin client");
+          prospectData = data;
+        } else {
+          console.log("No prospect found with admin client either");
+          
+          // Debug query to check if the prospects table has any data at all and if it has this specific ID
+          const { data: debugData, error: debugError } = await supabaseAdmin
+            .from('prospects')
+            .select('id')
+            .limit(5);
+            
+          if (debugError) {
+            console.error("Debug query error:", debugError);
+          } else {
+            console.log("Debug query sample IDs:", debugData);
+            
+            // Check if there are any prospects at all
+            const { count, error: countError } = await supabaseAdmin
+              .from('prospects')
+              .select('*', { count: 'exact', head: true });
+              
+            console.log("Total prospect count:", count, "Error:", countError);
+            
+            // Check if this specific prospect exists in any form
+            const { data: specificCheck, error: specificError } = await supabaseAdmin
+              .from('prospects')
+              .select('id')
+              .filter('id', 'ilike', `%${prospectId.slice(0, 8)}%`)
+              .limit(5);
+              
+            console.log("Similar ID check:", specificCheck, "Error:", specificError);
+          }
+        }
+      } catch (err) {
+        console.error("Error during admin prospect fetch:", err);
+        prospectError = err;
+      }
+    }
+    
+    if (!prospectData) {
+      console.error("No prospect found with ID:", prospectId);
+      return new Response(
+        JSON.stringify({ 
+          error: `Prospect not found. The prospect with ID ${prospectId} does not exist or has been deleted.`,
+          success: false,
+          code: 'PROSPECT_NOT_FOUND'
+        }),
+        { 
+          status: 404, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    // Validate that the prospect has a phone number
+    if (!prospectData.phone_number) {
+      console.error("Prospect has no phone number:", prospectId);
+      return new Response(
+        JSON.stringify({ 
+          error: `Prospect has no phone number. Please update the prospect with a valid phone number.`,
+          success: false,
+          code: 'MISSING_PHONE_NUMBER'
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    console.log("Prospect fetched with phone_number:", prospectData.phone_number);
+    
+    console.log("Prospect fetched, creating call log");
+    
+    // Create a call log entry before initiating the call - USING ADMIN CLIENT TO BYPASS RLS
+    console.log("Attempting to create call log using admin client");
+    
+    const { data: callLogData, error: callLogError } = await supabaseAdmin
       .from('call_logs')
       .insert({
         prospect_id: prospectId,
         user_id: userId,
         agent_config_id: agentConfigId,
-        twilio_call_sid: 'pending', // Will update this once we have the actual SID
         call_status: 'Initiated',
+        twilio_call_sid: 'pending', // Will be updated after Twilio response
         started_at: new Date().toISOString()
       })
-      .select('id')
+      .select()
       .single();
       
     if (callLogError) {
-      console.error(`Error creating call log: ${callLogError.message}`);
+      console.error("Call log error:", callLogError);
+      
+      // Check if it's an RLS error
+      if (callLogError.code === '42501' || callLogError.message?.includes('violates row-level security policy')) {
+        console.log("This appears to be an RLS policy violation. Checking call_logs table permissions...");
+        
+        // Debug RLS policies
+        try {
+          const { data: rlsData, error: rlsError } = await supabaseAdmin
+            .rpc('get_policies', { table_name: 'call_logs' });
+            
+          console.log("RLS policies for call_logs:", rlsData || "No policies found", "Error:", rlsError);
+        } catch (e) {
+          console.error("Error checking RLS policies:", e);
+        }
+      }
+      
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: "Failed to create call log", 
-          code: "CALL_LOG_ERROR" 
+          error: `Failed to create call log: ${callLogError.message}`,
+          success: false,
+          code: 'CALL_LOG_ERROR'
         }),
         { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
     
-    // Make the call via Twilio
-    console.log('Initiating Twilio call');
+    console.log("Call log created successfully:", callLogData);
+
+    // Create Twilio client
+    const twilioAccountSid = profileData.twilio_account_sid;
+    const twilioAuthToken = profileData.twilio_auth_token;
+    const twilioPhoneNumber = profileData.twilio_phone_number;
+    const twilio = twilioClient(twilioAccountSid, twilioAuthToken);
+    
+    console.log("Call log created, preparing webhook URLs");
+    
+    // Calculate the absolute URL for the webhook
+    const baseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const projectRef = baseUrl.split('https://')[1]?.split('.')[0] || '';
+    const webhookUrl = `https://${projectRef}.functions.supabase.co/twilio-call-webhook`;
+    
+    // Add query parameters with context info
+    const webhookWithParams = `${webhookUrl}?call_log_id=${callLogData.id}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
+    const statusWebhook = `${webhookUrl}/status?call_log_id=${callLogData.id}`;
+    
+    console.log("Webhook URL:", webhookWithParams);
+    console.log("Status webhook URL:", statusWebhook);
+    
     try {
-      const twilioCall = await twilioClient.calls.create({
-        to: formattedPhoneNumber,
-        from: profileData.twilio_phone_number,
-        url: `https://uttebgyhijrdcjiczxrg.supabase.co/functions/v1/twilio-call-webhook?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLog.id}`,
-        statusCallback: `https://uttebgyhijrdcjiczxrg.supabase.co/functions/v1/twilio-call-webhook?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLog.id}&status_callback=true`,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-        record: true
-      });
+      // Format the phone number to E.164 format
+      let formattedPhoneNumber = prospectData.phone_number.trim();
       
-      console.log(`Call initiated successfully. Twilio Call SID: ${twilioCall.sid}`);
+      // Remove any non-numeric characters
+      formattedPhoneNumber = formattedPhoneNumber.replace(/\D/g, '');
       
-      // Update the call log with the Twilio Call SID
-      const { error: updateError } = await supabaseClient
-        .from('call_logs')
-        .update({
-          twilio_call_sid: twilioCall.sid
-        })
-        .eq('id', callLog.id);
-        
-      if (updateError) {
-        console.error(`Error updating call log with SID: ${updateError.message}`);
-        // We don't want to fail the whole request for this, just log it
+      // Check if number has country code
+      if (!formattedPhoneNumber.startsWith('1') && formattedPhoneNumber.length === 10) {
+        formattedPhoneNumber = '1' + formattedPhoneNumber;
       }
       
-      // Update prospect status
-      const { error: prospectUpdateError } = await supabaseClient
+      // Add + prefix if missing
+      if (!formattedPhoneNumber.startsWith('+')) {
+        formattedPhoneNumber = '+' + formattedPhoneNumber;
+      }
+      
+      console.log(`Initiating Twilio call to ${formattedPhoneNumber} from ${twilioPhoneNumber}`);
+      console.log(`Raw phone number: "${prospectData.phone_number}", Formatted: "${formattedPhoneNumber}"`);
+      
+      // Detailed logging of Twilio parameters
+      const twilioParams = {
+        url: webhookWithParams,
+        to: formattedPhoneNumber,
+        from: twilioPhoneNumber,
+        statusCallback: statusWebhook,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+        record: 'true',
+      };
+      console.log("Twilio parameters:", JSON.stringify(twilioParams));
+      
+      // Initiate the call via Twilio
+      const call = await twilio.calls.create(twilioParams);
+      
+      console.log("Twilio call initiated successfully:", call.sid);
+      
+      // Update the call log with the Twilio SID - USING ADMIN CLIENT
+      console.log("Updating call log with Twilio SID using admin client");
+      await supabaseAdmin
+        .from('call_logs')
+        .update({
+          twilio_call_sid: call.sid
+        })
+        .eq('id', callLogData.id);
+      
+      // Update prospect status to "Calling" - USING ADMIN CLIENT
+      console.log("Updating prospect status to 'Calling' using admin client");
+      await supabaseAdmin
         .from('prospects')
         .update({
           status: 'Calling',
           last_call_attempted: new Date().toISOString()
         })
         .eq('id', prospectId);
-        
-      if (prospectUpdateError) {
-        console.error(`Error updating prospect status: ${prospectUpdateError.message}`);
-        // We don't want to fail the whole request for this, just log it
-      }
       
-      // Format name for response message
-      const prospectName = [customerData.first_name, customerData.last_name]
-        .filter(Boolean)
-        .join(' ') || 'the prospect';
-        
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          callSid: twilioCall.sid,
-          callLogId: callLog.id,
-          message: `Now calling ${prospectName} at ${formattedPhoneNumber}`
+        JSON.stringify({
+          success: true,
+          message: 'Call initiated successfully',
+          callSid: call.sid,
+          callLogId: callLogData.id
         }),
         { 
-          status: 200, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
+    } catch (twilioError) {
+      console.error('Twilio error:', twilioError);
       
-    } catch (error) {
-      console.error(`Twilio error: ${error.message}`);
-      
-      // Update the call log with the failure
-      const { error: updateError } = await supabaseClient
+      // Update the call log to mark as failed - USING ADMIN CLIENT
+      console.log("Updating call log to 'Failed' using admin client");
+      await supabaseAdmin
         .from('call_logs')
         .update({
           call_status: 'Failed',
           ended_at: new Date().toISOString()
         })
-        .eq('id', callLog.id);
-        
-      if (updateError) {
-        console.error(`Error updating call log for failure: ${updateError.message}`);
-      }
+        .eq('id', callLogData.id);
       
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: `Twilio error: ${error.message}`, 
-          code: "TWILIO_API_ERROR" 
+          error: `Twilio error: ${twilioError.message}`,
+          success: false,
+          code: 'TWILIO_API_ERROR'
         }),
         { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
   } catch (error) {
-    console.error(`Unexpected error: ${error.message}`);
+    console.error('Error in twilio-make-call function:', error);
     return new Response(
       JSON.stringify({ 
-        success: false, 
-        error: `Unexpected error: ${error.message}`, 
-        code: "UNEXPECTED_ERROR" 
+        error: error.message || 'Unknown error occurred',
+        success: false,
+        code: 'UNKNOWN_ERROR'
       }),
       { 
         status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
   }

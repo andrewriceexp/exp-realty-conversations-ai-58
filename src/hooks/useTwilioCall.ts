@@ -9,7 +9,6 @@ export interface CallOptions {
   prospectId: string;
   agentConfigId: string;
   userId: string;
-  twilio_customer_id: string;
 }
 
 export interface CallResponse {
@@ -124,6 +123,7 @@ export function useTwilioCall() {
       // Check for profile setup issues
       else if (errorMessage.includes('Profile setup') || 
           errorMessage.includes('Twilio configuration') ||
+          errorMessage.includes('Please visit your profile settings') ||
           errorCode === 'PROFILE_NOT_FOUND' ||
           errorCode === 'TWILIO_CONFIG_INCOMPLETE') {
         errorTitle = "Profile setup required";

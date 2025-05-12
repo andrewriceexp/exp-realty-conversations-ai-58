@@ -1,26 +1,24 @@
 
-# This is the project ID from the Supabase dashboard.
 project_id = "uttebgyhijrdcjiczxrg"
 
-# This is the URL to the API Gateway for your Function to be deployed to
-# You must always use the pattern: 'https://{project_ref}.supabase.co'
-# No need to include the API Gateway path
-base_url = "https://uttebgyhijrdcjiczxrg.supabase.co"
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
 
-# This is used by the CLI to retrieve the schema of your database and generate types
 [db]
-# The reference to your database is composed of 4 parts:
-# postgres://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}
-uri = "postgresql://postgres:postgres@db.uttebgyhijrdcjiczxrg.supabase.co:5432/postgres"
+port = 54322
 
-[functions.twilio-make-call]
-verify_jwt = true
+[studio]
+enabled = true
+port = 54323
 
-[functions.twilio-call-webhook]
-verify_jwt = false
+[inbucket]
+enabled = true
+port = 54324
 
-[functions.twilio-process-response]
-verify_jwt = false
+[storage]
+enabled = true
 
 [functions.generate-with-ai]
 verify_jwt = true
@@ -31,8 +29,3 @@ verify_jwt = true
 [functions.elevenlabs-voices]
 verify_jwt = true
 
-[functions.twilio-create-customer]
-verify_jwt = true
-
-[functions.twilio-get-customer]
-verify_jwt = true

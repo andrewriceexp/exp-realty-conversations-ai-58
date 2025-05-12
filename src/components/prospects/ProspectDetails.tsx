@@ -1,12 +1,11 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon, PhoneIcon, MapPinIcon, ClipboardListIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { ProspectList, CallLog } from '@/types';
+import { ProspectList, Prospect, CallLog } from '@/types';
 import ProspectActions from './ProspectActions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +17,6 @@ import {
   isAnonymizationEnabled, 
   setAnonymizationEnabled 
 } from '@/utils/anonymizationUtils';
-import { useProspectDetails } from '@/hooks/useProspectDetails';
 
 interface ProspectDetailsProps {
   list: ProspectList;
@@ -26,23 +24,52 @@ interface ProspectDetailsProps {
 
 const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   const { user } = useAuth();
-  const { 
-    prospects, 
-    selectedProspect, 
-    loading, 
-    loadingCustomerData,
-    handleProspectSelect, 
-    setSelectedProspect 
-  } = useProspectDetails(list);
-  
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [loading, setLoading] = useState(true);
   const [anonymizeData, setAnonymizeData] = useState(isAnonymizationEnabled());
   const { toast } = useToast();
+
+  useEffect(() => {
+    fetchProspects();
+  }, [list.id]);
 
   // Update localStorage when anonymization preference changes
   useEffect(() => {
     setAnonymizationEnabled(anonymizeData);
   }, [anonymizeData]);
+
+  const fetchProspects = async () => {
+    try {
+      setLoading(true);
+      if (!list?.id || !user) return;
+
+      // Fetch prospects for this list
+      const { data: prospectsData, error: prospectsError } = await supabase
+        .from('prospects')
+        .select('*')
+        .eq('list_id', list.id)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (prospectsError) throw prospectsError;
+      setProspects(prospectsData || []);
+      
+      // Log for debugging
+      console.log(`Fetched ${prospectsData?.length || 0} prospects for list ${list.id}`);
+      
+    } catch (error: any) {
+      console.error('Error fetching prospects:', error);
+      toast({
+        title: "Error loading prospects",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchCallLogs = async (prospectId: string) => {
     try {
@@ -73,12 +100,10 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
     }
   };
 
-  // When a prospect is selected, fetch their call logs
-  useEffect(() => {
-    if (selectedProspect) {
-      fetchCallLogs(selectedProspect.id);
-    }
-  }, [selectedProspect]);
+  const handleProspectSelect = (prospect: Prospect) => {
+    setSelectedProspect(prospect);
+    fetchCallLogs(prospect.id);
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
@@ -121,7 +146,7 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   };
 
   // Helper function to display name with anonymization support
-  const displayName = (firstName: string | null | undefined, lastName: string | null | undefined): string => {
+  const displayName = (firstName: string | null, lastName: string | null): string => {
     const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Unnamed';
     if (!anonymizeData) return fullName;
     
@@ -132,13 +157,12 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
   };
 
   // Helper function to display phone with anonymization support
-  const displayPhone = (phone?: string): string => {
-    if (!phone) return '—';
+  const displayPhone = (phone: string): string => {
     return anonymizeData ? anonymizePhoneNumber(phone) : phone;
   };
 
   // Helper function to display address with anonymization support
-  const displayAddress = (address: string | null | undefined): string => {
+  const displayAddress = (address: string | null): string => {
     if (!address) return '—';
     return anonymizeData ? anonymizeAddress(address) : address;
   };
@@ -203,6 +227,9 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Address</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Contact</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -210,17 +237,23 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
               </TableHeader>
               <TableBody>
                 {prospects.map((prospect) => {
+                  const prospectName = [prospect.first_name, prospect.last_name]
+                    .filter(Boolean)
+                    .join(' ') || 'Unnamed';
+                  
                   return (
                     <TableRow key={prospect.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleProspectSelect(prospect)}>
+                      <TableCell className="font-medium">
+                        {displayName(prospect.first_name, prospect.last_name)}
+                      </TableCell>
+                      <TableCell>{displayPhone(prospect.phone_number)}</TableCell>
+                      <TableCell>{displayAddress(prospect.property_address || '—')}</TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(prospect.status)}>{prospect.status}</Badge>
                       </TableCell>
                       <TableCell>{prospect.last_call_attempted ? formatDate(prospect.last_call_attempted) : '—'}</TableCell>
                       <TableCell className="text-right">
-                        <ProspectActions 
-                          prospectId={prospect.id} 
-                          twilio_customer_id={prospect.twilio_customer_id}
-                        />
+                        <ProspectActions prospectId={prospect.id} prospectName={prospectName} />
                       </TableCell>
                     </TableRow>
                   );
@@ -242,53 +275,42 @@ const ProspectDetails = ({ list }: ProspectDetailsProps) => {
               <Badge className={getStatusColor(selectedProspect.status)}>{selectedProspect.status}</Badge>
               <ProspectActions 
                 prospectId={selectedProspect.id} 
-                twilio_customer_id={selectedProspect.twilio_customer_id}
+                prospectName={displayName(selectedProspect.first_name, selectedProspect.last_name)} 
               />
             </div>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>{displayName(selectedProspect.first_name, selectedProspect.last_name)}</span>
-                {loadingCustomerData && <Loader2 className="h-4 w-4 animate-spin" />}
+              <CardTitle>
+                {displayName(selectedProspect.first_name, selectedProspect.last_name)}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {loadingCustomerData ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-6 w-1/2" />
-                  <Skeleton className="h-6 w-2/3" />
-                  <Skeleton className="h-6 w-full" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <PhoneIcon className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">{displayPhone(selectedProspect.phone_number)}</span>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {selectedProspect.phone_number && (
-                    <div className="flex items-center gap-2">
-                      <PhoneIcon className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">{displayPhone(selectedProspect.phone_number)}</span>
-                    </div>
-                  )}
-                  {selectedProspect.property_address && (
-                    <div className="flex items-center gap-2">
-                      <MapPinIcon className="h-5 w-5 text-muted-foreground" />
-                      <span>{displayAddress(selectedProspect.property_address)}</span>
-                    </div>
-                  )}
-                  {selectedProspect.last_call_attempted && (
-                    <div className="flex items-center gap-2">
-                      <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-                      <span>Last contacted: {formatDate(selectedProspect.last_call_attempted)}</span>
-                    </div>
-                  )}
-                  {selectedProspect.notes && (
-                    <div className="flex items-start gap-2 md:col-span-2">
-                      <ClipboardListIcon className="h-5 w-5 text-muted-foreground mt-1" />
-                      <span>{anonymizeData ? '*** Notes hidden for privacy ***' : selectedProspect.notes}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                {selectedProspect.property_address && (
+                  <div className="flex items-center gap-2">
+                    <MapPinIcon className="h-5 w-5 text-muted-foreground" />
+                    <span>{displayAddress(selectedProspect.property_address)}</span>
+                  </div>
+                )}
+                {selectedProspect.last_call_attempted && (
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-muted-foreground" />
+                    <span>Last contacted: {formatDate(selectedProspect.last_call_attempted)}</span>
+                  </div>
+                )}
+                {selectedProspect.notes && (
+                  <div className="flex items-start gap-2 md:col-span-2">
+                    <ClipboardListIcon className="h-5 w-5 text-muted-foreground mt-1" />
+                    <span>{anonymizeData ? '*** Notes hidden for privacy ***' : selectedProspect.notes}</span>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 

@@ -1,4 +1,3 @@
-
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -47,19 +46,15 @@ export interface Prospect {
   id: string;
   list_id: string;
   user_id: string;
-  twilio_customer_id: string; // Store reference to Twilio customer instead of PII
+  phone_number: string;
+  first_name: string | null;
+  last_name: string | null;
+  property_address: string | null;
+  notes: string | null;
   status: ProspectStatus;
   last_call_attempted: string | null;
   created_at: string;
   updated_at: string;
-  
-  // These fields are not stored in the database,
-  // but loaded from Twilio when needed
-  phone_number?: string;
-  first_name?: string | null;
-  last_name?: string | null;
-  property_address?: string | null;
-  notes?: string | null;
 }
 
 // Call Log type from Supabase call_logs table
@@ -126,13 +121,4 @@ export interface DashboardStats {
   pendingProspects: number;
   completedProspects: number;
   averageCallDuration: number;
-}
-
-// Customer data stored in Twilio
-export interface TwilioCustomerData {
-  phone_number: string;
-  first_name?: string | null;
-  last_name?: string | null;
-  property_address?: string | null;
-  notes?: string | null;
 }
