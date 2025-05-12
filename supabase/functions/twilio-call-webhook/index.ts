@@ -120,7 +120,10 @@ async function validateTwilioRequest(req: Request, url: string): Promise<boolean
     console.log(`Received Twilio signature: ${twilioSignature}`);
     console.log(`Calculated signature: ${calculatedSignature}`);
     
-    return twilioSignature === calculatedSignature;
+    const isValid = twilioSignature === calculatedSignature;
+    console.log(`Signature validation ${isValid ? 'PASSED' : 'FAILED'}`);
+    
+    return isValid;
   } catch (error) {
     console.error("Error validating Twilio request:", error);
     return false;
@@ -128,6 +131,9 @@ async function validateTwilioRequest(req: Request, url: string): Promise<boolean
 }
 
 serve(async (req) => {
+  // Very early logging as requested
+  console.log(`--- twilio-call-webhook: INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -146,9 +152,9 @@ serve(async (req) => {
       
       if (!isValidRequest) {
         console.error("Twilio request validation failed");
-        return new Response(JSON.stringify({ error: "Forbidden - Invalid signature" }), {
+        return new Response("Twilio signature validation failed", {
           status: 403,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          headers: { 'Content-Type': 'text/plain', ...corsHeaders }
         });
       }
     }
