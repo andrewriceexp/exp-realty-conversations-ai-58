@@ -90,15 +90,12 @@ serve(async (req) => {
       const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
       
       if (!isValidRequest) {
-        console.warn("Twilio request validation FAILED, but proceeding anyway for testing purposes");
-        // During development, we'll continue processing even if validation fails
-        // In production, uncomment the following return statement
-        /*
+        console.error("Twilio request validation FAILED - Returning 403 Forbidden");
+        // Strict validation mode - return 403 if validation fails
         return new Response("Twilio signature validation failed", {
           status: 403,
           headers: { 'Content-Type': 'text/plain', ...corsHeaders }
         });
-        */
       } else {
         console.log('Twilio request validated successfully');
       }
@@ -112,6 +109,18 @@ serve(async (req) => {
     
     console.log('Processing standard webhook request for initial call TwiML');
     
+    // For testing, let's simplify the TwiML response to isolate any potential issues
+    // Return a simple message to confirm the webhook is responding
+    const simpleResponse = twiml.VoiceResponse()
+      .say("Webhook reached and validated. Hello from the main webhook.")
+      .hangup();
+    
+    console.log('Returning simplified TwiML response for testing');
+    return new Response(simpleResponse.toString(), { 
+      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+    });
+    
+    /* TEMPORARILY COMMENTED OUT THE COMPLEX TWIML GENERATION FOR TESTING
     // Retrieve the agent configuration - CHANGED: now using supabaseAdmin instead of supabaseClient
     console.log(`Fetching agent config with ID: ${agentConfigId}`);
     const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
@@ -291,6 +300,7 @@ serve(async (req) => {
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
+    */
   } catch (error) {
     console.error('Error in twilio-call-webhook function:', error);
     
@@ -373,7 +383,13 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
         console.log(`Updating call log with status data:`, updateData);
         
         try {
-          // IMPORTANT: Do not include updated_at in the updateData
+          // IMPORTANT: Make sure we're not including updated_at in the updateData
+          // Double check there's no updated_at field
+          if ('updated_at' in updateData) {
+            console.log('Removing updated_at from updateData to prevent errors');
+            delete updateData.updated_at;
+          }
+          
           const { error } = await supabaseAdmin
             .from('call_logs')
             .update(updateData)

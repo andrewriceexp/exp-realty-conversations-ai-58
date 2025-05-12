@@ -78,19 +78,28 @@ serve(async (req) => {
     const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
     
     if (!isValidRequest) {
-      console.warn("Twilio request validation FAILED in process-response, but proceeding anyway for testing purposes");
-      // During development, we'll continue processing even if validation fails
-      // In production, uncomment the following return statement
-      /*
+      console.error("Twilio request validation FAILED - Returning 403 Forbidden");
+      // Strict validation mode - return 403 if validation fails
       return new Response("Twilio signature validation failed", {
         status: 403,
         headers: { 'Content-Type': 'text/plain', ...corsHeaders }
       });
-      */
     } else {
       console.log('Twilio request validated successfully in process-response');
     }
     
+    // For testing, let's simplify the TwiML response to isolate any potential issues
+    // Return a simple message to confirm the process-response webhook is responding
+    const simpleResponse = twiml.VoiceResponse()
+      .say("Response processed successfully. This is a test message from the process-response webhook.")
+      .hangup();
+    
+    console.log('Returning simplified TwiML response for testing');
+    return new Response(simpleResponse.toString(), { 
+      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+    });
+    
+    /* TEMPORARILY COMMENTED OUT THE COMPLEX TWIML GENERATION FOR TESTING
     // Try to parse the form data from Twilio
     let userInput: string | null = null;
     let digits: string | null = null;
@@ -230,6 +239,7 @@ serve(async (req) => {
     return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
+    */
   } catch (error) {
     console.error('Error in process-response function:', error);
     

@@ -1,4 +1,3 @@
-
 // Helper functions for Twilio-related operations in Edge Functions
 import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 
@@ -22,9 +21,7 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
     // Check if the provided auth token is valid
     if (!twilioAuthToken) {
       console.error("Missing twilioAuthToken parameter - user profile may be incomplete");
-      // For development purposes, we'll allow requests without validation
-      console.log("WARNING: Allowing request without validation due to missing auth token");
-      return true; // Allow requests to proceed for testing
+      return false; // No longer allowing requests without validation - strict mode
     }
     
     console.log(`Using provided twilioAuthToken for validation: ${twilioAuthToken.substring(0, 4)}...${twilioAuthToken.substring(twilioAuthToken.length - 4)}`);
@@ -52,13 +49,18 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
       }
     }
     
-    // Create validation signature
+    // Create validation signature - add detailed logging
+    console.log(`URL for validation: "${url}"`);
+    console.log(`Parameters for validation: ${JSON.stringify(params)}`);
+    
     const data = Object.keys(params)
       .sort()
       .reduce((acc, key) => {
         return acc + key + params[key];
       }, url);
       
+    console.log(`Data string for validation: "${data}"`);
+    
     const hmac = createHmac('sha1', twilioAuthToken);
     hmac.update(data);
     const calculatedSignature = hmac.digest('base64');
