@@ -6,3 +6,9 @@ verify_jwt = false
 
 [functions.twilio-process-response]
 verify_jwt = false
+
+[functions.generate-with-ai]
+verify_jwt = false
+
+[functions.generate-speech]
+verify_jwt = false

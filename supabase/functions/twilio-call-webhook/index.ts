@@ -333,13 +333,20 @@ async function handleStatusCallback(req: Request): Promise<Response> {
         }
         
         // Update the call log with the status using admin client
-        const { error } = await supabaseAdmin
-          .from('call_logs')
-          .update(updateData)
-          .eq('id', callLog.id);
-          
-        if (error) {
-          console.error('Error updating call log:', error);
+        // IMPORTANT: Removed the updated_at field that was causing the error
+        try {
+          const { error } = await supabaseAdmin
+            .from('call_logs')
+            .update(updateData)
+            .eq('id', callLog.id);
+            
+          if (error) {
+            console.error('Error updating call log:', error);
+          } else {
+            console.log('Call log updated successfully');
+          }
+        } catch (updateError) {
+          console.error('Exception in call log update:', updateError);
         }
       } else {
         console.error(`No call log found for call SID: ${callSid}`);

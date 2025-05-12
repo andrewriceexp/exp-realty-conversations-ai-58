@@ -258,7 +258,7 @@ serve(async (req) => {
       const updatedTranscript = transcriptHistory + 
         `\nProspect: ${speechResult}`;
       
-      // Using supabaseAdmin for the update
+      // Using supabaseAdmin for the update - REMOVED updated_at field
       try {
         const { error } = await supabaseAdmin
           .from('call_logs')
@@ -269,6 +269,8 @@ serve(async (req) => {
           
         if (error) {
           console.error('Error updating call log transcript:', error);
+        } else {
+          console.log('Call log transcript updated successfully');
         }
       } catch (error) {
         console.error('Exception updating call log transcript:', error);
@@ -319,7 +321,7 @@ serve(async (req) => {
       const updatedTranscript = transcriptHistory + 
         `\nAI: ${aiResponse}`;
       
-      // Using supabaseAdmin for the update
+      // Using supabaseAdmin for the update - REMOVED updated_at field
       try {
         const { error } = await supabaseAdmin
           .from('call_logs')
@@ -330,6 +332,8 @@ serve(async (req) => {
           
         if (error) {
           console.error('Error updating call log with AI response:', error);
+        } else {
+          console.log('Call log AI response updated successfully');
         }
       } catch (error) {
         console.error('Exception updating call log with AI response:', error);
@@ -363,7 +367,7 @@ serve(async (req) => {
           throw new Error(speechError?.message || 'No audio content returned');
         }
         
-        // Update prospect status - Using supabaseAdmin
+        // Update prospect status - Using supabaseAdmin - REMOVED updated_at field
         try {
           const { error } = await supabaseAdmin
             .from('prospects')
@@ -375,6 +379,8 @@ serve(async (req) => {
             
           if (error) {
             console.error('Error updating prospect status:', error);
+          } else {
+            console.log('Prospect status updated successfully');
           }
         } catch (error) {
           console.error('Exception updating prospect status:', error);
@@ -405,7 +411,7 @@ serve(async (req) => {
         finalResponse: speechResult
       };
       
-      // Update call log with the final data - Using supabaseAdmin
+      // Update call log with the final data - Using supabaseAdmin - REMOVED updated_at field
       if (callLogId) {
         try {
           const { error } = await supabaseAdmin
@@ -418,6 +424,8 @@ serve(async (req) => {
             
           if (error) {
             console.error('Error updating call log with final data:', error);
+          } else {
+            console.log('Call log final data updated successfully');
           }
         } catch (error) {
           console.error('Exception updating call log with final data:', error);
