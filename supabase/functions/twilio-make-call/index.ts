@@ -92,9 +92,11 @@ serve(async (req) => {
 
   try {
     // Get request payload
-    const { prospectId, agentConfigId, userId } = await req.json();
+    const requestBody = await req.json();
+    const { prospectId, agentConfigId, userId } = requestBody;
     
     console.log("Request params:", { prospectId, agentConfigId, userId });
+    console.log("Full request body:", JSON.stringify(requestBody, null, 2));
     
     if (!prospectId || !agentConfigId || !userId) {
       return new Response(
@@ -379,30 +381,22 @@ serve(async (req) => {
       console.log("Webhook URL:", webhookWithParams);
       console.log("Status webhook URL:", statusWebhook);
 
-      // Detailed logging of Twilio parameters
-      const twilioParams = {
+      // Define call parameters manually to ensure they're correct
+      const callParams = {
         url: webhookWithParams,
-        to: formattedPhoneNumber,
+        to: formattedPhoneNumber, // This is the 'to' parameter that was missing
         from: twilioPhoneNumber,
         statusCallback: statusWebhook,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         statusCallbackMethod: 'POST',
         record: 'true',
       };
-      
-      console.log("Twilio parameters:", JSON.stringify(twilioParams));
-      
-      // IMPORTANT: Pass the parameters directly instead of using twilioParams
-      // This ensures we don't have any reference/serialization issues
-      const call = await twilio.calls.create({
-        url: webhookWithParams,
-        to: formattedPhoneNumber,
-        from: twilioPhoneNumber,
-        statusCallback: statusWebhook,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-        record: 'true',
-      });
+
+      // Log the final call parameters for debugging
+      console.log("Final Twilio call parameters:", JSON.stringify(callParams));
+
+      // Make the API call with explicit parameters
+      const call = await twilio.calls.create(callParams);
       
       console.log("Twilio call initiated successfully:", call.sid);
       
