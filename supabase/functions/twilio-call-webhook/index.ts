@@ -261,6 +261,7 @@ async function handleStatusCallback(req: Request): Promise<Response> {
         console.log(`Updating call log with status data:`, updateData);
         
         try {
+          // Fixed: Removed updated_at field from update operation
           const { error } = await supabaseAdmin
             .from('call_logs')
             .update(updateData)
