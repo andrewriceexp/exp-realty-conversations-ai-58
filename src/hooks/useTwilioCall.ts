@@ -32,6 +32,7 @@ export function useTwilioCall() {
     try {
       console.log('Initiating call with options:', options);
       
+      // Make sure we're sending the complete options object
       const { data, error: invokeError } = await supabase.functions.invoke('twilio-make-call', {
         body: options,
       });

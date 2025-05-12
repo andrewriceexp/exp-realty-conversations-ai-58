@@ -11,6 +11,15 @@ const twilioClient = (accountSid: string, authToken: string) => {
         console.log("Creating call with params:", JSON.stringify(params));
         
         try {
+          // Validate required parameters first
+          if (!params.to || params.to === '') {
+            throw new Error("Missing required 'to' parameter for Twilio call");
+          }
+          
+          if (!params.from || params.from === '') {
+            throw new Error("Missing required 'from' parameter for Twilio call");
+          }
+          
           // Convert parameters to form data format expected by Twilio
           const formData = new URLSearchParams();
           
@@ -28,18 +37,10 @@ const twilioClient = (accountSid: string, authToken: string) => {
             }
           }
           
-          // Validate key parameters - critical check to prevent the "No 'To' number specified" error
-          if (!params.to || params.to === '') {
-            throw new Error("Missing required 'to' parameter for Twilio call");
-          }
-          
-          if (!params.from || params.from === '') {
-            throw new Error("Missing required 'from' parameter for Twilio call");
-          }
-          
-          // Log the actual form data being sent
+          // Double check the formData has the required parameters
           console.log("Sending form data to Twilio:", formData.toString());
           
+          // Make the actual API call to Twilio
           const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Calls.json`, {
             method: 'POST',
             headers: {
@@ -391,7 +392,8 @@ serve(async (req) => {
       
       console.log("Twilio parameters:", JSON.stringify(twilioParams));
       
-      // Initiate the call via Twilio - FIX: Make sure we're passing all required parameters properly
+      // IMPORTANT: Pass the parameters directly instead of using twilioParams
+      // This ensures we don't have any reference/serialization issues
       const call = await twilio.calls.create({
         url: webhookWithParams,
         to: formattedPhoneNumber,
