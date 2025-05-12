@@ -307,77 +307,20 @@ serve(async (req) => {
     }
 
     console.log("Prospect fetched with phone_number:", prospectData.phone_number);
+    console.log("Prospect fetched, preparing call");
     
-    console.log("Prospect fetched, creating call log");
-    
-    // Create a call log entry before initiating the call - USING ADMIN CLIENT TO BYPASS RLS
-    console.log("Attempting to create call log using admin client");
-    
-    const { data: callLogData, error: callLogError } = await supabaseAdmin
-      .from('call_logs')
-      .insert({
-        prospect_id: prospectId,
-        user_id: userId,
-        agent_config_id: agentConfigId,
-        call_status: 'Initiated',
-        twilio_call_sid: 'pending', // Will be updated after Twilio response
-        started_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-      
-    if (callLogError) {
-      console.error("Call log error:", callLogError);
-      
-      // Check if it's an RLS error
-      if (callLogError.code === '42501' || callLogError.message?.includes('violates row-level security policy')) {
-        console.log("This appears to be an RLS policy violation. Checking call_logs table permissions...");
-        
-        // Debug RLS policies
-        try {
-          const { data: rlsData, error: rlsError } = await supabaseAdmin
-            .rpc('get_policies', { table_name: 'call_logs' });
-            
-          console.log("RLS policies for call_logs:", rlsData || "No policies found", "Error:", rlsError);
-        } catch (e) {
-          console.error("Error checking RLS policies:", e);
-        }
-      }
-      
-      return new Response(
-        JSON.stringify({ 
-          error: `Failed to create call log: ${callLogError.message}`,
-          success: false,
-          code: 'CALL_LOG_ERROR'
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-    
-    console.log("Call log created successfully:", callLogData);
-
     // Create Twilio client
     const twilioAccountSid = profileData.twilio_account_sid;
     const twilioAuthToken = profileData.twilio_auth_token;
     const twilioPhoneNumber = profileData.twilio_phone_number;
     const twilio = twilioClient(twilioAccountSid, twilioAuthToken);
     
-    console.log("Call log created, preparing webhook URLs");
+    console.log("Calculating webhook URLs");
     
     // Calculate the absolute URL for the webhook
     const baseUrl = Deno.env.get('SUPABASE_URL') || '';
     const projectRef = baseUrl.split('https://')[1]?.split('.')[0] || '';
     const webhookUrl = `https://${projectRef}.functions.supabase.co/twilio-call-webhook`;
-    
-    // Add query parameters with context info
-    const webhookWithParams = `${webhookUrl}?call_log_id=${callLogData.id}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
-    const statusWebhook = `${webhookUrl}/status?call_log_id=${callLogData.id}`;
-    
-    console.log("Webhook URL:", webhookWithParams);
-    console.log("Status webhook URL:", statusWebhook);
     
     try {
       // Format the phone number to E.164 format
@@ -398,6 +341,46 @@ serve(async (req) => {
       
       console.log(`Initiating Twilio call to ${formattedPhoneNumber} from ${twilioPhoneNumber}`);
       console.log(`Raw phone number: "${prospectData.phone_number}", Formatted: "${formattedPhoneNumber}"`);
+      
+      // First, create a call log entry with null for twilio_call_sid
+      console.log("Creating call log entry with NULL sid");
+      const { data: callLogData, error: callLogError } = await supabaseAdmin
+        .from('call_logs')
+        .insert({
+          prospect_id: prospectId,
+          user_id: userId,
+          agent_config_id: agentConfigId,
+          call_status: 'Initiated',
+          twilio_call_sid: null, // Use NULL instead of 'pending'
+          started_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (callLogError) {
+        console.error("Call log error:", callLogError);
+        
+        return new Response(
+          JSON.stringify({ 
+            error: `Failed to create call log: ${callLogError.message}`,
+            success: false,
+            code: 'CALL_LOG_ERROR'
+          }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      console.log("Call log created successfully:", callLogData);
+      
+      // Add query parameters with context info
+      const webhookWithParams = `${webhookUrl}?call_log_id=${callLogData.id}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
+      const statusWebhook = `${webhookUrl}/status?call_log_id=${callLogData.id}`;
+      
+      console.log("Webhook URL:", webhookWithParams);
+      console.log("Status webhook URL:", statusWebhook);
       
       // Detailed logging of Twilio parameters
       const twilioParams = {
@@ -457,7 +440,7 @@ serve(async (req) => {
           call_status: 'Failed',
           ended_at: new Date().toISOString()
         })
-        .eq('id', callLogData.id);
+        .eq('id', callLogData?.id);
       
       return new Response(
         JSON.stringify({ 
