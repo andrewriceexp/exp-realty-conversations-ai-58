@@ -11,27 +11,58 @@ import { AgentConfig } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Link } from 'react-router-dom';
+import { getCustomerDataFromTwilio } from '@/utils/twilioCustomerManager';
 
 interface ProspectActionsProps {
   prospectId: string;
-  prospectName: string;
+  twilio_customer_id: string; // Changed from prospectName
 }
 
-const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => {
+const ProspectActions = ({ prospectId, twilio_customer_id }: ProspectActionsProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedConfigId, setSelectedConfigId] = useState<string>('');
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [loadingCustomerData, setLoadingCustomerData] = useState(false);
+  const [prospectName, setProspectName] = useState<string>('Prospect');
   const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  const loadProspectName = async () => {
+    if (!user || !twilio_customer_id) return;
+    
+    try {
+      setLoadingCustomerData(true);
+      
+      // Fetch customer data from Twilio to get the name
+      const customerData = await getCustomerDataFromTwilio(twilio_customer_id, user.id);
+      
+      if (customerData) {
+        const fullName = [customerData.first_name, customerData.last_name]
+          .filter(Boolean)
+          .join(' ') || 'Unnamed Prospect';
+        
+        setProspectName(fullName);
+      }
+    } catch (error) {
+      console.error('Error loading customer name:', error);
+      // Keep the default name if there's an error
+    } finally {
+      setLoadingCustomerData(false);
+    }
+  };
 
   const openCallDialog = async () => {
     setCallError(null);
     setErrorCode(null);
     setIsLoadingConfigs(true);
+    
+    // Load the prospect name when opening the dialog
+    loadProspectName();
+    
     try {
       console.log('Fetching agent configurations');
       const { data, error } = await supabase
@@ -80,13 +111,15 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       console.log('Making call with:', {
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id
+        userId: user.id,
+        twilio_customer_id // Added to pass to the edge function
       });
       
       const response = await makeCall({
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id
+        userId: user.id,
+        twilio_customer_id // This will be used to fetch customer data from Twilio
       });
       
       console.log('Call response:', response);
@@ -143,7 +176,13 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Call {prospectName || 'Prospect'}</DialogTitle>
+            <DialogTitle>
+              Call {loadingCustomerData ? (
+                <span className="inline-flex items-center">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
+                </span>
+              ) : prospectName}
+            </DialogTitle>
             <DialogDescription>
               Select an agent configuration to use for this call
             </DialogDescription>
