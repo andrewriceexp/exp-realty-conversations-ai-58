@@ -86,10 +86,16 @@ serve(async (req) => {
     
     console.log(`Speech received: "${speechResult}" (confidence: ${confidence})`);
     
-    // Initialize Supabase client
+    // Initialize Supabase client with anon key (for read operations)
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+    
+    // Initialize Supabase admin client with service role key (for write operations)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
     if (!speechResult) {
@@ -149,7 +155,7 @@ serve(async (req) => {
       });
     }
     
-    // Update the call log with the transcript
+    // Update the call log with the transcript - Using supabaseAdmin
     if (callLogId) {
       // Get existing transcript to build conversation history
       const { data: existingCallLog } = await supabaseClient
@@ -167,7 +173,8 @@ serve(async (req) => {
       const updatedTranscript = transcriptHistory + 
         `\nProspect: ${speechResult}`;
       
-      await supabaseClient
+      // Using supabaseAdmin for the update
+      await supabaseAdmin
         .from('call_logs')
         .update({
           transcript: updatedTranscript
@@ -203,7 +210,7 @@ serve(async (req) => {
     
     const aiResponse = openaiResponse?.generatedText || "Thank you for your response. An agent will contact you soon.";
     
-    // Update the call log with the AI response
+    // Update the call log with the AI response - Using supabaseAdmin
     if (callLogId) {
       const { data: existingCallLog } = await supabaseClient
         .from('call_logs')
@@ -219,7 +226,8 @@ serve(async (req) => {
       const updatedTranscript = transcriptHistory + 
         `\nAI: ${aiResponse}`;
       
-      await supabaseClient
+      // Using supabaseAdmin for the update
+      await supabaseAdmin
         .from('call_logs')
         .update({
           transcript: updatedTranscript
@@ -254,8 +262,8 @@ serve(async (req) => {
           throw new Error(speechError?.message || 'No audio content returned');
         }
         
-        // Update prospect status
-        await supabaseClient
+        // Update prospect status - Using supabaseAdmin
+        await supabaseAdmin
           .from('prospects')
           .update({
             status: 'Completed',
@@ -288,9 +296,9 @@ serve(async (req) => {
         finalResponse: speechResult
       };
       
-      // Update call log with the final data
+      // Update call log with the final data - Using supabaseAdmin
       if (callLogId) {
-        await supabaseClient
+        await supabaseAdmin
           .from('call_logs')
           .update({
             extracted_data: extractedData,
