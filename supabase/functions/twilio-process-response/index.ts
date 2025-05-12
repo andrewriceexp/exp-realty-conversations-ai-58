@@ -1,6 +1,5 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
 
@@ -91,91 +90,32 @@ serve(async (req) => {
     } else {
       console.log('Twilio request validated successfully in process-response');
     }
-
-    // Parse the form data from Twilio
-    const formData = await req.formData();
-    const speechResult = formData.get('SpeechResult')?.toString();
-    const confidence = formData.get('Confidence')?.toString();
-    const callSid = formData.get('CallSid')?.toString();
-    const digits = formData.get('Digits')?.toString(); // Get DTMF input if any
     
-    // Log the user input - both speech and DTMF
-    if (speechResult) {
-      console.log(`Speech received: "${speechResult}" (confidence: ${confidence})`);
-    }
-    if (digits) {
-      console.log(`DTMF digits received: "${digits}"`);
-    }
+    // Try to parse the form data from Twilio
+    let userInput: string | null = null;
+    let digits: string | null = null;
     
-    // Process DTMF input if no speech was detected
-    let userInput = speechResult || '';
-    if (!speechResult && digits) {
-      // Convert DTMF to text response
-      if (digits === '1') {
-        userInput = 'Yes, I am interested';
-      } else if (digits === '2') {
-        userInput = 'No, I am not interested';
-      } else {
-        userInput = `Pressed ${digits}`;
-      }
-      console.log(`Converted DTMF to text: "${userInput}"`);
+    console.log('Parsing form data from Twilio');
+    try {
+      const formData = await req.formData();
+      userInput = formData.get('SpeechResult')?.toString() || null;
+      digits = formData.get('Digits')?.toString() || null;
+      
+      console.log(`Parsed input - Speech: ${userInput || 'None'}, Digits: ${digits || 'None'}`);
+    } catch (error) {
+      console.error('Error parsing form data:', error);
     }
     
-    if (!userInput) {
-      console.error('No speech or DTMF input received');
-      
-      // Create a TwiML response for no input detected
-      const response = twiml.VoiceResponse();
-      response.say("I'm sorry, I couldn't hear you. Please speak clearly or use the keypad. Press 1 for yes or 2 for no.");
-      response.pause({ length: 2 }); // Added a longer pause to give the caller time to prepare
-      
-      // First gather attempt
-      const gather1 = response.gather({
-        input: 'speech dtmf', // Accept both speech and keypad
-        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
-        method: 'POST',
-        timeout: 15,
-        speechTimeout: 'auto',
-        language: 'en-US',
-        hints: 'yes,no,maybe,interested,not interested'
-      });
-      
-      gather1.say("Please let me know how I can help you today. You can speak now or press 1 for yes, 2 for no.");
-      
-      // Add a pause between gather attempts
-      response.pause({ length: 2 });
-      
-      // Second gather attempt
-      const gather2 = response.gather({
-        input: 'speech dtmf',
-        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${conversationCount}`,
-        method: 'POST',
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US'
-      });
-      
-      gather2.say("I still couldn't detect your response. Please try once more.");
-      
-      // Final message if still no input
-      response.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
-      response.hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    // Retrieve agent configuration for API settings
-    console.log(`Fetching agent config: ${agentConfigId}`);
-    const { data: agentConfig, error: agentConfigError } = await supabaseClient
+    // Fetch the agent configuration - CHANGED: now using supabaseAdmin instead of supabaseClient
+    console.log(`Fetching agent config with ID: ${agentConfigId}`);
+    const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
       .from('agent_configs')
       .select('*')
       .eq('id', agentConfigId)
       .maybeSingle();
     
-    if (agentConfigError) {
-      console.error('Error fetching agent config:', agentConfigError);
+    if (agentConfigError || !agentConfig) {
+      console.error(`Error fetching agent config or not found: ${agentConfigError?.message || 'Not found'}`);
       const response = twiml.VoiceResponse()
         .say("I'm sorry, there was an error with the AI agent configuration. Please try again later.")
         .hangup();
@@ -185,363 +125,117 @@ serve(async (req) => {
       });
     }
     
-    console.log(`Agent config retrieved: ${agentConfig?.config_name}`);
+    console.log(`Using agent config: ${agentConfig.config_name}`);
     
-    // Retrieve prospect information
-    console.log(`Fetching prospect: ${prospectId}`);
-    const { data: prospect, error: prospectError } = await supabaseClient
-      .from('prospects')
-      .select('first_name, last_name, phone_number, property_address, notes')
-      .eq('id', prospectId)
-      .maybeSingle();
+    // Generate appropriate response based on user input
+    let aiResponse: string;
+    
+    if (!userInput && !digits) {
+      console.log('No user input detected');
+      aiResponse = "I didn't hear your response. Could you please try again? Say yes if you're interested or no if you're not.";
+    } else {
+      console.log('Generating response for user input');
+      // Process speech or digit input
+      let normalizedInput = '';
       
-    if (prospectError) {
-      console.error('Error fetching prospect:', prospectError);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error retrieving your information. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      if (digits) {
+        // Convert digits to yes/no response
+        normalizedInput = digits === '1' ? 'yes' : digits === '2' ? 'no' : `pressed ${digits}`;
+        console.log(`Normalized digit input to: ${normalizedInput}`);
+      } else if (userInput) {
+        normalizedInput = userInput.toLowerCase();
+        console.log(`Using speech input: ${normalizedInput}`);
+      }
+      
+      // TODO: In a production environment, we would call an LLM here to generate a response
+      // For now, we'll use a simple rule-based approach
+      if (normalizedInput.includes('yes') || normalizedInput.includes('sure') || 
+          normalizedInput.includes('ok') || normalizedInput.includes('interested') ||
+          normalizedInput === 'pressed 1') {
+        console.log('Detected positive response');
+        aiResponse = "Great! I'll make sure an agent follows up with you soon. Is there a specific time that would work best for you?";
+      } else if (normalizedInput.includes('no') || normalizedInput.includes('not') ||
+                normalizedInput.includes('don\'t') || normalizedInput.includes('later') ||
+                normalizedInput === 'pressed 2') {
+        console.log('Detected negative response');
+        aiResponse = "I understand. Thank you for your time. If you change your mind or have questions about real estate opportunities in the future, please don't hesitate to reach out. Have a great day!";
+      } else {
+        console.log('Detected ambiguous response');
+        aiResponse = `I heard you say ${userInput || 'something'}, but I'm not sure if that's a yes or no. Could you please say yes if you're interested in speaking with one of our agents, or no if you're not interested at this time?`;
+      }
+    }
+    
+    console.log(`Generated AI response: "${aiResponse}"`);
+    
+    // Should we continue the conversation or end the call?
+    const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
+    const isNegativeResponse = aiResponse.includes("I understand") || aiResponse.includes("Have a great day");
+    const isEndingCall = isNegativeResponse || parseInt(conversationCount) >= 3;
+    
+    console.log(`Conversation flow - Positive: ${isPositiveResponse}, Negative: ${isNegativeResponse}, Ending: ${isEndingCall}, Count: ${conversationCount}`);
+    
+    // Build the TwiML response
+    const response = twiml.VoiceResponse();
+    response.say(aiResponse);
+    response.pause({ length: 1 });
+    
+    if (!isEndingCall) {
+      // Continue the conversation
+      const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=${nextConversationCount}${callLogId ? `&call_log_id=${callLogId}` : ''}`;
+      
+      const gather = response.gather({
+        input: 'speech dtmf',
+        action: nextActionUrl,
+        method: 'POST',
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US'
       });
-    }
-    
-    console.log(`Prospect retrieved: ${prospect?.first_name} ${prospect?.last_name}`);
-    
-    // Update the call log with the transcript - Using supabaseAdmin
-    if (callLogId) {
-      // Get existing transcript to build conversation history
-      console.log(`Fetching existing transcript for call log: ${callLogId}`);
-      const { data: existingCallLog } = await supabaseClient
-        .from('call_logs')
-        .select('transcript')
-        .eq('id', callLogId)
-        .maybeSingle();
-        
-      let transcriptHistory = '';
-      if (existingCallLog?.transcript) {
-        transcriptHistory = existingCallLog.transcript;
+      
+      gather.say("Please go ahead with your response.");
+      console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
+      
+      // Add a fallback in case gather times out
+      response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
+    } else {
+      // End the conversation
+      if (isPositiveResponse) {
+        response.say("Thank you for your time. An agent will be in touch with you soon. Have a great day!");
       }
       
-      // Add this turn to the transcript history
-      const updatedTranscript = transcriptHistory + 
-        `\nProspect: ${userInput}`;
+      response.hangup();
+      console.log('Ending call');
       
-      console.log(`Updating call log transcript: ${callLogId}`);
-      try {
-        // Only update the transcript field
-        const { error } = await supabaseAdmin
-          .from('call_logs')
-          .update({
-            transcript: updatedTranscript
-          })
-          .eq('id', callLogId);
-          
-        if (error) {
-          console.error('Error updating call log transcript:', error);
-        } else {
-          console.log('Call log transcript updated successfully');
-        }
-      } catch (error) {
-        console.error('Exception updating call log transcript:', error);
-      }
-    }
-    
-    // Call OpenAI to generate response
-    console.log('Calling OpenAI to generate response');
-    const openaiPayload = {
-      prompt: userInput,
-      systemPrompt: `You are an AI assistant for eXp Realty named Alex. You are speaking with a prospect named ${prospect?.first_name || 'there'}. 
-      Keep responses conversational, friendly, and under 100 words. You are calling about ${prospect?.property_address || 'their property'}. 
-      Your goal is to set up an appointment with a real estate agent. If they express interest, thank them and let them know an agent will call them soon.
-      If they're not interested, respect that and politely end the conversation. Previous conversation: ${callLogId ? "..." : "This is the start of the conversation."}`
-    };
-    
-    // Call the OpenAI edge function
-    console.log('Invoking generate-with-ai function');
-    const { data: openaiResponse, error: openaiError } = await supabaseClient.functions.invoke('generate-with-ai', {
-      body: openaiPayload
-    });
-    
-    if (openaiError) {
-      console.error('Error calling OpenAI:', openaiError);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, I'm having trouble processing your request right now. An agent will follow up with you soon. Thank you for your time.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    const aiResponse = openaiResponse?.generatedText || "Thank you for your response. An agent will contact you soon.";
-    console.log(`AI response generated: "${aiResponse}"`);
-    
-    // Update the call log with the AI response - Using supabaseAdmin
-    if (callLogId) {
-      const { data: existingCallLog } = await supabaseClient
-        .from('call_logs')
-        .select('transcript')
-        .eq('id', callLogId)
-        .maybeSingle();
-        
-      let transcriptHistory = '';
-      if (existingCallLog?.transcript) {
-        transcriptHistory = existingCallLog.transcript;
-      }
-      
-      const updatedTranscript = transcriptHistory + 
-        `\nAI: ${aiResponse}`;
-      
-      console.log(`Updating call log with AI response: ${callLogId}`);
-      try {
-        // Only update the transcript field
-        const { error } = await supabaseAdmin
-          .from('call_logs')
-          .update({
-            transcript: updatedTranscript
-          })
-          .eq('id', callLogId);
-          
-        if (error) {
-          console.error('Error updating call log with AI response:', error);
-        } else {
-          console.log('Call log AI response updated successfully');
-        }
-      } catch (error) {
-        console.error('Exception updating call log with AI response:', error);
-      }
-    }
-    
-    // Process the response to determine if we should end the call
-    const lowerResponse = aiResponse.toLowerCase();
-    const userInputLower = userInput.toLowerCase();
-    const isEndingCall = lowerResponse.includes('goodbye') || 
-                        lowerResponse.includes('thank you for your time') ||
-                        userInputLower.includes('no') || 
-                        userInputLower.includes('not interested') ||
-                        parseInt(conversationCount) >= 3; // Limit conversation to 3 turns
-    
-    console.log(`Is ending call: ${isEndingCall}, conversation count: ${conversationCount}`);
-    
-    let twimlResponse;
-    
-    // Check if this is the final turn of conversation
-    if (isEndingCall) {
-      console.log('Final turn - generating speech for ending call');
-      // Generate the final speech audio with ElevenLabs
-      const elevenLabsPayload = {
-        text: aiResponse,
-        voiceId: agentConfig?.voice_id || "EXAVITQu4vr4xnSDxMaL", // Use agent config or default to Sarah's voice
-        model: agentConfig?.tts_model || "eleven_multilingual_v2"
-      };
-      
-      try {
-        // Call ElevenLabs for text-to-speech
-        console.log('Invoking generate-speech function');
-        const { data: speechData, error: speechError } = await supabaseClient.functions.invoke('generate-speech', {
-          body: elevenLabsPayload
-        });
-        
-        if (speechError || !speechData?.audioContent) {
-          throw new Error(speechError?.message || 'No audio content returned');
-        }
-        
-        console.log('Speech generated successfully, updating prospect status');
-        
-        // Update prospect status
-        try {
-          const { error } = await supabaseAdmin
-            .from('prospects')
-            .update({
-              status: 'Completed',
-              notes: `CALL COMPLETED: Last response: "${speechResult}"`
-            })
-            .eq('id', prospectId);
-            
-          if (error) {
-            console.error('Error updating prospect status:', error);
-          } else {
-            console.log('Prospect status updated successfully');
-          }
-        } catch (error) {
-          console.error('Exception updating prospect status:', error);
-        }
-          
-        // Create TwiML with audio playback
-        const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
-        console.log('Creating TwiML with audio playback for final response');
-        
-        twimlResponse = twiml.VoiceResponse();
-        twimlResponse.play(audioUrl);
-        twimlResponse.pause({ length: 1 });
-        twimlResponse.say("Thank you for your time. Goodbye.");
-        twimlResponse.hangup();
-          
-      } catch (speechGenError) {
-        console.error('Error generating speech:', speechGenError);
-        console.log('Falling back to regular TTS for final response');
-        
-        twimlResponse = twiml.VoiceResponse();
-        twimlResponse.say(aiResponse);
-        twimlResponse.pause({ length: 1 });
-        twimlResponse.say("Thank you for your time. Goodbye.");
-        twimlResponse.hangup();
-      }
-      
-      // Extract data for the call log
-      const extractedData = {
-        interested: speechResult?.toLowerCase().includes('yes') || 
-                    speechResult?.toLowerCase().includes('interested') || 
-                    speechResult?.toLowerCase().includes('sure'),
-        finalResponse: speechResult
-      };
-      
-      // Update call log with the final data
+      // Update the call log status if we have a callLogId
       if (callLogId) {
-        console.log(`Updating call log with final data: ${callLogId}`);
         try {
-          // Only update these specific fields
-          const { error } = await supabaseAdmin
+          console.log(`Updating call log ${callLogId} with summary information`);
+          await supabaseAdmin
             .from('call_logs')
             .update({
-              extracted_data: extractedData,
-              summary: "Call completed. Review transcript for details."
+              summary: isPositiveResponse ? 
+                "Prospect expressed interest. Follow-up required." :
+                "Prospect not interested at this time."
             })
             .eq('id', callLogId);
-            
-          if (error) {
-            console.error('Error updating call log with final data:', error);
-          } else {
-            console.log('Call log final data updated successfully');
-          }
         } catch (error) {
-          console.error('Exception updating call log with final data:', error);
+          console.error('Error updating call log with summary:', error);
         }
-      }
-      
-    } else {
-      // This is not the final turn, continue the conversation
-      console.log('Not final turn - continuing conversation');
-      try {
-        // Generate the speech audio with ElevenLabs
-        const elevenLabsPayload = {
-          text: aiResponse,
-          voiceId: agentConfig?.voice_id || "EXAVITQu4vr4xnSDxMaL", // Use agent config or default to Sarah's voice
-          model: agentConfig?.tts_model || "eleven_multilingual_v2"
-        };
-        
-        console.log('Invoking generate-speech function');
-        // Call ElevenLabs for text-to-speech
-        const { data: speechData, error: speechError } = await supabaseClient.functions.invoke('generate-speech', {
-          body: elevenLabsPayload
-        });
-        
-        if (speechError || !speechData?.audioContent) {
-          throw new Error(speechError?.message || 'No audio content returned');
-        }
-        
-        // Make sure the action URL includes the full domain
-        const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`;
-        console.log(`Setting next Gather action URL to: ${nextActionUrl}`);
-        
-        // Create TwiML with audio playback and gather for next turn
-        const audioUrl = `data:audio/mpeg;base64,${speechData.audioContent}`;
-        console.log('Creating TwiML with audio playback for continued conversation');
-        
-        twimlResponse = twiml.VoiceResponse();
-        twimlResponse.play(audioUrl);
-        twimlResponse.pause({ length: 1 });
-        
-        // First gather attempt
-        const gather1 = twimlResponse.gather({
-          input: 'speech dtmf', // Accept both speech and keypad
-          action: nextActionUrl,
-          method: 'POST',
-          timeout: 15,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          hints: 'yes,no,maybe,interested,not interested'
-        });
-        
-        gather1.say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.");
-        
-        // Add a pause between gather attempts
-        twimlResponse.pause({ length: 2 });
-        
-        // Second gather attempt
-        const gather2 = twimlResponse.gather({
-          input: 'speech dtmf',
-          action: nextActionUrl,
-          method: 'POST',
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US'
-        });
-        
-        gather2.say("I still couldn't detect your response. Please try once more.");
-        
-        // Final message if still no input
-        twimlResponse.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
-        twimlResponse.hangup();
-          
-      } catch (speechGenError) {
-        console.error('Error generating speech:', speechGenError);
-        // Fallback to regular TTS if ElevenLabs fails
-        // Make sure the action URL includes the full domain
-        const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&call_log_id=${callLogId}&conversation_count=${nextConversationCount}`;
-        
-        console.log('Falling back to regular TTS for continued conversation');
-        
-        twimlResponse = twiml.VoiceResponse();
-        twimlResponse.say(aiResponse);
-        twimlResponse.pause({ length: 1 });
-        
-        // First gather attempt
-        const gather1 = twimlResponse.gather({
-          input: 'speech dtmf',
-          action: nextActionUrl,
-          method: 'POST',
-          timeout: 15,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          hints: 'yes,no,maybe,interested,not interested'
-        });
-        
-        gather1.say("I'm listening for your response. You can speak now or press 1 for yes, 2 for no.");
-        
-        // Add a pause between gather attempts
-        twimlResponse.pause({ length: 2 });
-        
-        // Second gather attempt
-        const gather2 = twimlResponse.gather({
-          input: 'speech dtmf',
-          action: nextActionUrl,
-          method: 'POST',
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US'
-        });
-        
-        gather2.say("I still couldn't detect your response. Please try once more.");
-        
-        // Final message if still no input
-        twimlResponse.say("I still couldn't detect your response. Thank you for your time. Goodbye.");
-        twimlResponse.hangup();
       }
     }
     
-    console.log('Returning TwiML response to Twilio');
-    return new Response(twimlResponse.toString(), { 
+    const twimlString = response.toString();
+    console.log(`Returning TwiML response (truncated): ${twimlString.substring(0, 200)}...`);
+    
+    return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
-    
   } catch (error) {
-    console.error('Error in twilio-process-response function:', error);
+    console.error('Error in process-response function:', error);
     
     // Return a simple TwiML response in case of error
     const response = twiml.VoiceResponse()
-      .say("I'm sorry, there was an error processing your response. Thank you for your time. Goodbye.")
+      .say("I'm sorry, there was an error processing your response. Please try again later.")
       .hangup();
       
     return new Response(response.toString(), { 

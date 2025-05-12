@@ -112,9 +112,9 @@ serve(async (req) => {
     
     console.log('Processing standard webhook request for initial call TwiML');
     
-    // Retrieve the agent configuration
+    // Retrieve the agent configuration - CHANGED: now using supabaseAdmin instead of supabaseClient
     console.log(`Fetching agent config with ID: ${agentConfigId}`);
-    const { data: agentConfig, error: agentConfigError } = await supabaseClient
+    const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
       .from('agent_configs')
       .select('*')
       .eq('id', agentConfigId)
@@ -145,9 +145,9 @@ serve(async (req) => {
     
     console.log(`Agent config retrieved: ${agentConfig?.config_name}`);
     
-    // Retrieve prospect information
+    // Retrieve prospect information - CHANGED: now using supabaseAdmin instead of supabaseClient
     console.log(`Fetching prospect with ID: ${prospectId}`);
-    const { data: prospect, error: prospectError } = await supabaseClient
+    const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('prospects')
       .select('first_name, last_name, phone_number, property_address')
       .eq('id', prospectId)
