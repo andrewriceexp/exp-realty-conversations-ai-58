@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 
 // TwiML helper functions
 const twiml = {
@@ -62,23 +63,103 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
+// Function to validate Twilio requests
+async function validateTwilioRequest(req: Request, url: string): Promise<boolean> {
+  console.log("Validating Twilio request");
+  
+  try {
+    const twilioSignature = req.headers.get('x-twilio-signature');
+    
+    if (!twilioSignature) {
+      console.error("Missing X-Twilio-Signature header");
+      return false;
+    }
+    
+    // Get Twilio auth token from environment variable or user profile
+    const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    
+    if (!twilioAuthToken) {
+      console.error("Missing TWILIO_AUTH_TOKEN environment variable");
+      return false;
+    }
+    
+    // For POST requests, we need to validate with the request body
+    let params = {};
+    if (req.method === 'POST') {
+      // Clone the request to avoid consuming it
+      const clonedReq = req.clone();
+      
+      // Try to parse the body as form data or JSON
+      try {
+        const contentType = req.headers.get('content-type') || '';
+        if (contentType.includes('application/x-www-form-urlencoded') ||
+            contentType.includes('multipart/form-data')) {
+          const formData = await clonedReq.formData();
+          formData.forEach((value, key) => {
+            params[key] = value;
+          });
+        } else if (contentType.includes('application/json')) {
+          params = await clonedReq.json();
+        }
+      } catch (error) {
+        console.error("Error parsing request body:", error);
+      }
+    }
+    
+    // Create validation signature
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => {
+        return acc + key + params[key];
+      }, url);
+      
+    const hmac = createHmac('sha1', twilioAuthToken);
+    hmac.update(data);
+    const calculatedSignature = hmac.digest('base64');
+    
+    console.log(`Received Twilio signature: ${twilioSignature}`);
+    console.log(`Calculated signature: ${calculatedSignature}`);
+    
+    return twilioSignature === calculatedSignature;
+  } catch (error) {
+    console.error("Error validating Twilio request:", error);
+    return false;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-
+  
   try {
-    // Parse URL and get query parameters
+    // Parse URL to get the full URL and query parameters
     const url = new URL(req.url);
+    const fullUrl = url.origin + url.pathname;
+    
+    // Validate Twilio request (skip validation for OPTIONS and status updates)
+    const isStatusCallback = url.pathname.endsWith('/status');
+    
+    if (!isStatusCallback) {
+      const isValidRequest = await validateTwilioRequest(req, fullUrl);
+      
+      if (!isValidRequest) {
+        console.error("Twilio request validation failed");
+        return new Response(JSON.stringify({ error: "Forbidden - Invalid signature" }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+    
+    // Continue with the existing webhook logic
     const callLogId = url.searchParams.get('call_log_id');
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
     
     // Check path to see if this is a status callback
-    const isStatusCallback = url.pathname.endsWith('/status');
-    
     if (isStatusCallback) {
       // For status callbacks, we'll need to look up the call_log from the CallSid
       // if call_log_id is not provided in the URL
@@ -89,6 +170,12 @@ serve(async (req) => {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+    
+    // Initialize Supabase admin client with service role key for writes
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
     // Retrieve the agent configuration
@@ -163,9 +250,9 @@ serve(async (req) => {
       .say("I didn't catch that. Thank you for your time. Goodbye.")
       .hangup();
     
-    // If we have a call_log_id, update the status
+    // If we have a call_log_id, update the status using admin client
     if (callLogId) {
-      await supabaseClient
+      await supabaseAdmin
         .from('call_logs')
         .update({
           call_status: 'Answered'
@@ -193,10 +280,10 @@ serve(async (req) => {
 // Handle status callbacks from Twilio
 async function handleStatusCallback(req: Request): Promise<Response> {
   try {
-    // Initialize Supabase client
-    const supabaseClient = createClient(
+    // Initialize Supabase admin client with service role key
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
     
     // Parse the form data from Twilio
@@ -210,7 +297,7 @@ async function handleStatusCallback(req: Request): Promise<Response> {
     
     if (callSid && callStatus) {
       // Find the call log using the CallSid
-      const { data: callLog } = await supabaseClient
+      const { data: callLog } = await supabaseAdmin
         .from('call_logs')
         .select('id')
         .eq('twilio_call_sid', callSid)
@@ -235,8 +322,8 @@ async function handleStatusCallback(req: Request): Promise<Response> {
           updateData.ended_at = new Date().toISOString();
         }
         
-        // Update the call log with the status
-        const { error } = await supabaseClient
+        // Update the call log with the status using admin client
+        const { error } = await supabaseAdmin
           .from('call_logs')
           .update(updateData)
           .eq('id', callLog.id);
