@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import MainLayout from '@/components/MainLayout';
-import { Textarea } from '@/components/ui/textarea';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Full name is required'),
@@ -36,7 +35,7 @@ const ProfileSetup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   useEffect(() => {
     if (profile) {
@@ -77,7 +76,7 @@ const ProfileSetup = () => {
     try {
       setIsLoading(true);
       setUpdateSuccess(false);
-      setDebugInfo('');
+      setErrorMessage(null);
       
       // Create update object
       const updateData: any = { ...values };
@@ -85,9 +84,9 @@ const ProfileSetup = () => {
       // Only update the auth token if one was provided (not empty)
       if (!updateData.twilio_auth_token) {
         delete updateData.twilio_auth_token;
-        setDebugInfo('Auth token field was empty, not updating token');
+        console.log('Auth token field was empty, not updating token');
       } else {
-        setDebugInfo(`Auth token provided (${updateData.twilio_auth_token.length} characters), updating token`);
+        console.log(`Auth token provided (${updateData.twilio_auth_token.length} characters), updating token`);
       }
       
       console.log('Submitting profile update with data:', { 
@@ -106,10 +105,12 @@ const ProfileSetup = () => {
         setHasAuthToken(true);
       }
       
-      // Set success state instead of navigating away
+      // Set success state
       setUpdateSuccess(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Profile update error:', error);
+      setErrorMessage(error.message || 'Failed to update profile');
+      setUpdateSuccess(false);
     } finally {
       setIsLoading(false);
     }
@@ -124,6 +125,14 @@ const ProfileSetup = () => {
           <Alert className="mb-6 bg-green-50 border-green-200 text-green-800">
             <AlertDescription>
               Profile successfully updated! Your Twilio credentials have been saved.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {errorMessage && (
+          <Alert className="mb-6 bg-red-50 border-red-200 text-red-800">
+            <AlertDescription>
+              Error: {errorMessage}
             </AlertDescription>
           </Alert>
         )}

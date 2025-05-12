@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
@@ -27,33 +26,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Clean up auth state completely (useful for logout or auth issues)
   const clearAuthState = () => {
-    // Remove Supabase items from storage
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
         localStorage.removeItem(key);
       }
     });
     
-    // Also clear from sessionStorage if it might be used
     Object.keys(sessionStorage || {}).forEach(key => {
       if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
         sessionStorage.removeItem(key);
       }
     });
     
-    // Reset state
     setUser(null);
     setProfile(null);
     setError(null);
   };
 
-  // Security check for session validity
   const secureSessionCheck = () => {
     if (!user) return false;
     
-    // Check if session is expired
     const tokenData = localStorage.getItem('supabase.auth.token');
     if (!tokenData) return false;
     
@@ -68,13 +61,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    // First set up the auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state change event:', event);
         setUser(session?.user ?? null);
         
-        // Log authentication events securely
         if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user?.id);
         } else if (event === 'SIGNED_OUT') {
@@ -82,7 +73,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setProfile(null);
         }
         
-        // Don't fetch profile here to avoid recursion risk
         if (session?.user) {
           setTimeout(() => {
             fetchProfile(session.user.id);
@@ -93,7 +83,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     );
 
-    // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       
@@ -135,15 +124,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       setError(null);
       
-      // Clean up any existing auth state before signing in
-      // This helps prevent "auth limbo" states
       clearAuthState();
       
-      // Try a global signout first to clear any existing sessions
       try {
         await supabase.auth.signOut({ scope: 'global' });
       } catch (e) {
-        // Continue even if this fails
         console.log('Global sign out before sign-in failed:', e);
       }
       
@@ -160,10 +145,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           variant: "destructive",
         });
         
-        // Log failed sign-in attempt (for security monitoring)
         console.warn('Failed sign-in attempt:', { email, timestamp: new Date().toISOString() });
       } else {
-        // Log successful sign-in (for security monitoring)
         console.log('Successful sign-in:', { email, timestamp: new Date().toISOString() });
       }
     } catch (err: any) {
@@ -183,7 +166,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       setError(null);
       
-      // Clear existing auth state
       clearAuthState();
       
       const { error } = await supabase.auth.signUp({
@@ -209,7 +191,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           description: "Please check your email to verify your account.",
         });
         
-        // Log successful registration (for security monitoring)
         console.log('New user registration:', { email, timestamp: new Date().toISOString() });
       }
     } catch (err: any) {
@@ -228,18 +209,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setLoading(true);
       
-      // First log the sign-out event (for security monitoring)
       console.log('User sign-out:', { userId: user?.id, timestamp: new Date().toISOString() });
       
-      // Clean up all auth state
       clearAuthState();
       
-      // Then trigger the actual sign-out
       await supabase.auth.signOut({ scope: 'global' });
       
-      // Force page reload for a clean state
-      // Uncomment if you want to ensure clean state after logout
-      // window.location.href = '/login';
+      window.location.href = '/login';
     } catch (err: any) {
       toast({
         title: "Sign Out Error",
@@ -251,7 +227,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Add resetPassword function implementation
   const resetPassword = async (email: string) => {
     try {
       setLoading(true);
@@ -271,7 +246,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
       
-      // Log password reset request (for security monitoring)
       console.log('Password reset requested:', { email, timestamp: new Date().toISOString() });
       
       toast({
@@ -288,12 +262,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateProfile = async (profileData: Partial<Profile>) => {
     if (!user) {
+      const errorMessage = "You must be logged in to update your profile";
       toast({
         title: "Error",
-        description: "You must be logged in to update your profile",
+        description: errorMessage,
         variant: "destructive",
       });
-      return;
+      throw new Error(errorMessage);
     }
 
     try {
@@ -305,13 +280,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         twilio_auth_token: profileData.twilio_auth_token ? '****' : undefined 
       });
       
-      // Log profile update (for security monitoring)
       console.log('Profile update:', { userId: user.id, timestamp: new Date().toISOString() });
       
-      // Create a clean update object
       const updateObj = { ...profileData, id: user.id };
       
-      // If twilio_auth_token is empty string, don't update it
       if (updateObj.twilio_auth_token === '') {
         delete updateObj.twilio_auth_token;
       }
@@ -331,14 +303,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
 
-      // Refresh the profile to get the updated data
       await fetchProfile(user.id);
       
       toast({
         title: "Profile Updated",
         description: "Your profile has been successfully updated",
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Profile update error:", err);
       throw err;
     } finally {

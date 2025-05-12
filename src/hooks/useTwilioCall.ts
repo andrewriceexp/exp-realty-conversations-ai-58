@@ -31,7 +31,7 @@ export function useTwilioCall() {
     try {
       console.log('Initiating call with options:', options);
       
-      // Make sure we're sending the complete options object
+      // Make API call to Supabase Edge Function
       const { data, error: invokeError } = await supabase.functions.invoke('twilio-make-call', {
         body: options,
       });
@@ -41,7 +41,7 @@ export function useTwilioCall() {
       if (invokeError) {
         console.error('Edge function error:', invokeError);
         
-        // This is crucial for extracting the actual error from Supabase Edge Function
+        // Extract the actual error from Supabase Edge Function
         if (typeof invokeError === 'object' && invokeError.message?.includes('non-2xx status code')) {
           // If we have data, it means the edge function returned an error response
           if (data && data.error) {
@@ -52,7 +52,7 @@ export function useTwilioCall() {
             }
             throw err;
           } else {
-            // Try to extract more details from the error if possible
+            // Try to extract more details from the error
             console.log('Attempting to extract more error details...');
             let errorDetails = "Unknown edge function error";
             
