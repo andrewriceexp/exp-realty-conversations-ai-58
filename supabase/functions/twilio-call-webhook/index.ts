@@ -33,34 +33,6 @@ serve(async (req) => {
     const isStatusCallback = url.pathname.endsWith('/status');
     console.log(`Is status callback? ${isStatusCallback}`);
     
-    // Validate Twilio request (skip validation for OPTIONS and status updates)
-    if (!isStatusCallback) {
-      console.log('Attempting to validate Twilio request signature');
-      const isValidRequest = await validateTwilioRequest(req, fullUrl);
-      
-      if (!isValidRequest) {
-        console.warn("Twilio request validation failed, but proceeding anyway for testing purposes");
-        // During development, we'll continue processing even if validation fails
-        // In production, uncomment the following return statement
-        /*
-        return new Response("Twilio signature validation failed", {
-          status: 403,
-          headers: { 'Content-Type': 'text/plain', ...corsHeaders }
-        });
-        */
-      } else {
-        console.log('Twilio request validated successfully');
-      }
-    }
-    
-    // Process status callback if that's what this is
-    if (isStatusCallback) {
-      console.log('Processing status callback request');
-      return handleStatusCallback(req);
-    }
-    
-    console.log('Processing standard webhook request for initial call TwiML');
-    
     // Initialize Supabase clients
     console.log('Initializing Supabase clients');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -85,6 +57,60 @@ serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     console.log('Supabase clients initialized successfully');
+    
+    // Fetch the user's Twilio auth token from their profile
+    let userTwilioAuthToken = null;
+    if (userId) {
+      console.log(`Attempting to fetch Twilio auth token for user ${userId}`);
+      try {
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from('profiles')
+          .select('twilio_auth_token')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (profileError) {
+          console.error(`Failed to fetch profile for user ${userId} for validation:`, profileError);
+        } else if (profile && profile.twilio_auth_token) {
+          userTwilioAuthToken = profile.twilio_auth_token;
+          console.log(`Auth token fetched successfully for user ${userId}`);
+        } else {
+          console.warn(`No auth token found in profile for user ${userId}`);
+        }
+      } catch (profileFetchError) {
+        console.error(`Exception fetching profile for user ${userId}:`, profileFetchError);
+      }
+    } else {
+      console.warn("No userId in webhook URL for validation");
+    }
+    
+    // Validate Twilio request (skip validation for OPTIONS and status updates)
+    if (!isStatusCallback) {
+      console.log('Attempting to validate Twilio request signature with user-specific auth token');
+      const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
+      
+      if (!isValidRequest) {
+        console.warn("Twilio request validation FAILED, but proceeding anyway for testing purposes");
+        // During development, we'll continue processing even if validation fails
+        // In production, uncomment the following return statement
+        /*
+        return new Response("Twilio signature validation failed", {
+          status: 403,
+          headers: { 'Content-Type': 'text/plain', ...corsHeaders }
+        });
+        */
+      } else {
+        console.log('Twilio request validated successfully');
+      }
+    }
+    
+    // Process status callback if that's what this is
+    if (isStatusCallback) {
+      console.log('Processing status callback request');
+      return handleStatusCallback(req, supabaseAdmin);
+    }
+    
+    console.log('Processing standard webhook request for initial call TwiML');
     
     // Retrieve the agent configuration
     console.log(`Fetching agent config with ID: ${agentConfigId}`);
@@ -282,26 +308,9 @@ serve(async (req) => {
 });
 
 // Handle status callbacks from Twilio
-async function handleStatusCallback(req: Request): Promise<Response> {
+async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<Response> {
   try {
     console.log('Processing status callback from Twilio');
-    
-    // Initialize Supabase admin client with service role key
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Missing required Supabase environment variables for status callback');
-      return new Response('Configuration error in status callback', { 
-        status: 500,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
-      });
-    }
-    
-    const supabaseAdmin = createClient(
-      supabaseUrl,
-      supabaseServiceRoleKey
-    );
     
     // Parse the form data from Twilio
     console.log('Parsing Twilio form data from status callback');
@@ -364,7 +373,7 @@ async function handleStatusCallback(req: Request): Promise<Response> {
         console.log(`Updating call log with status data:`, updateData);
         
         try {
-          // FIXED: Removed updated_at field from update operation
+          // IMPORTANT: Do not include updated_at in the updateData
           const { error } = await supabaseAdmin
             .from('call_logs')
             .update(updateData)

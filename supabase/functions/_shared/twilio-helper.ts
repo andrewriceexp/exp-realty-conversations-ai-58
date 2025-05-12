@@ -8,7 +8,7 @@ export const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-export async function validateTwilioRequest(req: Request, url: string): Promise<boolean> {
+export async function validateTwilioRequest(req: Request, url: string, twilioAuthToken?: string | null): Promise<boolean> {
   console.log("Validating Twilio request");
   
   try {
@@ -19,15 +19,15 @@ export async function validateTwilioRequest(req: Request, url: string): Promise<
       return false;
     }
     
-    // Get Twilio auth token from environment variable
-    const twilioAuthToken = Deno.env.get('TWILIO_AUTH_TOKEN');
-    
+    // Check if the provided auth token is valid
     if (!twilioAuthToken) {
-      console.error("Missing TWILIO_AUTH_TOKEN environment variable");
+      console.error("Missing twilioAuthToken parameter - user profile may be incomplete");
       // For development purposes, we'll allow requests without validation
       console.log("WARNING: Allowing request without validation due to missing auth token");
       return true; // Allow requests to proceed for testing
     }
+    
+    console.log(`Using provided twilioAuthToken for validation: ${twilioAuthToken.substring(0, 4)}...${twilioAuthToken.substring(twilioAuthToken.length - 4)}`);
     
     // For POST requests, we need to validate with the request body
     let params = {};

@@ -15,4 +15,3 @@ verify_jwt = false
 
 [functions.twilio-make-call]
 verify_jwt = false
-

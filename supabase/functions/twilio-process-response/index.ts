@@ -18,21 +18,6 @@ serve(async (req) => {
     const url = new URL(req.url);
     const fullUrl = url.origin + url.pathname;
     
-    // Validate Twilio request - but don't block requests if validation fails during testing
-    const isValidRequest = await validateTwilioRequest(req, fullUrl);
-    
-    if (!isValidRequest) {
-      console.warn("Twilio request validation failed, but proceeding anyway for testing purposes");
-      // During development, we'll continue processing even if validation fails
-      // In production, uncomment the following return statement
-      /*
-      return new Response("Twilio signature validation failed", {
-        status: 403,
-        headers: { 'Content-Type': 'text/plain', ...corsHeaders }
-      });
-      */
-    }
-
     // Parse URL and get query parameters
     const callLogId = url.searchParams.get('call_log_id');
     const prospectId = url.searchParams.get('prospect_id');
@@ -43,6 +28,70 @@ serve(async (req) => {
     
     console.log(`Processing response for prospect: ${prospectId}, agent config: ${agentConfigId}, user: ${userId}, call log: ${callLogId}, conversation count: ${conversationCount}`);
     
+    // Initialize Supabase clients
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+      console.error(`Missing required Supabase environment variables in process-response function`);
+      
+      const response = twiml.VoiceResponse()
+        .say("I'm sorry, there was an error with the configuration. Please try again later.")
+        .hangup();
+        
+      return new Response(response.toString(), { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+    
+    // Fetch the user's Twilio auth token from their profile
+    let userTwilioAuthToken = null;
+    if (userId) {
+      console.log(`Attempting to fetch Twilio auth token for user ${userId} in process-response`);
+      try {
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from('profiles')
+          .select('twilio_auth_token')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (profileError) {
+          console.error(`Failed to fetch profile for user ${userId} for validation in process-response:`, profileError);
+        } else if (profile && profile.twilio_auth_token) {
+          userTwilioAuthToken = profile.twilio_auth_token;
+          console.log(`Auth token fetched successfully for user ${userId} in process-response`);
+        } else {
+          console.warn(`No auth token found in profile for user ${userId} in process-response`);
+        }
+      } catch (profileFetchError) {
+        console.error(`Exception fetching profile for user ${userId} in process-response:`, profileFetchError);
+      }
+    } else {
+      console.warn("No userId in process-response webhook URL for validation");
+    }
+    
+    // Validate Twilio request with the user-specific token
+    console.log('Attempting to validate Twilio request signature in process-response with user-specific auth token');
+    const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
+    
+    if (!isValidRequest) {
+      console.warn("Twilio request validation FAILED in process-response, but proceeding anyway for testing purposes");
+      // During development, we'll continue processing even if validation fails
+      // In production, uncomment the following return statement
+      /*
+      return new Response("Twilio signature validation failed", {
+        status: 403,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders }
+      });
+      */
+    } else {
+      console.log('Twilio request validated successfully in process-response');
+    }
+
     // Parse the form data from Twilio
     const formData = await req.formData();
     const speechResult = formData.get('SpeechResult')?.toString();
@@ -57,18 +106,6 @@ serve(async (req) => {
     if (digits) {
       console.log(`DTMF digits received: "${digits}"`);
     }
-    
-    // Initialize Supabase client with anon key (for read operations)
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    );
-    
-    // Initialize Supabase admin client with service role key (for write operations)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
     
     // Process DTMF input if no speech was detected
     let userInput = speechResult || '';
