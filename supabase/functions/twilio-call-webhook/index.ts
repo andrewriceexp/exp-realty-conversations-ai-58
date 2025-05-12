@@ -80,7 +80,9 @@ serve(async (req) => {
     const isStatusCallback = url.pathname.endsWith('/status');
     
     if (isStatusCallback) {
-      return handleStatusCallback(req, callLogId);
+      // For status callbacks, we'll need to look up the call_log from the CallSid
+      // if call_log_id is not provided in the URL
+      return handleStatusCallback(req);
     }
     
     // Initialize Supabase client
@@ -151,7 +153,7 @@ serve(async (req) => {
       .pause({ length: 1 })
       .gather({
         input: 'speech',
-        action: `${url.origin}/twilio-process-response?call_log_id=${callLogId}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`,
+        action: `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`,
         method: 'POST',
         timeout: 5,
         speechTimeout: 'auto'
@@ -161,13 +163,15 @@ serve(async (req) => {
       .say("I didn't catch that. Thank you for your time. Goodbye.")
       .hangup();
     
-    // Update the call log with "Answered" status if this webhook was triggered
-    await supabaseClient
-      .from('call_logs')
-      .update({
-        call_status: 'Answered'
-      })
-      .eq('id', callLogId);
+    // If we have a call_log_id, update the status
+    if (callLogId) {
+      await supabaseClient
+        .from('call_logs')
+        .update({
+          call_status: 'Answered'
+        })
+        .eq('id', callLogId);
+    }
     
     return new Response(response.toString(), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
@@ -187,7 +191,7 @@ serve(async (req) => {
 });
 
 // Handle status callbacks from Twilio
-async function handleStatusCallback(req: Request, callLogId: string | null): Promise<Response> {
+async function handleStatusCallback(req: Request): Promise<Response> {
   try {
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -204,33 +208,44 @@ async function handleStatusCallback(req: Request, callLogId: string | null): Pro
     
     console.log(`Status update for call ${callSid}: ${callStatus}`);
     
-    if (callLogId && callStatus) {
-      const updateData: any = {
-        call_status: callStatus.charAt(0).toUpperCase() + callStatus.slice(1) // Capitalize first letter
-      };
-      
-      // Add fields conditionally
-      if (callDuration) {
-        updateData.call_duration_seconds = parseInt(callDuration, 10);
-      }
-      
-      if (recordingUrl) {
-        updateData.recording_url = recordingUrl;
-      }
-      
-      // If call is completed or failed, update the ended_at field
-      if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus)) {
-        updateData.ended_at = new Date().toISOString();
-      }
-      
-      // Update the call log with the status
-      const { error } = await supabaseClient
+    if (callSid && callStatus) {
+      // Find the call log using the CallSid
+      const { data: callLog } = await supabaseClient
         .from('call_logs')
-        .update(updateData)
-        .eq('id', callLogId);
+        .select('id')
+        .eq('twilio_call_sid', callSid)
+        .maybeSingle();
+      
+      if (callLog) {
+        const updateData: any = {
+          call_status: callStatus.charAt(0).toUpperCase() + callStatus.slice(1) // Capitalize first letter
+        };
         
-      if (error) {
-        console.error('Error updating call log:', error);
+        // Add fields conditionally
+        if (callDuration) {
+          updateData.call_duration_seconds = parseInt(callDuration, 10);
+        }
+        
+        if (recordingUrl) {
+          updateData.recording_url = recordingUrl;
+        }
+        
+        // If call is completed or failed, update the ended_at field
+        if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus)) {
+          updateData.ended_at = new Date().toISOString();
+        }
+        
+        // Update the call log with the status
+        const { error } = await supabaseClient
+          .from('call_logs')
+          .update(updateData)
+          .eq('id', callLog.id);
+          
+        if (error) {
+          console.error('Error updating call log:', error);
+        }
+      } else {
+        console.error(`No call log found for call SID: ${callSid}`);
       }
     }
     

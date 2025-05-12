@@ -342,8 +342,32 @@ serve(async (req) => {
       console.log(`Initiating Twilio call to ${formattedPhoneNumber} from ${twilioPhoneNumber}`);
       console.log(`Raw phone number: "${prospectData.phone_number}", Formatted: "${formattedPhoneNumber}"`);
       
-      // First, create a call log entry with null for twilio_call_sid
-      console.log("Creating call log entry with NULL sid");
+      // Add query parameters with context info
+      const webhookWithParams = `${webhookUrl}?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
+      const statusWebhook = `${webhookUrl}/status`;
+      
+      console.log("Webhook URL:", webhookWithParams);
+      console.log("Status webhook URL:", statusWebhook);
+      
+      // Detailed logging of Twilio parameters
+      const twilioParams = {
+        url: webhookWithParams,
+        to: formattedPhoneNumber,
+        from: twilioPhoneNumber,
+        statusCallback: statusWebhook,
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST',
+        record: 'true',
+      };
+      console.log("Twilio parameters:", JSON.stringify(twilioParams));
+      
+      // Initiate the call via Twilio
+      const call = await twilio.calls.create(twilioParams);
+      
+      console.log("Twilio call initiated successfully:", call.sid);
+      
+      // Create a call log entry with the Twilio SID - USING ADMIN CLIENT
+      console.log("Creating call log with Twilio SID using admin client");
       const { data: callLogData, error: callLogError } = await supabaseAdmin
         .from('call_logs')
         .insert({
@@ -351,7 +375,7 @@ serve(async (req) => {
           user_id: userId,
           agent_config_id: agentConfigId,
           call_status: 'Initiated',
-          twilio_call_sid: null, // Use NULL instead of 'pending'
+          twilio_call_sid: call.sid, // Use the actual SID we received from Twilio
           started_at: new Date().toISOString()
         })
         .select()
@@ -374,39 +398,6 @@ serve(async (req) => {
       }
       
       console.log("Call log created successfully:", callLogData);
-      
-      // Add query parameters with context info
-      const webhookWithParams = `${webhookUrl}?call_log_id=${callLogData.id}&prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}`;
-      const statusWebhook = `${webhookUrl}/status?call_log_id=${callLogData.id}`;
-      
-      console.log("Webhook URL:", webhookWithParams);
-      console.log("Status webhook URL:", statusWebhook);
-      
-      // Detailed logging of Twilio parameters
-      const twilioParams = {
-        url: webhookWithParams,
-        to: formattedPhoneNumber,
-        from: twilioPhoneNumber,
-        statusCallback: statusWebhook,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-        statusCallbackMethod: 'POST',
-        record: 'true',
-      };
-      console.log("Twilio parameters:", JSON.stringify(twilioParams));
-      
-      // Initiate the call via Twilio
-      const call = await twilio.calls.create(twilioParams);
-      
-      console.log("Twilio call initiated successfully:", call.sid);
-      
-      // Update the call log with the Twilio SID - USING ADMIN CLIENT
-      console.log("Updating call log with Twilio SID using admin client");
-      await supabaseAdmin
-        .from('call_logs')
-        .update({
-          twilio_call_sid: call.sid
-        })
-        .eq('id', callLogData.id);
       
       // Update prospect status to "Calling" - USING ADMIN CLIENT
       console.log("Updating prospect status to 'Calling' using admin client");
@@ -431,16 +422,6 @@ serve(async (req) => {
       );
     } catch (twilioError) {
       console.error('Twilio error:', twilioError);
-      
-      // Update the call log to mark as failed - USING ADMIN CLIENT
-      console.log("Updating call log to 'Failed' using admin client");
-      await supabaseAdmin
-        .from('call_logs')
-        .update({
-          call_status: 'Failed',
-          ended_at: new Date().toISOString()
-        })
-        .eq('id', callLogData?.id);
       
       return new Response(
         JSON.stringify({ 
