@@ -1,3 +1,4 @@
+
 // supabase/functions/twilio-call-webhook/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
@@ -8,7 +9,7 @@ import { encodeXmlUrl, createErrorResponse, createDebugTwiML, createGatherWithSa
 
 serve(async (req) => {
   const requestTimestamp = new Date().toISOString();
-  const functionVersion = "FINAL_FIX_V2"; // Updated version marker for this fix
+  const functionVersion = "FINAL_FIX_V3"; // Updated version marker for this fix
   console.log(`--- [${requestTimestamp}] twilio-call-webhook (${functionVersion}): INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
 
   if (req.method === 'OPTIONS') {
@@ -97,7 +98,10 @@ serve(async (req) => {
     }
 
     // For POST, Twilio signs the URL without its query string. For GET, it signs with query string.
-    const validationUrlForTwilioHelper = req.method === 'POST' ? `${url.origin}${url.pathname}` : fullUrlForValidation;
+    // Using baseUrl (without query params) for POST signature validation 
+    const validationUrlForTwilioHelper = req.method === 'POST' ? 
+      `${url.origin}${url.pathname}` : 
+      fullUrlForValidation;
 
     if (!isStatusCallback) {
       console.log(`[${requestTimestamp}] (${functionVersion}) Attempting to validate Twilio request. Validation URL for helper: ${validationUrlForTwilioHelper}`);

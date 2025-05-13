@@ -1,3 +1,4 @@
+
 // supabase/functions/_shared/twilio-helper.ts
 import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts"; // For btoa
@@ -39,6 +40,7 @@ export async function validateTwilioRequest(
 
   let dataForSig = "";
   const urlObj = new URL(validationUrl);
+  const baseUrl = `${urlObj.origin}${urlObj.pathname}`;
 
   if (req.method === 'POST') {
     if (!rawBodyText) {
@@ -46,9 +48,9 @@ export async function validateTwilioRequest(
         return false;
     }
     try {
-      // For POST, Twilio uses the URL without any query string parameters for signature calculation
-      const baseUrlForPostSig = `${urlObj.origin}${urlObj.pathname}`;
-      dataForSig = baseUrlForPostSig;
+      // For POST requests, Twilio builds the signature based on the request URL (without query parameters)
+      // concatenated with the POST parameters in alphabetical order by key
+      dataForSig = baseUrl; // Use URL without query params for POST requests
 
       const formData = new URLSearchParams(rawBodyText);
       const paramsArray: [string, string][] = [];
@@ -65,7 +67,7 @@ export async function validateTwilioRequest(
       }
 
       console.log(`${logPrefix} POST params for validation (sorted & concatenated): ${paramsArray.map(p => p[0]+p[1]).join('')}`);
-      console.log(`${logPrefix} Base URL for POST validation: "${baseUrlForPostSig}"`);
+      console.log(`${logPrefix} Base URL for POST validation: "${baseUrl}"`);
 
     } catch (error) {
       console.error(`${logPrefix} Error processing POST body for validation:`, error.message);
