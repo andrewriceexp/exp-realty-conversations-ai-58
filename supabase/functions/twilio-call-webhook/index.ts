@@ -324,7 +324,7 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
       if (callLog) {
         console.log(`Found call log: ${callLog.id}`);
         
-        // FIX: Define only the exact fields we want to update, avoiding updated_at
+        // FIX: Define only the exact fields we want to update, excluding updated_at
         // Capitalize first letter of status
         let statusCapitalized = callStatus;
         if (statusCapitalized) {
@@ -332,6 +332,7 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
         }
         
         // Build a specific update object with only the fields that exist in the table
+        // IMPORTANT: Do not include updated_at field which is causing the error
         const updateObj: Record<string, any> = {
           call_status: statusCapitalized
         };
@@ -352,14 +353,13 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
         
         // Add a flag for trial accounts
         if (isTrial) {
-          updateObj.notes = updateObj.notes ? 
-            updateObj.notes + " (Twilio Trial Account)" : 
-            "Call made with Twilio Trial Account";
+          updateObj.notes = "Call made with Twilio Trial Account";
         }
         
         console.log('Updating call log with these fields:', updateObj);
         
         try {
+          // Update call log without touching updated_at field
           const { error } = await supabaseAdmin
             .from('call_logs')
             .update(updateObj)
@@ -367,22 +367,18 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
             
           if (error) {
             console.error('Error updating call log:', error);
-            return new Response('Database error updating call log', { 
-              status: 500,
-              headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
-            });
+            // Don't return error response, just log it and continue
+            console.log('Continuing despite update error to avoid call interruption');
           } else {
             console.log('Call log updated successfully');
           }
         } catch (updateError) {
           console.error('Exception in call log update:', updateError);
-          return new Response('Exception updating call log', { 
-            status: 500,
-            headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
-          });
+          // Don't return error response, just log it and continue
+          console.log('Continuing despite exception to avoid call interruption');
         }
       } else {
-        console.error(`No call log found for call SID: ${callSid}`);
+        console.log(`No call log found for call SID: ${callSid}`);
         // This is not necessarily an error - might be the first status callback before the call log is created
       }
     } else {
@@ -394,13 +390,15 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
     }
     
     console.log('Completed status callback processing');
+    // Always return success to Twilio, even if we had internal errors
     return new Response('Status received', { 
       headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
     });
   } catch (error) {
     console.error('Error in status callback handler:', error);
-    return new Response('Error processing status callback', { 
-      status: 500,
+    // Return success to Twilio despite internal errors
+    // This prevents Twilio from retrying and possibly causing more errors
+    return new Response('Status received despite errors', { 
       headers: { 'Content-Type': 'text/plain', ...corsHeaders } 
     });
   }
