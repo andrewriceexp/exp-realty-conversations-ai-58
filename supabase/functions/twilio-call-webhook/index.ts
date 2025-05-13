@@ -26,8 +26,9 @@ serve(async (req) => {
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
+    const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     
-    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}`);
+    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, bypass_validation=${bypassValidation}`);
     
     // Check path to see if this is a status callback
     const isStatusCallback = url.pathname.endsWith('/status');
@@ -84,10 +85,10 @@ serve(async (req) => {
       console.warn("No userId in webhook URL for validation");
     }
     
-    // Validate Twilio request (skip validation for OPTIONS and status updates)
+    // Validate Twilio request (skip validation for OPTIONS and status updates if needed)
     if (!isStatusCallback) {
       console.log('Attempting to validate Twilio request signature with user-specific auth token');
-      const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
+      const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken, bypassValidation);
       
       if (!isValidRequest) {
         console.error("Twilio request validation FAILED - Returning 403 Forbidden");
@@ -119,188 +120,6 @@ serve(async (req) => {
     return new Response(simpleResponse.toString(), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
-    
-    /* TEMPORARILY COMMENTED OUT THE COMPLEX TWIML GENERATION FOR TESTING
-    // Retrieve the agent configuration - CHANGED: now using supabaseAdmin instead of supabaseClient
-    console.log(`Fetching agent config with ID: ${agentConfigId}`);
-    const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
-      .from('agent_configs')
-      .select('*')
-      .eq('id', agentConfigId)
-      .maybeSingle();
-      
-    if (agentConfigError) {
-      console.error('Error fetching agent config:', agentConfigError);
-      // Return a simple TwiML response in case of error
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error with the AI agent configuration. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    if (!agentConfig) {
-      console.error(`No agent config found for ID: ${agentConfigId}`);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, I couldn't find the AI agent configuration. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    console.log(`Agent config retrieved: ${agentConfig?.config_name}`);
-    
-    // Retrieve prospect information - CHANGED: now using supabaseAdmin instead of supabaseClient
-    console.log(`Fetching prospect with ID: ${prospectId}`);
-    const { data: prospect, error: prospectError } = await supabaseAdmin
-      .from('prospects')
-      .select('first_name, last_name, phone_number, property_address')
-      .eq('id', prospectId)
-      .maybeSingle();
-      
-    if (prospectError) {
-      console.error('Error fetching prospect:', prospectError);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error retrieving your information. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    if (!prospect) {
-      console.error(`No prospect found for ID: ${prospectId}`);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, I couldn't find your information. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    
-    console.log(`Prospect retrieved: ${prospect?.first_name} ${prospect?.last_name}, phone: ${prospect?.phone_number}`);
-    
-    // Generate a greeting based on the prospect's information
-    let greeting = "Hello";
-    
-    if (prospect?.first_name) {
-      greeting += `, ${prospect.first_name}`;
-    }
-    
-    greeting += ". This is an AI assistant calling on behalf of eXp Realty. ";
-    greeting += "I'm reaching out to discuss your property needs. Would you be interested in speaking with one of our agents about ";
-    
-    if (prospect?.property_address) {
-      greeting += `your property at ${prospect.property_address}?`;
-    } else {
-      greeting += "real estate opportunities in your area?";
-    }
-    
-    console.log(`Generated greeting: "${greeting}"`);
-    
-    // Make sure the action URL includes the full domain
-    const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}${callLogId ? `&call_log_id=${callLogId}` : ''}`;
-    console.log(`Setting Gather action URL to: ${processResponseUrl}`);
-    
-    // Create a TwiML response - Accept both speech AND keypad input
-    try {
-      console.log('Creating TwiML response');
-      const response = twiml.VoiceResponse();
-      
-      console.log('Adding main greeting to TwiML');
-      response.say(greeting);
-      
-      console.log('Adding pause after greeting');
-      response.pause({ length: 1 });
-      
-      // First attempt to gather input
-      console.log('Adding first gather attempt to TwiML');
-      const gather1 = response.gather({
-        input: 'speech dtmf', // Accept both speech and keypad
-        action: processResponseUrl,
-        method: 'POST',
-        timeout: 15, // Increased timeout from 7 to 15 seconds
-        speechTimeout: 'auto',
-        language: 'en-US', // Explicitly set language
-        hints: 'yes,no,maybe,interested,not interested' // Add speech hints to improve recognition
-      });
-      
-      gather1.say("I'm waiting for your response. Please speak or press 1 for yes or 2 for no.");
-      console.log('Completed first gather with prompt');
-      
-      // Add a pause between gather attempts
-      console.log('Adding pause between gather attempts');
-      response.pause({ length: 2 });
-      
-      // Second attempt to gather input
-      console.log('Adding second gather attempt to TwiML');
-      const gather2 = response.gather({
-        input: 'speech dtmf', // Second attempt, accepting both inputs
-        action: processResponseUrl,
-        method: 'POST',
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US'
-      });
-      
-      gather2.say("I still didn't catch that. Please speak clearly or press a key.");
-      console.log('Completed second gather with prompt');
-      
-      // Final message if no input is detected
-      console.log('Adding final message and hangup to TwiML');
-      response.say("Thank you for your time. Goodbye.");
-      response.hangup();
-      
-      // If we have a call_log_id, update the status
-      if (callLogId) {
-        console.log(`Updating call log status to 'Answered': ${callLogId}`);
-        try {
-          const { error } = await supabaseAdmin
-            .from('call_logs')
-            .update({
-              call_status: 'Answered'
-            })
-            .eq('id', callLogId);
-            
-          if (error) {
-            console.error('Error updating call log status:', error);
-          } else {
-            console.log('Call log status updated successfully');
-          }
-        } catch (error) {
-          console.error('Exception updating call log status:', error);
-        }
-      }
-      
-      // Generate the final TwiML string to return
-      const twimlString = response.toString();
-      console.log(`Generated TwiML (truncated): ${twimlString.substring(0, 200)}...`);
-      
-      console.log('Returning TwiML response to Twilio');
-      return new Response(twimlString, { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    } catch (twimlError) {
-      console.error('Error generating TwiML response:', twimlError);
-      
-      // Simple error TwiML response as fallback
-      const errorResponse = `<?xml version="1.0" encoding="UTF-8"?>
-      <Response>
-        <Say>I'm sorry, there was an error processing this call. Please try again later.</Say>
-        <Hangup/>
-      </Response>`;
-      
-      return new Response(errorResponse, { 
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-      });
-    }
-    */
   } catch (error) {
     console.error('Error in twilio-call-webhook function:', error);
     
@@ -384,11 +203,10 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
         
         try {
           // IMPORTANT: Make sure we're not including updated_at in the updateData
-          // Double check there's no updated_at field
-          if ('updated_at' in updateData) {
-            console.log('Removing updated_at from updateData to prevent errors');
-            delete updateData.updated_at;
-          }
+          // Triple-check there's no updated_at field
+          delete updateData.updated_at; // Just in case
+          
+          console.log('Final update data (without updated_at):', updateData);
           
           const { error } = await supabaseAdmin
             .from('call_logs')

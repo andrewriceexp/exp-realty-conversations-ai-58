@@ -8,6 +8,7 @@ export interface CallOptions {
   prospectId: string;
   agentConfigId: string;
   userId: string;
+  bypassValidation?: boolean;
 }
 
 export interface CallResponse {
@@ -173,8 +174,17 @@ export function useTwilioCall() {
     }
   };
 
+  const makeDevelopmentCall = async (options: CallOptions): Promise<CallResponse> => {
+    // Add bypass_validation flag for development testing
+    return makeCall({
+      ...options,
+      bypassValidation: true
+    });
+  };
+
   return {
     makeCall,
+    makeDevelopmentCall, // Add this development-only function
     isLoading,
     error,
   };

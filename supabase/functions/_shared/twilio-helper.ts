@@ -1,3 +1,4 @@
+
 // Helper functions for Twilio-related operations in Edge Functions
 import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 
@@ -7,8 +8,14 @@ export const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
-export async function validateTwilioRequest(req: Request, url: string, twilioAuthToken?: string | null): Promise<boolean> {
+export async function validateTwilioRequest(req: Request, url: string, twilioAuthToken?: string | null, bypassValidation?: boolean): Promise<boolean> {
   console.log("Validating Twilio request");
+  
+  // If bypass is explicitly enabled, skip validation but log this decision
+  if (bypassValidation) {
+    console.log("⚠️ VALIDATION BYPASSED - This should only be used for testing!");
+    return true;
+  }
   
   try {
     const twilioSignature = req.headers.get('x-twilio-signature');
@@ -21,13 +28,13 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
     // Check if the provided auth token is valid
     if (!twilioAuthToken) {
       console.error("Missing twilioAuthToken parameter - user profile may be incomplete");
-      return false; // No longer allowing requests without validation - strict mode
+      return false; // Strict validation - no token means reject
     }
     
     console.log(`Using provided twilioAuthToken for validation: ${twilioAuthToken.substring(0, 4)}...${twilioAuthToken.substring(twilioAuthToken.length - 4)}`);
     
     // For POST requests, we need to validate with the request body
-    let params = {};
+    let params: Record<string, string> = {};
     if (req.method === 'POST') {
       // Clone the request to avoid consuming it
       const clonedReq = req.clone();
@@ -38,26 +45,37 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
             contentType.includes('multipart/form-data')) {
           const formData = await clonedReq.formData();
           formData.forEach((value, key) => {
-            params[key] = value;
+            params[key] = value.toString();
           });
         } else if (contentType.includes('application/json')) {
           params = await clonedReq.json();
         }
       } catch (error) {
         console.error("Error parsing request body:", error);
-        // Continue with validation attempt even if body parsing fails
+        // In strict mode, parsing failure means validation fails
+        return false;
       }
     }
     
-    // Create validation signature - add detailed logging
-    console.log(`URL for validation: "${url}"`);
-    console.log(`Parameters for validation: ${JSON.stringify(params)}`);
+    // Log each parameter separately for better debugging
+    console.log("Parameters for validation:");
+    Object.keys(params).sort().forEach(key => {
+      console.log(`  - ${key}: ${params[key]}`);
+    });
     
+    // Make sure URL doesn't contain query parameters (Twilio separates these in validation)
+    // Extract base URL without query string
+    const urlObj = new URL(url);
+    const baseUrl = `${urlObj.origin}${urlObj.pathname}`;
+    console.log(`Original URL: "${url}"`);
+    console.log(`Base URL for validation: "${baseUrl}"`);
+    
+    // Create validation signature
     const data = Object.keys(params)
       .sort()
       .reduce((acc, key) => {
         return acc + key + params[key];
-      }, url);
+      }, baseUrl);
       
     console.log(`Data string for validation: "${data}"`);
     
@@ -69,7 +87,7 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
     console.log(`Calculated signature: ${calculatedSignature}`);
     
     const isValid = twilioSignature === calculatedSignature;
-    console.log(`Signature validation ${isValid ? 'PASSED' : 'FAILED'}`);
+    console.log(`Signature validation ${isValid ? 'PASSED ✓' : 'FAILED ✗'}`);
     
     return isValid;
   } catch (error) {

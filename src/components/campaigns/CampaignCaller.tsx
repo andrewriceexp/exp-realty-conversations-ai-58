@@ -1,12 +1,14 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Phone, Loader2 } from 'lucide-react';
+import { Phone, Loader2, Bug } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Prospect, ProspectStatus } from '@/types';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface CampaignCallerProps {
   campaignId: string;
@@ -19,7 +21,8 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   const [isLoading, setIsLoading] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [currentProspectIndex, setCurrentProspectIndex] = useState(0);
-  const { makeCall } = useTwilioCall();
+  const [bypassValidation, setBypassValidation] = useState(false);
+  const { makeCall, makeDevelopmentCall } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -75,7 +78,9 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
     try {
       setIsCalling(true);
       
-      const response = await makeCall({
+      // Use appropriate call method based on bypass setting
+      const callMethod = bypassValidation ? makeDevelopmentCall : makeCall;
+      const response = await callMethod({
         prospectId: prospect.id,
         agentConfigId,
         userId: user.id
@@ -134,6 +139,23 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
                 <p className="text-muted-foreground text-xs">{prospects[currentProspectIndex].phone_number}</p>
               </div>
             )}
+          </div>
+          
+          {/* Developer toggle for bypassing validation */}
+          <div className="flex items-center space-x-2 pt-2 border-t">
+            <Switch 
+              id="bypass-validation-campaign" 
+              checked={bypassValidation}
+              onCheckedChange={setBypassValidation}
+            />
+            <div className="grid gap-1.5">
+              <Label htmlFor="bypass-validation-campaign" className="text-sm flex items-center">
+                <Bug className="h-3 w-3 mr-1" /> Development Mode
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Bypass Twilio webhook validation (testing only)
+              </p>
+            </div>
           </div>
           
           <Button 

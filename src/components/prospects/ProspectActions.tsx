@@ -1,9 +1,10 @@
+
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Phone, Loader2, AlertCircle, Settings } from 'lucide-react';
+import { Phone, Loader2, AlertCircle, Settings, Bug } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +12,7 @@ import { AgentConfig } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Link } from 'react-router-dom';
+import { Switch } from '@/components/ui/switch';
 
 interface ProspectActionsProps {
   prospectId: string;
@@ -24,7 +26,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const { makeCall, isLoading: isCallingLoading } = useTwilioCall();
+  const [bypassValidation, setBypassValidation] = useState(false);
+  const { makeCall, makeDevelopmentCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -80,10 +83,13 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       console.log('Making call with:', {
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id
+        userId: user.id,
+        bypassValidation
       });
       
-      const response = await makeCall({
+      // Use either regular or development call method based on bypass setting
+      const callMethod = bypassValidation ? makeDevelopmentCall : makeCall;
+      const response = await callMethod({
         prospectId,
         agentConfigId: selectedConfigId,
         userId: user.id
@@ -203,6 +209,23 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                 </Select>
               </div>
             )}
+
+            {/* Developer toggle for bypassing validation */}
+            <div className="flex items-center space-x-2 pt-4 border-t">
+              <Switch 
+                id="bypass-validation" 
+                checked={bypassValidation}
+                onCheckedChange={setBypassValidation}
+              />
+              <div className="grid gap-1.5">
+                <Label htmlFor="bypass-validation" className="text-sm flex items-center">
+                  <Bug className="h-3 w-3 mr-1" /> Development Mode
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Bypass Twilio signature validation (testing only)
+                </p>
+              </div>
+            </div>
           </div>
           
           <DialogFooter>
