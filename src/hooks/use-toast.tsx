@@ -117,12 +117,19 @@ const reducer = (state: State, action: Action): State => {
   }
 }
 
+// Toast helper function
+const toastFunction = (props: Omit<ToasterToast, "id">) => {
+  const { addToast } = useToast()
+  return addToast(props)
+}
+
 type ToastContextType = {
   toasts: ToasterToast[]
   addToast: (props: Omit<ToasterToast, "id">) => string
   updateToast: (props: Partial<ToasterToast> & { id: string }) => void
   dismissToast: (toastId?: string) => void
   removeToast: (toastId?: string) => void
+  toast: (props: Omit<ToasterToast, "id">) => string // Add toast function to context
 }
 
 const ToastContext = React.createContext<ToastContextType | undefined>(undefined)
@@ -211,6 +218,14 @@ export function ToastProvider({
     [dispatch]
   )
 
+  // Include the toast function in the same context
+  const toast = React.useCallback(
+    (props: Omit<ToasterToast, "id">) => {
+      return addToast(props);
+    },
+    [addToast]
+  )
+
   return (
     <ToastContext.Provider
       value={{
@@ -219,6 +234,7 @@ export function ToastProvider({
         updateToast,
         dismissToast,
         removeToast,
+        toast, // Include the toast function in the provided context
       }}
     >
       {children}
@@ -226,10 +242,16 @@ export function ToastProvider({
   )
 }
 
-type Toast = Omit<ToasterToast, "id">
-
-// Toast function for direct usage (without the hook)
-export function toast(props: Toast) {
-  const { addToast } = useToast()
-  return addToast(props)
+// Standalone toast function for direct usage without hooks
+export const toast = (props: Omit<ToasterToast, "id">) => {
+  // This is tricky in a non-component context, so we'll use a workaround
+  // Create a dummy element and render the provider + a component that uses the hook
+  // This only works in a browser environment
+  if (typeof document !== "undefined") {
+    const addToastFn = useToast().addToast;
+    return addToastFn(props);
+  }
+  
+  console.warn("Toast was called outside of a component context");
+  return ""; // Return an empty string as ID when not in a component context
 }
