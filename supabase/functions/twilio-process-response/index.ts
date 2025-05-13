@@ -129,6 +129,7 @@ serve(async (req) => {
     }
     
     console.log(`Using agent config: ${agentConfig.config_name}`);
+    console.log(`Voice provider: ${agentConfig.voice_provider}, Voice ID: ${agentConfig.voice_id}`);
     
     // Fetch prospect details if we have a prospect ID
     let prospectDetails = null;
@@ -247,6 +248,35 @@ serve(async (req) => {
       }
     }
     
+    // Generate speech using ElevenLabs if configured
+    let audioContent = null;
+    if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
+      try {
+        console.log(`Generating speech using ElevenLabs with voice ID: ${agentConfig.voice_id}`);
+        
+        // Call the generate-speech edge function
+        const speechResponse = await supabaseAdmin.functions.invoke('generate-speech', {
+          body: {
+            text: aiResponse,
+            voiceId: agentConfig.voice_id,
+            model: 'eleven_multilingual_v2'
+          }
+        });
+        
+        if (speechResponse.error) {
+          throw new Error(`ElevenLabs speech generation error: ${speechResponse.error}`);
+        }
+        
+        console.log('Speech generated successfully');
+        audioContent = speechResponse.data?.audioContent;
+      } catch (error) {
+        console.error('Error generating speech with ElevenLabs:', error);
+        console.log('Falling back to TTS using Twilio <Say>');
+      }
+    } else {
+      console.log('ElevenLabs voice provider not configured, using Twilio <Say>');
+    }
+    
     // Should we continue the conversation or end the call?
     const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
     const isNegativeResponse = aiResponse.includes("I understand") || aiResponse.includes("Have a great day");
@@ -256,7 +286,16 @@ serve(async (req) => {
     
     // Build the TwiML response
     const response = twiml.VoiceResponse();
-    response.say(aiResponse);
+    
+    // If we have audio content from ElevenLabs, use it. Otherwise fall back to Twilio <Say>
+    if (audioContent) {
+      // Create a temporary audio URL that Twilio can play
+      const audioUrl = `data:audio/mpeg;base64,${audioContent}`;
+      response.play({ digits: audioUrl });
+    } else {
+      response.say(aiResponse);
+    }
+    
     response.pause({ length: 1 });
     
     if (!isEndingCall) {

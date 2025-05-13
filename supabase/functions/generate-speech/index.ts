@@ -22,8 +22,16 @@ serve(async (req) => {
       throw new Error('Text is required');
     }
 
+    if (!elevenlabsApiKey) {
+      throw new Error('ELEVENLABS_API_KEY is not configured');
+    }
+
     const defaultVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice
     const defaultModel = 'eleven_multilingual_v2';
+
+    console.log(`Generating speech for text (truncated): "${text.substring(0, 50)}..."`);
+    console.log(`Using voice ID: ${voiceId || defaultVoiceId}`);
+    console.log(`Using model: ${model || defaultModel}`);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId || defaultVoiceId}`,
@@ -56,6 +64,8 @@ serve(async (req) => {
     const audioBase64 = btoa(
       String.fromCharCode(...new Uint8Array(audioArrayBuffer))
     );
+
+    console.log(`Speech generated successfully, returned ${audioBase64.length} characters of base64 audio`);
 
     return new Response(
       JSON.stringify({ audioContent: audioBase64 }),
