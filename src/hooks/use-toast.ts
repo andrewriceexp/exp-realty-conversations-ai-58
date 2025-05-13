@@ -1,6 +1,4 @@
 
-// src/hooks/use-toast.ts
-// This is the main implementation of the toast hook and toast function
 import * as React from "react"
 import {
   Toast,
