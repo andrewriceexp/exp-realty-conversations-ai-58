@@ -198,6 +198,8 @@ serve(async (req) => {
       
       console.log(`Set process-response URL for trial account: ${processResponseUrl}`);
       
+      // IMPORTANT: The Gather element is automatically closed when we move to the next command on the response object
+      
       // If gather times out, redirect to the process-response endpoint anyway
       // This must be outside the Gather element
       response.redirect({
@@ -206,7 +208,8 @@ serve(async (req) => {
       
       // Log the final TwiML for debugging
       const twimlString = response.toString();
-      console.log(`Final TwiML response for trial account (first 200 chars): ${twimlString.substring(0, 200)}...`);
+      console.log(`Final TwiML response for trial account (first 500 chars):`);
+      console.log(twimlString.substring(0, 500));
       
       return new Response(twimlString, { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
@@ -273,7 +276,7 @@ serve(async (req) => {
     // Create XML-encoded URL
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a gather to collect user input - PROPERLY STRUCTURED
+    // Create a gather to collect user input
     const gather = response.gather({
       input: 'speech dtmf',
       action: processResponseUrl,
@@ -288,7 +291,8 @@ serve(async (req) => {
     
     console.log(`Set process-response URL: ${processResponseUrl}`);
     
-    // IMPORTANT: The Gather element is automatically closed here. Now we can add the Redirect outside of it.
+    // FIXED: The Gather element is automatically closed when we move to the next command on the response object.
+    // We should not add the Redirect inside the Gather block.
     
     // If gather times out, redirect to the process-response endpoint anyway
     // This must be outside the Gather element
@@ -296,9 +300,10 @@ serve(async (req) => {
       method: 'POST'
     }, processResponseUrl);
     
-    // Log the final TwiML for debugging
+    // Log the final TwiML for debugging - show more of the TwiML to catch issues
     const twimlString = response.toString();
-    console.log(`Final TwiML response (first 200 chars): ${twimlString.substring(0, 200)}...`);
+    console.log(`Final TwiML response (full response):`);
+    console.log(twimlString);
     
     console.log('Returning full TwiML response');
     return new Response(twimlString, { 
