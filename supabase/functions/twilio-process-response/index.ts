@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
@@ -286,6 +285,21 @@ serve(async (req) => {
       response.pause({ length: 1 });
     }
     
+    // Helper function to encode URL parameters properly for XML
+    const encodeXmlUrl = (baseUrl, params) => {
+      const url = new URL(baseUrl);
+      
+      // Add each parameter to the URL
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, value.toString());
+        }
+      }
+      
+      // Replace all & with &amp; for XML compatibility
+      return url.toString().replace(/&/g, '&amp;');
+    };
+    
     // Check if we should use ElevenLabs for voice
     let useElevenLabs = agentConfig.voice_provider === 'elevenlabs' && 
                        agentConfig.voice_id && 
@@ -362,9 +376,25 @@ serve(async (req) => {
     
     if (!isEndingCall) {
       // Continue the conversation
-      // Pass along the bypass_validation and debug_mode flags
-      const nextActionUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=${nextConversationCount}${callLogId ? `&call_log_id=${callLogId}` : ''}&bypass_validation=${bypassValidation}&debug_mode=${debugMode}`;
+      // Build the next URL with encoded XML parameters
+      const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
+      const processResponseParams = {
+        prospect_id: prospectId,
+        agent_config_id: agentConfigId,
+        user_id: userId,
+        conversation_count: nextConversationCount,
+        bypass_validation: bypassValidation ? 'true' : undefined,
+        debug_mode: debugMode ? 'true' : undefined
+      };
       
+      if (callLogId) {
+        processResponseParams.call_log_id = callLogId;
+      }
+      
+      // Create XML-encoded URL
+      const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
+      
+      // Create a gather element with proper structure
       const gather = response.gather({
         input: 'speech dtmf',
         action: nextActionUrl,
@@ -374,11 +404,14 @@ serve(async (req) => {
         language: 'en-US'
       });
       
+      // Add the Say element inside the Gather element
       gather.say("Please go ahead with your response.");
-      gather.endGather();
+      
+      // Note: We don't need to call .endGather() - that's not valid with the Twilio SDK
+      
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       
-      // Add a fallback in case gather times out
+      // Add a fallback in case gather times out (outside the Gather element)
       response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
     } else {
       // End the conversation

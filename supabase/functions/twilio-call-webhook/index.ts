@@ -207,10 +207,13 @@ serve(async (req) => {
         language: 'en-US'
       });
       
+      // Add the Say element inside the Gather element
       gather.say("How can I assist you with your real estate needs today?");
+      
       console.log(`Set process-response URL for trial account: ${processResponseUrl}`);
       
       // If gather times out, redirect to the process-response endpoint anyway
+      // This must be outside the Gather element
       response.redirect({
         method: 'POST'
       }, processResponseUrl);
@@ -290,10 +293,13 @@ serve(async (req) => {
       language: 'en-US'
     });
     
+    // Add the Say element inside the Gather element
     gather.say("How can I assist you with your real estate needs today?");
+    
     console.log(`Set process-response URL: ${processResponseUrl}`);
     
     // If gather times out, redirect to the process-response endpoint anyway
+    // This must be outside the Gather element
     response.redirect({
       method: 'POST'
     }, processResponseUrl);
