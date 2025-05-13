@@ -4,15 +4,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts"; // Polyfill for btoa if not globa
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Ensure this path is correct and the helper functions are as expected.
 import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createDebugTwiML } from "../_shared/twilio-helper.ts";
-import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts"; // New import
-
-// Old helper, replaced by createErrorResponse from twiml-helpers.ts
-// function createErrorTwiML(errorMessage: string): string {
-//   const response = twiml.VoiceResponse();
-//   response.say(errorMessage || "I'm sorry, an application error occurred. Please try again later.");
-//   response.hangup();
-//   return response.toString();
-// }
+import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts"; 
 
 serve(async (req) => {
   const requestTimestamp = new Date().toISOString();
@@ -34,7 +26,7 @@ serve(async (req) => {
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
-    const voiceId = url.searchParams.get('voice_id'); // New: Get voice_id
+    const voiceId = url.searchParams.get('voice_id'); 
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
 
@@ -50,7 +42,6 @@ serve(async (req) => {
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       console.error(`[${requestTimestamp}] CRITICAL ERROR: Missing Supabase environment variables in twilio-call-webhook.`);
-      // Use new error helper
       return new Response(createErrorResponse("I'm sorry, there was an error with the configuration. Please try again later."), {
         headers: { 'Content-Type': 'text/xml', ...corsHeaders }
       });
@@ -106,7 +97,6 @@ serve(async (req) => {
 
     if (!isStatusCallback) {
       console.log(`[${requestTimestamp}] Attempting to validate Twilio request signature for twilio-call-webhook. Full URL: ${fullUrl}`);
-      // Kept the validateTwilioRequest call signature from the Canvas version, including requestBodyForValidation
       const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken, bypassValidation, requestBodyForValidation);
 
       if (!isValidRequest) {
@@ -130,23 +120,16 @@ serve(async (req) => {
 
     if (debugMode) {
       console.log(`[${requestTimestamp}] Debug mode active for twilio-call-webhook. Adding debug TwiML.`);
-      // Assuming createDebugTwiML is compatible or updated to add to response object, or returns a string to be said.
-      // For safety, let's make it explicit if it returns a string.
-      // const debugTwimlString = createDebugTwiML({ accountSid, callSid, isTrial, prospectId, agentConfigId, userId, bypassValidation, voiceId });
-      // response.say(debugTwimlString); // This would be if createDebugTwiML returns a simple string.
-      // If it modifies the response object directly, then:
-      // createDebugTwiML(response, { accountSid, callSid, isTrial, prospectId, agentConfigId, userId, bypassValidation, voiceId });
-      // For now, using the simpler approach from before:
       response.say(`Debug Mode Active. SID: ${callSid || 'N/A'}. User: ${userId || 'N/A'}. VoiceID: ${voiceId || 'N/A'}`);
       response.pause({length: 1});
     }
     
     const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
-    const processResponseParams: Record<string, string | undefined> = { // Type for clarity
+    const processResponseParams: Record<string, string | undefined> = { 
         prospect_id: prospectId || undefined,
         agent_config_id: agentConfigId || undefined,
         user_id: userId || undefined,
-        voice_id: voiceId || undefined, // Pass voice_id
+        voice_id: voiceId || undefined, 
         conversation_count: '0',
         bypass_validation: bypassValidation ? 'true' : undefined,
         debug_mode: debugMode ? 'true' : undefined
@@ -154,6 +137,7 @@ serve(async (req) => {
     if (callLogId) {
         processResponseParams.call_log_id = callLogId;
     }
+    // Ensure encodeXmlUrl is used here as it's critical for action attributes
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
 
 
@@ -164,29 +148,29 @@ serve(async (req) => {
       
       createGatherWithSay(
         response,
-        processResponseUrl,
-        "How can I assist you with your real estate needs today?",
+        processResponseUrl, // Already encoded
+        "How can I assist you with your real estate needs today?", // Explicit string
         {
           timeout: 10,
           speechTimeout: 'auto',
           language: 'en-US',
           method: 'POST'
-          // actionOnEmptyResult: true is usually default for createGatherWithSay if it includes it
         }
       );
-      response.redirect({ method: 'POST' }, processResponseUrl); // Fallback redirect
+      // Fallback redirect URL must also be encoded
+      response.redirect({ method: 'POST' }, processResponseUrl); 
 
     } else { // Standard Account Logic
-      let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs.";
+      let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs."; // Default greeting
       let useElevenLabs = false;
-      let agentVoiceId = voiceId || null; // Use URL voice_id first, then from config
+      let agentVoiceId = voiceId || null; 
 
       if (agentConfigId) {
         try {
           console.log(`[${requestTimestamp}] Fetching agent config ${agentConfigId} for greeting in twilio-call-webhook.`);
           const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
             .from('agent_configs')
-            .select('system_prompt, config_name, voice_provider, voice_id') // Fetch voice_provider and voice_id
+            .select('system_prompt, config_name, voice_provider, voice_id') 
             .eq('id', agentConfigId)
             .maybeSingle();
 
@@ -194,7 +178,7 @@ serve(async (req) => {
             console.error(`[${requestTimestamp}] Error fetching agent config in twilio-call-webhook: ${agentConfigError.message}`);
           } else if (agentConfig) {
             console.log(`[${requestTimestamp}] Found agent config: ${agentConfig.config_name} for twilio-call-webhook.`);
-            if (agentConfig.system_prompt) {
+            if (agentConfig.system_prompt && agentConfig.system_prompt.trim() !== "") { // Check if not empty
               const promptLines = agentConfig.system_prompt.split(/[.!?]/); 
               if (promptLines.length > 0) {
                 const introLine = promptLines[0].trim();
@@ -202,10 +186,12 @@ serve(async (req) => {
                    greeting = introLine + (/[.!?]$/.test(introLine) ? "" : ".");
                 }
               }
+            } else {
+                console.warn(`[${requestTimestamp}] Agent config system_prompt is empty. Using default greeting.`);
             }
             if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
               useElevenLabs = true;
-              if (!agentVoiceId) agentVoiceId = agentConfig.voice_id; // Set if not overridden by URL param
+              if (!agentVoiceId) agentVoiceId = agentConfig.voice_id; 
               console.log(`[${requestTimestamp}] Using ElevenLabs voice from agent config: ${agentVoiceId}`);
             }
           } else {
@@ -220,14 +206,13 @@ serve(async (req) => {
       if (useElevenLabs && !elevenLabsApiKey) {
           console.warn(`[${requestTimestamp}] ElevenLabs selected but ELEVENLABS_API_KEY is not set. Falling back to default Twilio voice.`);
           useElevenLabs = false;
-      } else if (useElevenLabs || (voiceId && elevenLabsApiKey)) { // If voice_id passed in URL, assume ElevenLabs if API key exists
+      } else if (useElevenLabs || (voiceId && elevenLabsApiKey)) { 
           console.log(`[${requestTimestamp}] ELEVENLABS_API_KEY is available. Voice synthesis will attempt ElevenLabs if configured/requested.`);
-          useElevenLabs = true; // Ensure it's true if voiceId is passed and key exists
-          if (!agentVoiceId && voiceId) agentVoiceId = voiceId; // Prioritize URL voice_id if no agent config one
+          useElevenLabs = true; 
+          if (!agentVoiceId && voiceId) agentVoiceId = voiceId; 
       }
 
-
-      // Update processResponseUrlParams with the determined agentVoiceId
+      // Construct the final processResponseUrl with the potentially updated agentVoiceId
       const finalProcessResponseParams: Record<string, string | undefined> = {
         prospect_id: prospectId || undefined,
         agent_config_id: agentConfigId || undefined,
@@ -238,43 +223,53 @@ serve(async (req) => {
         debug_mode: debugMode ? 'true' : undefined
       };
       if (callLogId) finalProcessResponseParams.call_log_id = callLogId;
+      // Ensure this URL is also encoded
       const finalProcessResponseUrl = encodeXmlUrl(processResponseBaseUrl, finalProcessResponseParams);
 
-
+      // Ensure greeting is not an empty string before passing to <Say>
+      const greetingToSay = (greeting && greeting.trim() !== "") ? greeting : "Hello.";
       if (useElevenLabs) {
-        response.say({ voice: 'Polly.Amy-Neural' }, greeting); // Higher quality base for ElevenLabs
+        response.say({ voice: 'Polly.Amy-Neural' }, greetingToSay); 
       } else {
-        response.say(greeting);
+        response.say(greetingToSay);
       }
       response.pause({ length: 1 });
 
+      // Ensure the message for createGatherWithSay is a string
+      const gatherPrompt = "How can I assist you with your real estate needs today?";
       createGatherWithSay(
         response,
-        finalProcessResponseUrl, // Use final URL with correct voice_id
-        "How can I assist you with your real estate needs today?",
+        finalProcessResponseUrl, // Already encoded
+        gatherPrompt, // Explicit string
         {
           timeout: 10,
           speechTimeout: 'auto',
           language: 'en-US',
-          voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined, // Match greeting voice if using ElevenLabs
+          voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined, 
           method: 'POST'
-          // actionOnEmptyResult: true should be handled by createGatherWithSay if it's a good helper
         }
       );
-      response.redirect({ method: 'POST' }, finalProcessResponseUrl); // Fallback redirect
+      // Fallback redirect URL must also be encoded
+      response.redirect({ method: 'POST' }, finalProcessResponseUrl); 
     }
 
     const twimlString = response.toString();
     console.log(`[${requestTimestamp}] Returning TwiML from twilio-call-webhook (full TwiML):`);
-    console.log(twimlString); // Log full TwiML
-    if (!twimlString.includes('</Gather>') && twimlString.includes('<Gather')) { // Basic check
-        console.error(`[${requestTimestamp}] ERROR: Generated TwiML might be missing a closing Gather tag!`);
+    console.log(twimlString); 
+    if (!twimlString.includes('</Gather>') && twimlString.includes('<Gather')) { 
+        console.error(`[${requestTimestamp}] ERROR: Generated TwiML might be missing a closing Gather tag! Review createGatherWithSay helper.`);
     }
+    if (twimlString.includes("[object Object]")) {
+        console.error(`[${requestTimestamp}] ERROR: Generated TwiML contains "[object Object]". Review Say calls.`);
+    }
+    if (twimlString.match(/action="[^"]*&[^a][^m][^p;]/) || twimlString.match(/<Redirect>[^<]*&[^a][^m][^p;]/) ) { // Basic check for unencoded &
+        console.error(`[${requestTimestamp}] ERROR: Generated TwiML likely contains unencoded ampersands in URL! Review encodeXmlUrl usage.`);
+    }
+
     return new Response(twimlString, { headers: { 'Content-Type': 'text/xml', ...corsHeaders } });
 
   } catch (error) {
     console.error(`[${requestTimestamp}] FATAL ERROR in twilio-call-webhook:`, error.message, error.stack);
-    // Use new error helper
     return new Response(createErrorResponse("I'm sorry, there was an error processing this call. Please try again later."), {
       status: 500, 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders }
