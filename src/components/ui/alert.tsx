@@ -22,6 +22,9 @@ const alertVariants = cva(
   }
 )
 
+// Explicitly define the variant types to ensure TypeScript recognizes them
+type AlertVariant = "default" | "destructive" | "warning";
+
 const Alert = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
