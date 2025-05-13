@@ -23,6 +23,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   const [isCalling, setIsCalling] = useState(false);
   const [currentProspectIndex, setCurrentProspectIndex] = useState(0);
   const [bypassValidation, setBypassValidation] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const { makeCall, makeDevelopmentCall } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -85,7 +86,8 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         prospectId: prospect.id,
         agentConfigId,
         userId: user.id,
-        bypassValidation // Explicitly pass the bypass flag
+        bypassValidation, // Explicitly pass the bypass flag
+        debugMode // Pass the debug mode flag
       });
       
       if (response.success) {
@@ -111,6 +113,17 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         description: error.message || 'An error occurred while making the call',
         variant: 'destructive',
       });
+      
+      // Special handling for trial accounts
+      if (error.message?.includes('trial account') || 
+          error.message?.includes('Trial account') ||
+          error.code === 'TWILIO_TRIAL_ACCOUNT') {
+        toast({
+          title: "Twilio Trial Account",
+          description: "Your Twilio trial account has limitations. Try enabling Development Mode for basic functionality.",
+          variant: "warning"
+        });
+      }
     } finally {
       setIsCalling(false);
     }
@@ -169,6 +182,25 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
               </p>
             </div>
           </div>
+          
+          {/* Debug mode switch - only visible when dev mode is on */}
+          {bypassValidation && (
+            <div className="flex items-center space-x-2">
+              <Switch 
+                id="debug-mode-campaign" 
+                checked={debugMode}
+                onCheckedChange={setDebugMode}
+              />
+              <div className="grid gap-1.5">
+                <Label htmlFor="debug-mode-campaign" className="text-sm flex items-center">
+                  <Bug className="h-3 w-3 mr-1" /> Debug TwiML
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable verbose TwiML debug output on call
+                </p>
+              </div>
+            </div>
+          )}
           
           <Button 
             className="w-full"

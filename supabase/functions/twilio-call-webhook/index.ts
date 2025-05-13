@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
+import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createTrialAccountTwiML, createDebugTwiML } from "../_shared/twilio-helper.ts";
 
 serve(async (req) => {
   // Very early logging
@@ -27,8 +27,9 @@ serve(async (req) => {
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
+    const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
     
-    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, bypass_validation=${bypassValidation}`);
+    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
     
     // Check path to see if this is a status callback
     const isStatusCallback = url.pathname.endsWith('/status');
@@ -58,6 +59,28 @@ serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
     console.log('Supabase clients initialized successfully');
+    
+    // Extract Twilio account info from the request for trial detection
+    let accountSid = null;
+    let callSid = null;
+    
+    if (req.method === 'POST') {
+      try {
+        const clonedReq = req.clone();
+        const formData = await clonedReq.formData();
+        accountSid = formData.get('AccountSid')?.toString() || null;
+        callSid = formData.get('CallSid')?.toString() || null;
+        
+        console.log(`Extracted AccountSid: ${accountSid ? accountSid.substring(0, 6) + '...' : 'null'}`);
+        console.log(`Extracted CallSid: ${callSid || 'null'}`);
+      } catch (error) {
+        console.warn("Could not extract form data for trial account detection:", error);
+      }
+    }
+    
+    // Check if this is likely a trial account
+    const isTrial = isTrialAccount(accountSid);
+    console.log(`Is Twilio trial account? ${isTrial}`);
     
     // Fetch the user's Twilio auth token from their profile
     let userTwilioAuthToken = null;
@@ -110,6 +133,36 @@ serve(async (req) => {
     
     console.log('Processing standard webhook request for initial call TwiML');
     
+    // If in development or debug mode, provide more verbose details
+    if (debugMode) {
+      console.log('Debug mode detected - returning debug TwiML response');
+      const debugResponse = createDebugTwiML({
+        accountSid,
+        callSid,
+        isTrial,
+        prospectId,
+        agentConfigId,
+        userId,
+        bypassValidation
+      });
+      
+      return new Response(debugResponse, { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
+    // For trial accounts, provide a simplified TwiML response that works better
+    if (isTrial) {
+      console.log('Trial account detected - providing simplified TwiML response');
+      const trialResponse = createTrialAccountTwiML(
+        "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs. This is a simplified message for trial accounts. Thank you for calling."
+      );
+      
+      return new Response(trialResponse, { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
     // Return a very simple TwiML response for testing
     const simpleResponse = twiml.VoiceResponse()
       .say("Hello, this is the eXp Realty AI assistant. I'm here to help you with your real estate needs. This is a test call. Goodbye.")
@@ -157,9 +210,14 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
     const callStatus = formData.get('CallStatus')?.toString();
     const callDuration = formData.get('CallDuration')?.toString();
     const recordingUrl = formData.get('RecordingUrl')?.toString();
+    const accountSid = formData.get('AccountSid')?.toString() || null;
     
     console.log(`Status update for call ${callSid}: ${callStatus}`);
     console.log(`Additional data - Duration: ${callDuration}, Recording URL: ${Boolean(recordingUrl)}`);
+    
+    // Check if this is likely a trial account
+    const isTrial = isTrialAccount(accountSid);
+    console.log(`Is Twilio trial account? ${isTrial}`);
     
     if (callSid && callStatus) {
       // Find the call log using the CallSid
@@ -205,6 +263,13 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
         // If call is completed or failed, update the ended_at field
         if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus || '')) {
           updateObj.ended_at = new Date().toISOString();
+        }
+        
+        // Add a flag for trial accounts
+        if (isTrial) {
+          updateObj.notes = updateObj.notes ? 
+            updateObj.notes + " (Twilio Trial Account)" : 
+            "Call made with Twilio Trial Account";
         }
         
         console.log('Updating call log with these fields:', updateObj);

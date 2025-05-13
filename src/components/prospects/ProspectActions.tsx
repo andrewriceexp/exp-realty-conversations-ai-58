@@ -27,6 +27,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [callError, setCallError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [bypassValidation, setBypassValidation] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const { makeCall, makeDevelopmentCall, isLoading: isCallingLoading } = useTwilioCall();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -84,7 +85,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         prospectId,
         agentConfigId: selectedConfigId,
         userId: user.id,
-        bypassValidation
+        bypassValidation,
+        debugMode
       });
       
       // Use either regular or development call method based on bypass setting
@@ -92,7 +94,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       const response = await callMethod({
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id
+        userId: user.id,
+        debugMode
       });
       
       console.log('Call response:', response);
@@ -126,6 +129,17 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
               Update Profile
             </Link>
           )
+        });
+      }
+      
+      // If this is a trial account error, show a special message
+      if (error.message?.includes('trial account') || 
+          error.message?.includes('Trial account') ||
+          error.code === 'TWILIO_TRIAL_ACCOUNT') {
+        toast({
+          title: "Twilio Trial Account",
+          description: "Your Twilio trial account has limitations. For full functionality, please upgrade to a paid account.",
+          variant: "warning"
         });
       }
     }
@@ -226,6 +240,34 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                 </p>
               </div>
             </div>
+            
+            {/* Debug mode switch - only visible when dev mode is on */}
+            {bypassValidation && (
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="debug-mode" 
+                  checked={debugMode}
+                  onCheckedChange={setDebugMode}
+                />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="debug-mode" className="text-sm flex items-center">
+                    <Bug className="h-3 w-3 mr-1" /> Debug TwiML
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable verbose TwiML debug output on call
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {bypassValidation && (
+              <Alert variant="warning" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Development mode is active. If you're using a Twilio trial account, this simplified mode may help overcome trial account limitations.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           
           <DialogFooter>

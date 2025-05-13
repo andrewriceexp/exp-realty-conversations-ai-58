@@ -9,6 +9,7 @@ export interface CallOptions {
   agentConfigId: string;
   userId: string;
   bypassValidation?: boolean;
+  debugMode?: boolean;
 }
 
 export interface CallResponse {
@@ -142,19 +143,25 @@ export function useTwilioCall() {
       // Twilio API errors
       else if (errorCode === 'TWILIO_API_ERROR' || errorMessage.includes('Twilio error')) {
         errorTitle = "Twilio API error";
-        // Anonymize phone numbers in Twilio error messages if needed
-        const shouldAnonymize = isAnonymizationEnabled();
-        let cleanedMessage = errorMessage.replace('Twilio error: ', '');
-        
-        if (shouldAnonymize) {
-          // Anonymize any phone numbers in the error message
-          cleanedMessage = cleanedMessage.replace(
-            /\+?1?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/g, 
-            (match) => anonymizePhoneNumber(match)
-          );
+        // Check for trial account specific errors
+        if (errorMessage.includes('trial') || errorMessage.includes('Trial')) {
+          errorTitle = "Twilio Trial Account";
+          errorDescription = "Your Twilio trial account has limitations. For full functionality, please upgrade your Twilio account.";
+        } else {
+          // Anonymize phone numbers in Twilio error messages if needed
+          const shouldAnonymize = isAnonymizationEnabled();
+          let cleanedMessage = errorMessage.replace('Twilio error: ', '');
+          
+          if (shouldAnonymize) {
+            // Anonymize any phone numbers in the error message
+            cleanedMessage = cleanedMessage.replace(
+              /\+?1?\s*\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})/g, 
+              (match) => anonymizePhoneNumber(match)
+            );
+          }
+          
+          errorDescription = cleanedMessage;
         }
-        
-        errorDescription = cleanedMessage;
       }
       
       setError(errorMessage);
@@ -178,7 +185,8 @@ export function useTwilioCall() {
     // Add bypass_validation flag for development testing
     return makeCall({
       ...options,
-      bypassValidation: true
+      bypassValidation: true,
+      debugMode: true  // Enable debug mode for development calls
     });
   };
 

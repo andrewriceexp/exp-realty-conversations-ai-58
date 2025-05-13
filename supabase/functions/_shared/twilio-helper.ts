@@ -97,6 +97,15 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
   }
 }
 
+// Helper to detect if a Twilio account is a trial account
+export function isTrialAccount(accountSid: string | null): boolean {
+  if (!accountSid) return false;
+  
+  // Twilio trial accounts typically start with "AC" and often have specific patterns
+  // Most reliable way is to check for the word "trial" in the account SID or response
+  return accountSid.startsWith('AC') && accountSid.includes('trial');
+}
+
 // TwiML helper functions to generate XML responses for Twilio
 export const twiml = {
   VoiceResponse: function() {
@@ -157,3 +166,40 @@ export const twiml = {
     };
   }
 };
+
+// Create a simplified TwiML response that works better with trial accounts
+export function createTrialAccountTwiML(message: string): string {
+  return twiml.VoiceResponse()
+    .pause({ length: 1 }) // Add a pause to wait for the trial message to complete
+    .say(message)
+    .pause({ length: 1 }) // Add another pause for better flow
+    .hangup()
+    .toString();
+}
+
+// Create a debugging TwiML that echoes back information about the request
+export function createDebugTwiML(info: Record<string, any>): string {
+  // Create a simple message summarizing the request data
+  let debugMessage = "Debug mode active. ";
+  
+  if (info.accountSid) {
+    debugMessage += `Account SID: ${info.accountSid.substring(0, 6)}...${info.accountSid.substring(info.accountSid.length - 4)}. `;
+  }
+  
+  if (info.isTrial) {
+    debugMessage += "This is a trial account. ";
+  }
+  
+  if (info.callSid) {
+    debugMessage += `Call SID: ${info.callSid.substring(0, 4)}. `;
+  }
+  
+  debugMessage += "Call parameters received successfully. Goodbye.";
+  
+  return twiml.VoiceResponse()
+    .pause({ length: 2 }) // Longer pause for trial message
+    .say(debugMessage)
+    .pause({ length: 1 })
+    .hangup()
+    .toString();
+}
