@@ -8,7 +8,7 @@ import { encodeXmlUrl, createErrorResponse, createDebugTwiML, createGatherWithSa
 
 serve(async (req) => {
   const requestTimestamp = new Date().toISOString();
-  const functionVersion = "FINAL_FIX_V1"; // This version marker helps identify which code is running
+  const functionVersion = "FINAL_FIX_V2"; // Updated version marker for this fix
   console.log(`--- [${requestTimestamp}] twilio-call-webhook (${functionVersion}): INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
 
   if (req.method === 'OPTIONS') {
@@ -21,6 +21,7 @@ serve(async (req) => {
       try {
           const clonedReqForBody = req.clone();
           requestBodyForValidation = await clonedReqForBody.text();
+          console.log(`[${requestTimestamp}] (${functionVersion}) POST body for validation: ${requestBodyForValidation.substring(0, 100)}...`);
       } catch (e) {
           console.warn(`[${requestTimestamp}] (${functionVersion}) Error cloning/reading body for validation: ${e.message}`);
       }
@@ -29,7 +30,7 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const fullUrlForValidation = url.toString(); // URL Twilio actually called, used for GET validation
-    // console.log(`[${requestTimestamp}] (${functionVersion}) Parsed URL: ${url.origin + url.pathname}, Search params: ${url.search}`);
+    console.log(`[${requestTimestamp}] (${functionVersion}) Parsed URL: ${url.origin + url.pathname}, Search params: ${url.search}`);
 
     const callLogId = url.searchParams.get('call_log_id');
     const prospectId = url.searchParams.get('prospect_id');
@@ -39,10 +40,10 @@ serve(async (req) => {
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
 
-    // console.log(`[${requestTimestamp}] (${functionVersion}) Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceIdFromUrl || 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
+    console.log(`[${requestTimestamp}] (${functionVersion}) Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceIdFromUrl || 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
 
     const isStatusCallback = url.pathname.endsWith('/status');
-    // console.log(`[${requestTimestamp}] (${functionVersion}) Is status callback? ${isStatusCallback}`);
+    console.log(`[${requestTimestamp}] (${functionVersion}) Is status callback? ${isStatusCallback}`);
 
     // Initialize Supabase client first
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -56,7 +57,7 @@ serve(async (req) => {
       });
     }
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
-    // console.log(`[${requestTimestamp}] (${functionVersion}) Supabase admin client initialized.`);
+    console.log(`[${requestTimestamp}] (${functionVersion}) Supabase admin client initialized.`);
 
     let accountSid = null;
     let callSid = null;
@@ -66,6 +67,7 @@ serve(async (req) => {
             const formData = new URLSearchParams(requestBodyForValidation);
             accountSid = formData.get('AccountSid') || null;
             callSid = formData.get('CallSid') || null;
+            console.log(`[${requestTimestamp}] (${functionVersion}) Parsed form data: AccountSid=${accountSid}, CallSid=${callSid}`);
         } catch (error) {
             console.warn(`[${requestTimestamp}] (${functionVersion}) Could not parse POST body string as form data:`, error.message);
         }
@@ -83,21 +85,22 @@ serve(async (req) => {
         if (profileError) throw profileError;
         if (profile && profile.twilio_auth_token) {
           userTwilioAuthToken = profile.twilio_auth_token;
+          console.log(`[${requestTimestamp}] (${functionVersion}) Retrieved auth token for user ${userId}: ...${profile.twilio_auth_token.slice(-4)}`);
         } else {
-          // console.warn(`[${requestTimestamp}] (${functionVersion}) No auth token in profile for user ${userId}.`);
+          console.warn(`[${requestTimestamp}] (${functionVersion}) No auth token in profile for user ${userId}.`);
         }
       } catch (profileFetchError) {
         console.error(`[${requestTimestamp}] (${functionVersion}) Exception fetching profile for user ${userId}:`, profileFetchError.message);
       }
     } else {
-      // console.warn(`[${requestTimestamp}] (${functionVersion}) No userId in webhook URL. Cannot fetch user-specific Twilio auth token.`);
+      console.warn(`[${requestTimestamp}] (${functionVersion}) No userId in webhook URL. Cannot fetch user-specific Twilio auth token.`);
     }
 
     // For POST, Twilio signs the URL without its query string. For GET, it signs with query string.
     const validationUrlForTwilioHelper = req.method === 'POST' ? `${url.origin}${url.pathname}` : fullUrlForValidation;
 
     if (!isStatusCallback) {
-      // console.log(`[${requestTimestamp}] (${functionVersion}) Attempting to validate Twilio request. Validation URL for helper: ${validationUrlForTwilioHelper}`);
+      console.log(`[${requestTimestamp}] (${functionVersion}) Attempting to validate Twilio request. Validation URL for helper: ${validationUrlForTwilioHelper}`);
       const isValidRequest = await validateTwilioRequest(req, validationUrlForTwilioHelper, userTwilioAuthToken, bypassValidation, requestBodyForValidation);
 
       if (!isValidRequest) {
@@ -111,11 +114,11 @@ serve(async (req) => {
     }
 
     if (isStatusCallback) {
-      // console.log(`[${requestTimestamp}] (${functionVersion}) Processing status callback request.`);
-      return await handleStatusCallback(req, supabaseAdmin, requestTimestamp, requestBodyForValidation);
+      console.log(`[${requestTimestamp}] (${functionVersion}) Processing status callback request.`);
+      return await handleStatusCallback(req, supabaseAdmin, requestTimestamp, functionVersion, requestBodyForValidation);
     }
 
-    // console.log(`[${requestTimestamp}] (${functionVersion}) Processing standard webhook request for initial TwiML.`);
+    console.log(`[${requestTimestamp}] (${functionVersion}) Processing standard webhook request for initial TwiML.`);
 
     const response = new twiml.VoiceResponse(); // Use 'new' with the class from twilio-helper
 
@@ -212,8 +215,8 @@ serve(async (req) => {
     response.hangup();
 
     const twimlString = response.toString();
-    console.log(`[${requestTimestamp}] (${functionVersion}) TwiML Being Sent (Full from Corrected Helper V1):`);
-    console.log(twimlString);
+    console.log(`[${requestTimestamp}] (${functionVersion}) TwiML Being Sent (First 200 chars):`);
+    console.log(twimlString.substring(0, 200));
 
     if (!twimlString.includes('</Gather>') && twimlString.includes('<Gather')) {
         console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: String missing </Gather>!`);
@@ -243,7 +246,7 @@ serve(async (req) => {
   }
 });
 
-async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTimestamp: string, rawBody?: string): Promise<Response> {
+async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTimestamp: string, functionVersion: string, rawBody?: string): Promise<Response> {
   try {
     let formData;
     if (rawBody && rawBody.length > 0) {
@@ -264,16 +267,19 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
     const accountSid = formData.get('AccountSid')?.toString() || null;
     const isTrial = isTrialAccount(accountSid);
 
+    console.log(`[${requestTimestamp}] (${functionVersion}) Status callback params: callSid=${callSid}, callStatus=${callStatus}, isTrial=${isTrial}`);
+
     if (callSid && callStatus) {
       const { data: callLog, error: findError } = await supabaseAdmin
         .from('call_logs')
-        .select('id, prospect_id, notes') // Fetch notes to avoid overwriting
+        .select('id, prospect_id')
         .eq('twilio_call_sid', callSid)
         .maybeSingle();
 
       if (findError) {
-        console.error(`[${requestTimestamp}] Error finding call log in handleStatusCallback:`, findError.message);
+        console.error(`[${requestTimestamp}] (${functionVersion}) Error finding call log in handleStatusCallback:`, findError.message);
       } else if (callLog) {
+        console.log(`[${requestTimestamp}] (${functionVersion}) Found call log with ID: ${callLog.id}`);
         let statusCapitalized = callStatus.charAt(0).toUpperCase() + callStatus.slice(1);
         const updateObj: Record<string, any> = { call_status: statusCapitalized };
 
@@ -282,11 +288,13 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
         if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus.toLowerCase())) {
           updateObj.ended_at = new Date().toISOString();
         }
-        // Only add trial note if not already present
-        if (isTrial && (!callLog.notes || !callLog.notes.includes("Call made with Twilio Trial Account"))) {
-            updateObj.notes = ((callLog.notes || "") + " Call made with Twilio Trial Account").trim();
+        
+        // Add trial information as summary, not in notes which doesn't exist
+        if (isTrial) {
+            updateObj.summary = "Call made with Twilio Trial Account";
         }
 
+        console.log(`[${requestTimestamp}] (${functionVersion}) Updating call log with:`, updateObj);
 
         const { error: updateError } = await supabaseAdmin
           .from('call_logs')
@@ -294,20 +302,24 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
           .eq('id', callLog.id);
 
         if (updateError) {
-          console.error(`[${requestTimestamp}] Error updating call log ${callLog.id} in handleStatusCallback:`, updateError.message);
+          console.error(`[${requestTimestamp}] (${functionVersion}) Error updating call log ${callLog.id} in handleStatusCallback:`, updateError.message);
         } else {
+          console.log(`[${requestTimestamp}] (${functionVersion}) Successfully updated call log ${callLog.id}`);
           if (['Completed', 'Failed', 'Busy', 'No-answer'].includes(statusCapitalized) && callLog.prospect_id) {
+              console.log(`[${requestTimestamp}] (${functionVersion}) Updating prospect ${callLog.prospect_id} status to ${statusCapitalized}`);
               await supabaseAdmin
                   .from('prospects')
                   .update({ status: statusCapitalized, last_call_attempted: new Date().toISOString() })
                   .eq('id', callLog.prospect_id);
           }
         }
+      } else {
+        console.log(`[${requestTimestamp}] (${functionVersion}) No call log found for CallSid: ${callSid}`);
       }
     }
     return new Response('Status received', { headers: { 'Content-Type': 'text/plain', ...corsHeaders } });
   } catch (error) {
-    console.error(`[${requestTimestamp}] Error in handleStatusCallback:`, error.message, error.stack);
+    console.error(`[${requestTimestamp}] (${functionVersion}) Error in handleStatusCallback:`, error.message, error.stack);
     return new Response('Status received despite internal error', {
       status: 200,
       headers: { 'Content-Type': 'text/plain', ...corsHeaders }

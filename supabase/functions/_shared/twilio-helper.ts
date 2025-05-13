@@ -18,7 +18,7 @@ export async function validateTwilioRequest(
   const requestTimestamp = new Date().toISOString();
   const logPrefix = `[${requestTimestamp}] [twilio-helper] validateTwilioRequest:`;
 
-  // console.log(`${logPrefix} Attempting validation. Bypass: ${bypassValidation}. Validation URL: ${validationUrl}`);
+  console.log(`${logPrefix} Attempting validation. Bypass: ${bypassValidation}. Validation URL: ${validationUrl}`);
 
   if (bypassValidation) {
     console.warn(`${logPrefix} ⚠️ VALIDATION BYPASSED - This should only be used for testing!`);
@@ -35,7 +35,7 @@ export async function validateTwilioRequest(
     console.error(`${logPrefix} Missing twilioAuthToken for validation. Validation FAILED.`);
     return false;
   }
-  // console.log(`${logPrefix} Using TwilioAuthToken (last 4): ...${twilioAuthToken.slice(-4)} for validation.`);
+  console.log(`${logPrefix} Using TwilioAuthToken (last 4): ...${twilioAuthToken.slice(-4)} for validation.`);
 
   let dataForSig = "";
   const urlObj = new URL(validationUrl);
@@ -46,7 +46,7 @@ export async function validateTwilioRequest(
         return false;
     }
     try {
-      // For POST, Twilio uses the URL Twilio requested, without any query string.
+      // For POST, Twilio uses the URL without any query string parameters for signature calculation
       const baseUrlForPostSig = `${urlObj.origin}${urlObj.pathname}`;
       dataForSig = baseUrlForPostSig;
 
@@ -64,8 +64,8 @@ export async function validateTwilioRequest(
         dataForSig += key + value;
       }
 
-      // console.log(`${logPrefix} POST params for validation (sorted & concatenated): ${paramsArray.map(p => p[0]+p[1]).join('')}`);
-      // console.log(`${logPrefix} Base URL for POST validation: "${baseUrlForPostSig}"`);
+      console.log(`${logPrefix} POST params for validation (sorted & concatenated): ${paramsArray.map(p => p[0]+p[1]).join('')}`);
+      console.log(`${logPrefix} Base URL for POST validation: "${baseUrlForPostSig}"`);
 
     } catch (error) {
       console.error(`${logPrefix} Error processing POST body for validation:`, error.message);
@@ -73,11 +73,12 @@ export async function validateTwilioRequest(
     }
   } else { // For GET requests, Twilio includes query parameters in the signature URL
       dataForSig = validationUrl; // The full URL including query string
-      // console.log(`${logPrefix} GET request, using full URL for validation: "${dataForSig}"`);
+      console.log(`${logPrefix} GET request, using full URL for validation: "${dataForSig}"`);
   }
 
-  // console.log(`${logPrefix} Data string for signature (first 100 chars): "${dataForSig.substring(0,100)}..."`);
+  console.log(`${logPrefix} Data string for signature (first 100 chars): "${dataForSig.substring(0,100)}..."`);
 
+  // Create HMAC-SHA1 signature
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(twilioAuthToken),
     { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
@@ -85,21 +86,20 @@ export async function validateTwilioRequest(
   const signatureBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(dataForSig));
   const calculatedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
 
-  // console.log(`${logPrefix} Received Twilio signature: ${twilioSignature}`);
-  // console.log(`${logPrefix} Calculated signature: ${calculatedSignature}`);
+  console.log(`${logPrefix} Received Twilio signature: ${twilioSignature}`);
+  console.log(`${logPrefix} Calculated signature: ${calculatedSignature}`);
 
   const isValid = twilioSignature === calculatedSignature;
   if (!isValid) {
       console.error(`${logPrefix} Signature validation FAILED ✗. URL: ${validationUrl}, Method: ${req.method}`);
-      // console.error(`${logPrefix} Data for Sig: "${dataForSig.substring(0,200)}..."`);
-      // console.error(`${logPrefix} Received Sig: ${twilioSignature}, Calculated Sig: ${calculatedSignature}`);
+      console.error(`${logPrefix} Data for Sig: "${dataForSig.substring(0,200)}..."`);
+      console.error(`${logPrefix} Received Sig: ${twilioSignature}, Calculated Sig: ${calculatedSignature}`);
   } else {
       console.log(`${logPrefix} Signature validation PASSED ✓`);
   }
 
   return isValid;
 }
-
 
 export function isTrialAccount(accountSid: string | null): boolean {
   if (!accountSid) return false;

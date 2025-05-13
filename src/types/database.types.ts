@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -184,7 +183,7 @@ export interface Database {
           cost: number | null
           started_at: string
           ended_at: string | null
-          updated_at: string  // Added to match the database schema
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -201,7 +200,7 @@ export interface Database {
           cost?: number | null
           started_at?: string
           ended_at?: string | null
-          updated_at?: string  // Added to match the database schema
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -218,7 +217,7 @@ export interface Database {
           cost?: number | null
           started_at?: string
           ended_at?: string | null
-          updated_at?: string  // Added to match the database schema
+          updated_at?: string
         }
       }
     }
