@@ -118,7 +118,17 @@ export const twiml = {
         return this;
       },
       play: function(url) {
-        content += `<Play>${url}</Play>`;
+        // Handle both string URLs and options objects
+        if (typeof url === 'string') {
+          content += `<Play>${url}</Play>`;
+        } else if (typeof url === 'object' && url !== null) {
+          // If it's an object with a url property, use that
+          const urlStr = url.url || url.digits || '';
+          content += `<Play>${urlStr}</Play>`;
+        } else {
+          // Default empty Play tag if nothing valid is provided
+          content += '<Play></Play>';
+        }
         return this;
       },
       pause: function(options = {}) {
@@ -147,7 +157,15 @@ export const twiml = {
             return this;
           },
           play: function(url) {
-            content += `<Play>${url}</Play>`;
+            // Handle both string URLs and option objects
+            if (typeof url === 'string') {
+              content += `<Play>${url}</Play>`;
+            } else if (typeof url === 'object' && url !== null) {
+              const urlStr = url.url || url.digits || '';
+              content += `<Play>${urlStr}</Play>`;
+            } else {
+              content += '<Play></Play>';
+            }
             return this;
           },
           endGather: function() {

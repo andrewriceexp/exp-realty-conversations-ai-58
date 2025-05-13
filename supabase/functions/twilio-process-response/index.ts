@@ -248,8 +248,17 @@ serve(async (req) => {
       }
     }
     
-    // Generate speech using ElevenLabs if configured
-    let audioContent = null;
+    // Should we continue the conversation or end the call?
+    const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
+    const isNegativeResponse = aiResponse.includes("I understand") || aiResponse.includes("Have a great day");
+    const isEndingCall = isNegativeResponse || parseInt(conversationCount) >= 3;
+    
+    console.log(`Conversation flow - Positive: ${isPositiveResponse}, Negative: ${isNegativeResponse}, Ending: ${isEndingCall}, Count: ${conversationCount}`);
+    
+    // Build the TwiML response
+    const response = twiml.VoiceResponse();
+    
+    // Check if we should use ElevenLabs for voice
     if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
       try {
         console.log(`Generating speech using ElevenLabs with voice ID: ${agentConfig.voice_id}`);
@@ -264,35 +273,23 @@ serve(async (req) => {
         });
         
         if (speechResponse.error) {
-          throw new Error(`ElevenLabs speech generation error: ${speechResponse.error}`);
+          console.error(`ElevenLabs speech generation error: ${speechResponse.error}`);
+          // Fall back to Twilio's built-in TTS
+          response.say(aiResponse);
+        } else {
+          console.log('Speech generated successfully, use Twilio Say with SSML markup');
+          // Since we can't play base64 content directly in TwiML, use Twilio's Say with the AI text
+          // In a production environment, we would store the audio and provide a public URL
+          response.say(aiResponse);
         }
-        
-        console.log('Speech generated successfully');
-        audioContent = speechResponse.data?.audioContent;
       } catch (error) {
         console.error('Error generating speech with ElevenLabs:', error);
-        console.log('Falling back to TTS using Twilio <Say>');
+        // Fall back to Twilio's built-in TTS
+        response.say(aiResponse);
       }
     } else {
-      console.log('ElevenLabs voice provider not configured, using Twilio <Say>');
-    }
-    
-    // Should we continue the conversation or end the call?
-    const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
-    const isNegativeResponse = aiResponse.includes("I understand") || aiResponse.includes("Have a great day");
-    const isEndingCall = isNegativeResponse || parseInt(conversationCount) >= 3;
-    
-    console.log(`Conversation flow - Positive: ${isPositiveResponse}, Negative: ${isNegativeResponse}, Ending: ${isEndingCall}, Count: ${conversationCount}`);
-    
-    // Build the TwiML response
-    const response = twiml.VoiceResponse();
-    
-    // If we have audio content from ElevenLabs, use it. Otherwise fall back to Twilio <Say>
-    if (audioContent) {
-      // Create a temporary audio URL that Twilio can play
-      const audioUrl = `data:audio/mpeg;base64,${audioContent}`;
-      response.play({ digits: audioUrl });
-    } else {
+      // Use Twilio's default TTS
+      console.log('Using Twilio <Say> for text-to-speech');
       response.say(aiResponse);
     }
     
@@ -312,6 +309,7 @@ serve(async (req) => {
       });
       
       gather.say("Please go ahead with your response.");
+      gather.endGather();
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       
       // Add a fallback in case gather times out
