@@ -1,9 +1,8 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createTrialAccountTwiML, createDebugTwiML } from "../_shared/twilio-helper.ts";
-import { encodeXmlUrl } from "../_shared/twiml-helpers.ts";
+import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts";
 
 serve(async (req) => {
   // Very early logging
@@ -49,11 +48,7 @@ serve(async (req) => {
         SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'set' : 'missing'},
         SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceRoleKey ? 'set' : 'missing'}`);
       
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error with the configuration. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
+      return new Response(createErrorResponse("I'm sorry, there was an error with the configuration. Please try again later."), { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
@@ -158,15 +153,6 @@ serve(async (req) => {
     if (isTrial) {
       console.log('Trial account detected - providing modified TwiML response for trial account');
       
-      // Create a response that will redirect to the process-response webhook
-      const response = twiml.VoiceResponse();
-      
-      // First say the trial message
-      response.say("Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
-      
-      // Add a pause to make it more natural
-      response.pause({ length: 1 });
-      
       // Now set up the process-response call to continue the conversation
       const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
       const processResponseParams = {
@@ -186,21 +172,27 @@ serve(async (req) => {
       // Create XML-encoded URL
       const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
-      // Create a gather to collect user input
-      const gather = response.gather({
-        input: 'speech dtmf',
-        action: processResponseUrl,
-        method: 'POST',
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US'
-      });
+      // Create a TwiML response
+      const response = twiml.VoiceResponse();
       
-      // Add the Say element inside the Gather element
-      gather.say("How can I assist you with your real estate needs today?");
+      // First say the trial message
+      response.say("Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
       
-      // Important: We need to close the Gather element before proceeding
-      // This is handled implicitly by the twiml library
+      // Add a pause to make it more natural
+      response.pause({ length: 1 });
+      
+      // IMPORTANT: Use the createGatherWithSay helper to create a properly structured Gather with Say element
+      createGatherWithSay(
+        response,
+        processResponseUrl,
+        "How can I assist you with your real estate needs today?",
+        {
+          timeout: 10,
+          speechTimeout: 'auto',
+          language: 'en-US',
+          method: 'POST'
+        }
+      );
       
       // If gather times out, redirect to the process-response endpoint anyway
       // This must be outside the Gather element
@@ -281,10 +273,9 @@ serve(async (req) => {
       useElevenLabs = true;
     }
     
-    // Say the greeting - if using ElevenLabs, set voice to alice for now
-    // (we'll use ElevenLabs in the process-response webhook)
+    // Say the greeting
     if (useElevenLabs) {
-      // Use a nicer Twilio voice as we don't have ElevenLabs synthesis in this initial greeting
+      // When using ElevenLabs, use a nicer Twilio voice as fallback for initial greeting
       response.say({
         voice: 'Polly.Amy-Neural' // Use a higher quality voice
       }, greeting);
@@ -311,30 +302,22 @@ serve(async (req) => {
       processResponseParams.call_log_id = callLogId;
     }
     
-    // Create XML-encoded URL
+    // Create XML-encoded URL for the next step
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a gather element for user input
-    const gather = response.gather({
-      input: 'speech dtmf',
-      action: processResponseUrl,
-      method: 'POST',
-      timeout: 10,
-      speechTimeout: 'auto',
-      language: 'en-US'
-    });
-    
-    // Add a Say element inside the Gather element
-    // Use a better voice for the main question
-    if (useElevenLabs) {
-      gather.say({
-        voice: 'Polly.Amy-Neural'
-      }, "How can I assist you with your real estate needs today?");
-    } else {
-      gather.say("How can I assist you with your real estate needs today?");
-    }
-    
-    // Gather element is automatically closed by the library when we move on
+    // IMPORTANT: Use the helper function to create a properly structured Gather with Say element
+    createGatherWithSay(
+      response,
+      processResponseUrl,
+      "How can I assist you with your real estate needs today?",
+      {
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US',
+        voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
+        method: 'POST'
+      }
+    );
     
     // If gather times out, redirect to the process-response endpoint anyway
     // This must be outside the Gather element
@@ -360,13 +343,7 @@ serve(async (req) => {
     console.error('Error in twilio-call-webhook function:', error);
     
     // Return a simple TwiML response in case of error
-    const response = `<?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-      <Say>I'm sorry, there was an error processing this call. Please try again later.</Say>
-      <Hangup/>
-    </Response>`;
-      
-    return new Response(response, { 
+    return new Response(createErrorResponse("I'm sorry, there was an error processing this call. Please try again later."), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
   }

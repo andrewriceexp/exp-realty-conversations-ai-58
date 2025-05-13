@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
+import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts";
 
 serve(async (req) => {
   // Very early logging
@@ -47,11 +48,7 @@ serve(async (req) => {
         ELEVENLABS_API_KEY: ${elevenLabsApiKey ? 'set' : 'missing'}`
       );
       
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error with the configuration. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
+      return new Response(createErrorResponse("I'm sorry, there was an error with the configuration. Please try again later."), { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
@@ -133,11 +130,7 @@ serve(async (req) => {
     
     if (agentConfigError || !agentConfig) {
       console.error(`Error fetching agent config or not found: ${agentConfigError?.message || 'Not found'}`);
-      const response = twiml.VoiceResponse()
-        .say("I'm sorry, there was an error with the AI agent configuration. Please try again later.")
-        .hangup();
-        
-      return new Response(response.toString(), { 
+      return new Response(createErrorResponse("I'm sorry, there was an error with the AI agent configuration. Please try again later."), { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
@@ -287,21 +280,6 @@ serve(async (req) => {
       response.pause({ length: 1 });
     }
     
-    // Helper function to encode URL parameters properly for XML
-    const encodeXmlUrl = (baseUrl, params) => {
-      const url = new URL(baseUrl);
-      
-      // Add each parameter to the URL
-      for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, value.toString());
-        }
-      }
-      
-      // Replace all & with &amp; for XML compatibility
-      return url.toString().replace(/&/g, '&amp;');
-    };
-    
     // Determine which voice ID to use - preference order:
     // 1. Explicitly passed voice_id from URL parameters
     // 2. Agent config voice_id
@@ -313,6 +291,7 @@ serve(async (req) => {
                        
     console.log(`Using ElevenLabs for voice synthesis: ${useElevenLabs ? 'YES' : 'NO'}, Selected voice ID: ${selectedVoiceId ? selectedVoiceId.substring(0, 8) + '...' : 'none'}`);
     
+    // Generate the audio for the response
     if (useElevenLabs) {
       try {
         console.log(`Generating speech using ElevenLabs with voice ID: ${selectedVoiceId}`);
@@ -338,24 +317,19 @@ serve(async (req) => {
         
         console.log('ElevenLabs speech generated successfully');
         
-        // Use Twilio's Say with the text for now, but also log that we successfully generated audio
-        // In a production app, we would need to store this audio at a publicly accessible URL
-        console.log('Using Twilio <Say> with successfully generated ElevenLabs audio content');
-        
-        // If in debug mode, announce that we're using ElevenLabs
+        // Use Twilio's Say with the text as we can't directly play ElevenLabs audio
+        // but use a high-quality voice to simulate
         if (debugMode) {
           response.say("Using ElevenLabs voice synthesis.");
           response.pause({ length: 1 });
         }
         
-        // Create SSML for Twilio to modify the voice characteristics to simulate ElevenLabs voice
-        // This is a workaround since we can't directly play the base64 audio
+        // Use Polly neural voice for higher quality speech
         response.say({
-          voice: 'Polly.Amy-Neural', // Use a high-quality voice as base
+          voice: 'Polly.Amy-Neural', 
         }, aiResponse);
         
       } catch (error) {
-        // If ElevenLabs fails, log the error and fall back to Twilio's default TTS
         console.error('Error generating speech with ElevenLabs:', error);
         
         if (debugMode) {
@@ -401,25 +375,22 @@ serve(async (req) => {
       // Create XML-encoded URL
       const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
-      // Create a gather element with proper structure
-      const gather = response.gather({
-        input: 'speech dtmf',
-        action: nextActionUrl,
-        method: 'POST',
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US'
-      });
-      
-      // Add the Say element inside the Gather element
-      gather.say("Please go ahead with your response.");
-      
-      // Note: the Gather element is automatically closed when we move to the next command
+      // IMPORTANT: Use the helper function to create a properly structured Gather with Say element
+      createGatherWithSay(
+        response,
+        nextActionUrl,
+        "Please go ahead with your response.",
+        {
+          timeout: 10,
+          speechTimeout: 'auto',
+          language: 'en-US',
+          method: 'POST'
+        }
+      );
       
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       
       // Add a fallback in case gather times out (outside the Gather element)
-      // IMPORTANT: This must be after the gather element
       response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
       
     } else {
@@ -464,11 +435,7 @@ serve(async (req) => {
     console.error('Error in process-response function:', error);
     
     // Return a simple TwiML response in case of error
-    const response = twiml.VoiceResponse()
-      .say("I'm sorry, there was an error processing your response. Please try again later.")
-      .hangup();
-      
-    return new Response(response.toString(), { 
+    return new Response(createErrorResponse("I'm sorry, there was an error processing your response. Please try again later."), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
   }

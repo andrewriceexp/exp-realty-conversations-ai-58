@@ -73,4 +73,3 @@ export function createErrorResponse(errorMessage = "I'm sorry, there was an erro
   
   return response.toString();
 }
-

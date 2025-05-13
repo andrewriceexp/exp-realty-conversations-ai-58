@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 export interface VoiceOptions {
   text: string;
@@ -11,8 +11,11 @@ export interface VoiceOptions {
   similarityBoost?: number;
 }
 
-export interface VoiceResponse {
-  audioContent: string;
+export interface Voice {
+  voice_id: string;
+  name: string;
+  category?: string;
+  description?: string;
 }
 
 export function useElevenLabs() {
@@ -22,19 +25,29 @@ export function useElevenLabs() {
   const { toast } = useToast();
 
   // Function to get available voices
-  const getVoices = async () => {
+  const getVoices = async (): Promise<Voice[]> => {
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log('Fetching available ElevenLabs voices...');
       const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
         body: {},
       });
       
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error('Error fetching ElevenLabs voices:', error);
+        throw new Error(error.message);
+      }
       
       // Log the response to help with debugging
       console.log('Voices retrieved from ElevenLabs:', data?.voices?.length || 0);
+      
+      if (!data?.voices || !Array.isArray(data.voices)) {
+        console.warn('No voices returned from ElevenLabs API or invalid response format');
+        return [];
+      }
+      
       return data.voices;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch voices';
@@ -45,7 +58,9 @@ export function useElevenLabs() {
         description: errorMessage,
         variant: "destructive"
       });
-      throw new Error(errorMessage);
+      
+      // Return empty array rather than throwing to make error handling easier for callers
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +79,8 @@ export function useElevenLabs() {
     setAudioSrc(null);
     
     try {
+      console.log(`Generating speech with ElevenLabs, voice ID: ${voiceId.substring(0, 8)}...`);
+      
       const { data, error } = await supabase.functions.invoke('generate-speech', {
         body: {
           text,
@@ -76,26 +93,42 @@ export function useElevenLabs() {
         },
       });
       
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error('Error invoking generate-speech function:', error);
+        throw new Error(error.message);
+      }
       
-      if (!data.audioContent) {
+      if (!data?.audioContent) {
+        console.error('No audio content returned from generate-speech function');
         throw new Error('No audio content returned');
       }
       
       // Create an audio source URL from the base64 content
       const audioUrl = `data:audio/mpeg;base64,${data.audioContent}`;
       setAudioSrc(audioUrl);
+      console.log('Successfully generated speech with ElevenLabs');
       
       return audioUrl;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate speech';
       setError(errorMessage);
       console.error('ElevenLabs generateSpeech error:', err);
-      toast({
-        title: "Speech generation failed",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      
+      // Special case for missing API key
+      if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
+        toast({
+          title: "ElevenLabs API Key Missing",
+          description: "Please add your ElevenLabs API key in your profile settings to use custom voices.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Speech generation failed",
+          description: errorMessage,
+          variant: "destructive"
+        });
+      }
+      
       throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
