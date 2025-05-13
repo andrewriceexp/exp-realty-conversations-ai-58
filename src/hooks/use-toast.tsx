@@ -117,11 +117,8 @@ const reducer = (state: State, action: Action): State => {
   }
 }
 
-// Toast helper function
-const toastFunction = (props: Omit<ToasterToast, "id">) => {
-  const { addToast } = useToast()
-  return addToast(props)
-}
+// Create a global reference for the toast context
+let toastContext: ToastContextType | undefined = undefined;
 
 type ToastContextType = {
   toasts: ToasterToast[]
@@ -226,17 +223,23 @@ export function ToastProvider({
     [addToast]
   )
 
+  const contextValue = React.useMemo(
+    () => ({
+      toasts: state.toasts,
+      addToast,
+      updateToast,
+      dismissToast,
+      removeToast,
+      toast,
+    }),
+    [state.toasts, addToast, updateToast, dismissToast, removeToast, toast]
+  )
+
+  // Store in global reference for standalone toast function
+  toastContext = contextValue;
+
   return (
-    <ToastContext.Provider
-      value={{
-        toasts: state.toasts,
-        addToast,
-        updateToast,
-        dismissToast,
-        removeToast,
-        toast, // Include the toast function in the provided context
-      }}
-    >
+    <ToastContext.Provider value={contextValue}>
       {children}
     </ToastContext.Provider>
   )
@@ -244,14 +247,11 @@ export function ToastProvider({
 
 // Standalone toast function for direct usage without hooks
 export const toast = (props: Omit<ToasterToast, "id">) => {
-  // This is tricky in a non-component context, so we'll use a workaround
-  // Create a dummy element and render the provider + a component that uses the hook
-  // This only works in a browser environment
-  if (typeof document !== "undefined") {
-    const addToastFn = useToast().addToast;
-    return addToastFn(props);
+  // Try to use the global context reference if available
+  if (toastContext) {
+    return toastContext.addToast(props);
   }
   
-  console.warn("Toast was called outside of a component context");
+  console.warn("Toast was called outside of a ToastProvider context");
   return ""; // Return an empty string as ID when not in a component context
 }
