@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createTrialAccountTwiML, createDebugTwiML } from "../_shared/twilio-helper.ts";
+import { encodeXmlUrl } from "../_shared/twiml-helpers.ts";
 
 serve(async (req) => {
   // Very early logging
@@ -151,21 +152,6 @@ serve(async (req) => {
       });
     }
     
-    // Helper function to encode URL parameters properly for XML
-    const encodeXmlUrl = (baseUrl, params) => {
-      const url = new URL(baseUrl);
-      
-      // Add each parameter to the URL
-      for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, value.toString());
-        }
-      }
-      
-      // Replace all & with &amp; for XML compatibility
-      return url.toString().replace(/&/g, '&amp;');
-    };
-    
     // For trial accounts, provide a simplified TwiML response that works better but still continues the call
     if (isTrial) {
       console.log('Trial account detected - providing modified TwiML response for trial account');
@@ -218,7 +204,11 @@ serve(async (req) => {
         method: 'POST'
       }, processResponseUrl);
       
-      return new Response(response.toString(), { 
+      // Log the final TwiML for debugging
+      const twimlString = response.toString();
+      console.log(`Final TwiML response for trial account (first 200 chars): ${twimlString.substring(0, 200)}...`);
+      
+      return new Response(twimlString, { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
@@ -283,7 +273,7 @@ serve(async (req) => {
     // Create XML-encoded URL
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a gather to collect user input
+    // Create a gather to collect user input - PROPERLY STRUCTURED
     const gather = response.gather({
       input: 'speech dtmf',
       action: processResponseUrl,
@@ -298,14 +288,20 @@ serve(async (req) => {
     
     console.log(`Set process-response URL: ${processResponseUrl}`);
     
+    // IMPORTANT: The Gather element is automatically closed here. Now we can add the Redirect outside of it.
+    
     // If gather times out, redirect to the process-response endpoint anyway
     // This must be outside the Gather element
     response.redirect({
       method: 'POST'
     }, processResponseUrl);
     
+    // Log the final TwiML for debugging
+    const twimlString = response.toString();
+    console.log(`Final TwiML response (first 200 chars): ${twimlString.substring(0, 200)}...`);
+    
     console.log('Returning full TwiML response');
-    return new Response(response.toString(), { 
+    return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
   } catch (error) {
