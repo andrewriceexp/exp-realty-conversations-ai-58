@@ -1,11 +1,12 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Phone, Loader2, AlertCircle, Settings, Bug } from 'lucide-react';
+import { Phone, Loader2, AlertCircle, Settings, Bug, Headphones } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
+import { useElevenLabs } from '@/hooks/useElevenLabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
@@ -13,6 +14,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Link } from 'react-router-dom';
 import { Switch } from '@/components/ui/switch';
+
+interface VoiceOption {
+  id: string;
+  name: string;
+}
 
 interface ProspectActionsProps {
   prospectId: string;
@@ -28,9 +34,74 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [bypassValidation, setBypassValidation] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
+  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+  const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
+  
   const { makeCall, makeDevelopmentCall, isLoading: isCallingLoading } = useTwilioCall();
+  const { getVoices } = useElevenLabs();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Default ElevenLabs voices
+  const defaultVoices: VoiceOption[] = [
+    { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah" },
+    { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" }, 
+    { id: "9BWtsMINqrJLrRacOk9x", name: "Aria" }
+  ];
+
+  useEffect(() => {
+    if (useElevenLabsVoice) {
+      fetchElevenLabsVoices();
+    } else {
+      // Use the default voices anyway
+      setVoices(defaultVoices);
+      if (defaultVoices.length > 0) {
+        setSelectedVoiceId(defaultVoices[0].id);
+      }
+    }
+  }, [useElevenLabsVoice]);
+
+  const fetchElevenLabsVoices = async () => {
+    setIsLoadingVoices(true);
+    try {
+      const fetchedVoices = await getVoices();
+      if (fetchedVoices && Array.isArray(fetchedVoices) && fetchedVoices.length > 0) {
+        const formattedVoices = fetchedVoices.map(voice => ({
+          id: voice.voice_id,
+          name: voice.name
+        }));
+        setVoices(formattedVoices);
+        
+        // Set default voice if one exists
+        if (formattedVoices.length > 0) {
+          setSelectedVoiceId(formattedVoices[0].id);
+        }
+      } else {
+        // Fall back to default voices
+        setVoices(defaultVoices);
+        if (defaultVoices.length > 0) {
+          setSelectedVoiceId(defaultVoices[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch ElevenLabs voices", error);
+      toast({
+        title: "Error fetching voices",
+        description: "Failed to load ElevenLabs voices. Using default voices instead.",
+        variant: "destructive"
+      });
+      
+      // Fall back to default voices
+      setVoices(defaultVoices);
+      if (defaultVoices.length > 0) {
+        setSelectedVoiceId(defaultVoices[0].id);
+      }
+    } finally {
+      setIsLoadingVoices(false);
+    }
+  };
 
   const openCallDialog = async () => {
     setCallError(null);
@@ -86,7 +157,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         agentConfigId: selectedConfigId,
         userId: user.id,
         bypassValidation,
-        debugMode
+        debugMode,
+        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
       });
       
       // Use either regular or development call method based on bypass setting
@@ -96,7 +168,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         agentConfigId: selectedConfigId,
         userId: user.id,
         bypassValidation,
-        debugMode
+        debugMode,
+        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
       });
       
       console.log('Call response:', response);
@@ -141,6 +214,21 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
           title: "Twilio Trial Account",
           description: "Your Twilio trial account has limitations. For full functionality, please upgrade to a paid account.",
           variant: "warning"
+        });
+      }
+      
+      // If this is an ElevenLabs API key error, show a special message
+      if (error.message?.includes('ElevenLabs API key') || 
+          error.code === 'ELEVENLABS_API_KEY_MISSING') {
+        toast({
+          title: "ElevenLabs API Key Required",
+          description: "To use custom voices, please add your ElevenLabs API key in your profile settings.",
+          variant: "warning",
+          action: (
+            <Link to="/profile-setup" className="underline bg-background text-foreground px-2 py-1 rounded hover:bg-muted">
+              Update Profile
+            </Link>
+          )
         });
       }
     }
@@ -222,6 +310,53 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {/* ElevenLabs Voice Selection */}
+            <div className="flex items-center space-x-2 pt-4 border-t">
+              <Switch 
+                id="use-elevenlabs" 
+                checked={useElevenLabsVoice}
+                onCheckedChange={setUseElevenLabsVoice}
+              />
+              <div className="grid gap-1.5">
+                <Label htmlFor="use-elevenlabs" className="text-sm flex items-center">
+                  <Headphones className="h-3 w-3 mr-1" /> Use ElevenLabs Voice
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable natural-sounding AI voices powered by ElevenLabs
+                </p>
+              </div>
+            </div>
+
+            {/* Voice selection dropdown - only show when ElevenLabs is enabled */}
+            {useElevenLabsVoice && (
+              <div className="space-y-2">
+                <Label htmlFor="voice">Voice Selection</Label>
+                {isLoadingVoices ? (
+                  <div className="flex items-center">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <span className="text-sm">Loading voices...</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedVoiceId}
+                    onValueChange={setSelectedVoiceId}
+                    disabled={isLoadingVoices || voices.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voices.map(voice => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
 

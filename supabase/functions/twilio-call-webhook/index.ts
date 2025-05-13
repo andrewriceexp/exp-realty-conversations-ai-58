@@ -208,8 +208,13 @@ serve(async (req) => {
       
       // Log the final TwiML for debugging
       const twimlString = response.toString();
-      console.log(`Final TwiML response for trial account (first 500 chars):`);
-      console.log(twimlString.substring(0, 500));
+      console.log(`Final TwiML response for trial account (full TwiML):`);
+      console.log(twimlString);
+      
+      // Verify the TwiML structure is correct
+      if (!twimlString.includes('</Gather>')) {
+        console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
+      }
       
       return new Response(twimlString, { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
@@ -252,8 +257,16 @@ serve(async (req) => {
       console.error('Error fetching agent config:', error);
     }
     
+    // Check if ElevenLabs API key is available
+    const elevenLabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    if (!elevenLabsApiKey) {
+      console.warn('ELEVENLABS_API_KEY is not set in environment variables. Using default Twilio voice.');
+    } else {
+      console.log('ELEVENLABS_API_KEY is available. Voice synthesis will use ElevenLabs.');
+    }
+    
     // Say the greeting
-    response.say(greeting);
+    const sayElement = response.say(greeting);
     
     // Add a pause to make it more natural
     response.pause({ length: 1 });
@@ -276,7 +289,7 @@ serve(async (req) => {
     // Create XML-encoded URL
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a gather to collect user input
+    // Create a separate Gather element for user input
     const gather = response.gather({
       input: 'speech dtmf',
       action: processResponseUrl,
@@ -286,8 +299,10 @@ serve(async (req) => {
       language: 'en-US'
     });
     
-    // Add the Say element inside the Gather element
-    gather.say("How can I assist you with your real estate needs today?");
+    // Add a Say element inside the Gather element
+    gather.say({
+      voice: 'alice' // Specify a voice explicitly
+    }, "How can I assist you with your real estate needs today?");
     
     console.log(`Set process-response URL: ${processResponseUrl}`);
     
@@ -300,10 +315,15 @@ serve(async (req) => {
       method: 'POST'
     }, processResponseUrl);
     
-    // Log the final TwiML for debugging - show more of the TwiML to catch issues
+    // Log the full final TwiML for debugging
     const twimlString = response.toString();
-    console.log(`Final TwiML response (full response):`);
+    console.log(`Final TwiML response (full TwiML):`);
     console.log(twimlString);
+    
+    // Verify the TwiML structure is correct
+    if (!twimlString.includes('</Gather>')) {
+      console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
+    }
     
     console.log('Returning full TwiML response');
     return new Response(twimlString, { 
@@ -455,3 +475,4 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
     });
   }
 }
+

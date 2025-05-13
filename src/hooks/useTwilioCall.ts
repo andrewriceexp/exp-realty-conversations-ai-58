@@ -10,6 +10,7 @@ export interface CallOptions {
   userId: string;
   bypassValidation?: boolean;
   debugMode?: boolean;
+  voiceId?: string; // Added for ElevenLabs voice selection
 }
 
 export interface CallResponse {
@@ -139,6 +140,12 @@ export function useTwilioCall() {
         errorTitle = "Database permission error";
         errorDescription = "There was an issue with database permissions. Please contact support.";
         console.log('RLS policy violation detected. Error details:', err);
+      }
+      // Check for missing ElevenLabs API key
+      else if (errorCode === 'ELEVENLABS_API_KEY_MISSING' || 
+               errorMessage.includes('ElevenLabs API key')) {
+        errorTitle = "ElevenLabs API key missing";
+        errorDescription = "Please add your ElevenLabs API key in the profile settings to use custom voices.";
       }
       // Twilio API errors
       else if (errorCode === 'TWILIO_API_ERROR' || errorMessage.includes('Twilio error')) {
