@@ -110,13 +110,12 @@ serve(async (req) => {
     
     console.log('Processing standard webhook request for initial call TwiML');
     
-    // For testing, let's simplify the TwiML response to isolate any potential issues
-    // Return a simple message to confirm the webhook is responding
+    // Return a very simple TwiML response for testing
     const simpleResponse = twiml.VoiceResponse()
-      .say("Webhook reached and validated. Hello from the main webhook.")
+      .say("Hello, this is the eXp Realty AI assistant. I'm here to help you with your real estate needs. This is a test call. Goodbye.")
       .hangup();
     
-    console.log('Returning simplified TwiML response for testing');
+    console.log('Returning simplified TwiML response');
     return new Response(simpleResponse.toString(), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
@@ -181,36 +180,39 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
       
       if (callLog) {
         console.log(`Found call log: ${callLog.id}`);
-        const updateData: Record<string, any> = {
-          call_status: callStatus.charAt(0).toUpperCase() + callStatus.slice(1) // Capitalize first letter
+        
+        // FIX: Define only the exact fields we want to update, avoiding updated_at
+        // Capitalize first letter of status
+        let statusCapitalized = callStatus;
+        if (statusCapitalized) {
+          statusCapitalized = statusCapitalized.charAt(0).toUpperCase() + statusCapitalized.slice(1);
+        }
+        
+        // Build a specific update object with only the fields that exist in the table
+        const updateObj: Record<string, any> = {
+          call_status: statusCapitalized
         };
         
-        // Add fields conditionally
+        // Conditionally add fields only if they exist
         if (callDuration) {
-          updateData.call_duration_seconds = parseInt(callDuration, 10);
+          updateObj.call_duration_seconds = parseInt(callDuration, 10);
         }
         
         if (recordingUrl) {
-          updateData.recording_url = recordingUrl;
+          updateObj.recording_url = recordingUrl;
         }
         
         // If call is completed or failed, update the ended_at field
-        if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus)) {
-          updateData.ended_at = new Date().toISOString();
+        if (['completed', 'failed', 'busy', 'no-answer'].includes(callStatus || '')) {
+          updateObj.ended_at = new Date().toISOString();
         }
         
-        console.log(`Updating call log with status data:`, updateData);
+        console.log('Updating call log with these fields:', updateObj);
         
         try {
-          // IMPORTANT: Make sure we're not including updated_at in the updateData
-          // Triple-check there's no updated_at field
-          delete updateData.updated_at; // Just in case
-          
-          console.log('Final update data (without updated_at):', updateData);
-          
           const { error } = await supabaseAdmin
             .from('call_logs')
-            .update(updateData)
+            .update(updateObj)
             .eq('id', callLog.id);
             
           if (error) {

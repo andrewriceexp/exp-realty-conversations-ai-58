@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Prospect, ProspectStatus } from '@/types';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface CampaignCallerProps {
   campaignId: string;
@@ -83,7 +84,8 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
       const response = await callMethod({
         prospectId: prospect.id,
         agentConfigId,
-        userId: user.id
+        userId: user.id,
+        bypassValidation // Explicitly pass the bypass flag
       });
       
       if (response.success) {
@@ -117,6 +119,16 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   return (
     <div className="border rounded-md p-4 space-y-4">
       <h3 className="text-md font-medium">Campaign Caller</h3>
+      
+      {bypassValidation && (
+        <Alert variant="warning">
+          <Bug className="h-4 w-4" />
+          <AlertTitle>Development Mode Active</AlertTitle>
+          <AlertDescription>
+            Twilio webhook validation is bypassed. Use only for testing.
+          </AlertDescription>
+        </Alert>
+      )}
       
       {isLoading ? (
         <div className="flex items-center justify-center p-4">
@@ -162,6 +174,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
             className="w-full"
             disabled={isCalling || currentProspectIndex >= prospects.length}
             onClick={handleCallNext}
+            variant={bypassValidation ? "outline" : "default"}
           >
             {isCalling ? (
               <>
@@ -171,7 +184,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
             ) : (
               <>
                 <Phone className="mr-2 h-4 w-4" />
-                Call Next Prospect
+                {bypassValidation ? 'Call Next Prospect (Dev Mode)' : 'Call Next Prospect'}
               </>
             )}
           </Button>

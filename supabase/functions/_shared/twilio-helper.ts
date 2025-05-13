@@ -63,9 +63,10 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
       console.log(`  - ${key}: ${params[key]}`);
     });
     
-    // Make sure URL doesn't contain query parameters (Twilio separates these in validation)
-    // Extract base URL without query string
+    // IMPORTANT FIX: Ensure we're using the exact URL without query parameters
+    // Extract base URL without query string for validation
     const urlObj = new URL(url);
+    // For validation, we need the path without query parameters
     const baseUrl = `${urlObj.origin}${urlObj.pathname}`;
     console.log(`Original URL: "${url}"`);
     console.log(`Base URL for validation: "${baseUrl}"`);
