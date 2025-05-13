@@ -1,5 +1,5 @@
 // supabase/functions/_shared/twiml-helpers.ts
-import { twiml } from './twilio-helper.ts'; // Assuming twiml is correctly exported from your twilio-helper
+import { twiml } from './twilio-helper.ts'; // Assuming twiml is correctly exported from your twilio-helper and VoiceResponse is a class
 
 /**
  * Encodes a URL with query parameters for safe use in TwiML attributes.
@@ -30,7 +30,7 @@ export function encodeXmlUrl(baseUrl: string, params: Record<string, string | un
  * This function ensures proper nesting of Say within Gather
  */
 export function createGatherWithSay(
-  response: any, // Should be a twiml.VoiceResponse instance from your twilio-helper
+  response: any, // Should be an instance of twiml.VoiceResponse class
   action: string, // Expect this to be ALREADY XML-encoded by encodeXmlUrl
   sayText: string,
   options: Record<string, any> = {} // e.g., { voice: 'Polly.Joanna-Neural', timeout: 10, actionOnEmptyResult: true }
@@ -45,46 +45,51 @@ export function createGatherWithSay(
 
   console.log(`[twiml-helpers] createGatherWithSay: actionUrl="${action}", sayText="${sayText}", gatherAttributes="${JSON.stringify(gatherAttributes)}"`);
 
-  const gatherNode = response.gather(gatherAttributes);
+  // Assuming 'response' is an instance of your VoiceResponse class which has a 'gather' method
+  const gatherNode = response.gather(gatherAttributes, (nestedGatherNode: any) => {
+    const textToSay = (typeof sayText === 'string' && sayText.trim() !== "") ? sayText.trim() : "How can I assist you today?";
   
-  const textToSay = (typeof sayText === 'string' && sayText.trim() !== "") ? sayText.trim() : "How can I assist you today?";
-  
-  const sayAttributesInGather: Record<string, string> = {};
-  if (options.voice) {
-    sayAttributesInGather.voice = options.voice;
-  } else {
-    // Default to a standard Twilio voice if none specified for the Gather's prompt
-    sayAttributesInGather.voice = 'alice'; 
-  }
-  
-  gatherNode.say(sayAttributesInGather, textToSay);
-  console.log(`[twiml-helpers] createGatherWithSay: Nested <Say voice="${sayAttributesInGather.voice}">: "${textToSay}"`);
+    const sayAttributesInGather: Record<string, string> = {};
+    if (options.voice) {
+      sayAttributesInGather.voice = options.voice;
+    } else {
+      sayAttributesInGather.voice = 'alice'; 
+    }
+    
+    nestedGatherNode.say(sayAttributesInGather, textToSay);
+    console.log(`[twiml-helpers] createGatherWithSay: Nested <Say voice="${sayAttributesInGather.voice}">: "${textToSay}"`);
+  });
 }
 
 /**
  * Helper to create error response TwiML
  */
 export function createErrorResponse(message: string): string {
-  const response = twiml.VoiceResponse(); // Assuming twiml is imported and VoiceResponse is a constructor
+  const response = new twiml.VoiceResponse(); // FIXED: Added 'new' keyword
   const messageToSay = (message && message.trim() !== "") ? message.trim() : "An application error occurred.";
-  response.say(messageToSay);
-  response.hangup();
+  response.say(messageToSay); // Assuming .say() is a method of the instance
+  response.hangup(); // Assuming .hangup() is a method of the instance
   const twimlString = response.toString();
   console.log(`[twiml-helpers] createErrorResponse: "${twimlString}"`);
   return twimlString;
 }
 
-// You might also have other helpers like createDebugTwiML here
-// For example:
-// export function createDebugTwiML(debugInfo: Record<string, any>): string {
-//   const response = twiml.VoiceResponse();
-//   response.say("Debug mode active.");
-//   for (const key in debugInfo) {
-//     if (debugInfo[key] !== undefined && debugInfo[key] !== null) {
-//       response.say(`${key} is ${debugInfo[key].toString()}`);
-//       response.pause({length: 1});
-//     }
-//   }
-//   response.hangup();
-//   return response.toString();
-// }
+/**
+ * Helper to create debug TwiML (example, ensure it's used if needed)
+ */
+export function createDebugTwiML(info: Record<string, any>): string {
+  const response = new twiml.VoiceResponse(); // FIXED: Added 'new' keyword
+  response.say("Debug mode active."); 
+  for (const key in info) {
+    if (info[key] !== undefined && info[key] !== null) {
+      // Ensure the value is a string before passing to say
+      const valueStr = typeof info[key] === 'object' ? JSON.stringify(info[key]) : info[key].toString();
+      response.say(`${key} is ${valueStr}`);
+      response.pause({length: 1}); 
+    }
+  }
+  response.hangup();
+  const twimlString = response.toString();
+  console.log(`[twiml-helpers] createDebugTwiML: "${twimlString}"`);
+  return twimlString;
+}
