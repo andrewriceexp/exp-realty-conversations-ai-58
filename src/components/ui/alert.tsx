@@ -22,20 +22,24 @@ const alertVariants = cva(
   }
 )
 
-// Explicitly define the variant types to ensure TypeScript recognizes them
-type AlertVariant = "default" | "destructive" | "warning";
+// Define the VariantProps type to extract variant types from alertVariants
+type AlertVariantProps = VariantProps<typeof alertVariants>
 
-const Alert = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { variant?: AlertVariant }
->(({ className, variant, ...props }, ref) => (
-  <div
-    ref={ref}
-    role="alert"
-    className={cn(alertVariants({ variant }), className)}
-    {...props}
-  />
-))
+// Explicitly define a composite type that includes all allowed variants
+type AlertProps = React.HTMLAttributes<HTMLDivElement> & {
+  variant?: AlertVariantProps["variant"] // This will include "default", "destructive", and "warning"
+}
+
+const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
+  ({ className, variant, ...props }, ref) => (
+    <div
+      ref={ref}
+      role="alert"
+      className={cn(alertVariants({ variant }), className)}
+      {...props}
+    />
+  )
+)
 Alert.displayName = "Alert"
 
 const AlertTitle = React.forwardRef<
