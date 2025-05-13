@@ -27,7 +27,7 @@ type AlertVariant = "default" | "destructive" | "warning";
 
 const Alert = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>
+  React.HTMLAttributes<HTMLDivElement> & { variant?: AlertVariant }
 >(({ className, variant, ...props }, ref) => (
   <div
     ref={ref}
