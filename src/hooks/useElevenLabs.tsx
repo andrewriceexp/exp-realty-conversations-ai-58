@@ -33,10 +33,13 @@ export function useElevenLabs() {
       
       if (error) throw new Error(error.message);
       
+      // Log the response to help with debugging
+      console.log('Voices retrieved from ElevenLabs:', data?.voices?.length || 0);
       return data.voices;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch voices';
       setError(errorMessage);
+      console.error('ElevenLabs getVoices error:', err);
       toast({
         title: "Error fetching voices",
         description: errorMessage,
@@ -87,6 +90,7 @@ export function useElevenLabs() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate speech';
       setError(errorMessage);
+      console.error('ElevenLabs generateSpeech error:', err);
       toast({
         title: "Speech generation failed",
         description: errorMessage,
@@ -103,6 +107,7 @@ export function useElevenLabs() {
     if (audioSrc) {
       const audio = new Audio(audioSrc);
       audio.play().catch(err => {
+        console.error('Audio playback error:', err);
         toast({
           title: "Audio playback error",
           description: err.message,
@@ -113,7 +118,7 @@ export function useElevenLabs() {
       toast({
         title: "No audio to play",
         description: "Please generate speech first",
-        variant: "default" // Changed from "warning" to "default"
+        variant: "default"
       });
     }
   };

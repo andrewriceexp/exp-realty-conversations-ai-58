@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
@@ -21,13 +22,14 @@ serve(async (req) => {
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
+    const voiceId = url.searchParams.get('voice_id');
     const conversationCount = url.searchParams.get('conversation_count') || '0';
     const nextConversationCount = (parseInt(conversationCount) + 1).toString();
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true';
     
     console.log(`Processing response for prospect: ${prospectId}, agent config: ${agentConfigId}, user: ${userId}, call log: ${callLogId}, conversation count: ${conversationCount}`);
-    console.log(`Bypass validation: ${bypassValidation}, Debug mode: ${debugMode}`);
+    console.log(`Voice ID: ${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, Bypass validation: ${bypassValidation}, Debug mode: ${debugMode}`);
     
     // Initialize Supabase clients
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -273,7 +275,7 @@ serve(async (req) => {
     // Debug mode response if enabled
     if (debugMode) {
       console.log('Debug mode enabled - Adding extra diagnostics to TwiML');
-      response.say(`Debug info: Agent config ID ${agentConfigId}, Voice provider ${agentConfig.voice_provider}, Voice ID ${agentConfig.voice_id || 'none'}`);
+      response.say(`Debug info: Agent config ID ${agentConfigId}, Voice provider ${agentConfig.voice_provider}, Voice ID ${voiceId || agentConfig.voice_id || 'none'}`);
       response.pause({ length: 1 });
       
       if (elevenLabsApiKey) {
@@ -300,22 +302,26 @@ serve(async (req) => {
       return url.toString().replace(/&/g, '&amp;');
     };
     
+    // Determine which voice ID to use - preference order:
+    // 1. Explicitly passed voice_id from URL parameters
+    // 2. Agent config voice_id
+    // 3. Default to null (use Twilio default)
+    const selectedVoiceId = voiceId || (agentConfig.voice_provider === 'elevenlabs' ? agentConfig.voice_id : null);
+    
     // Check if we should use ElevenLabs for voice
-    let useElevenLabs = agentConfig.voice_provider === 'elevenlabs' && 
-                       agentConfig.voice_id && 
-                       elevenLabsApiKey;
+    const useElevenLabs = elevenLabsApiKey && selectedVoiceId && agentConfig.voice_provider === 'elevenlabs';
                        
-    console.log(`Using ElevenLabs for voice synthesis: ${useElevenLabs ? 'YES' : 'NO'}`);
+    console.log(`Using ElevenLabs for voice synthesis: ${useElevenLabs ? 'YES' : 'NO'}, Selected voice ID: ${selectedVoiceId ? selectedVoiceId.substring(0, 8) + '...' : 'none'}`);
     
     if (useElevenLabs) {
       try {
-        console.log(`Generating speech using ElevenLabs with voice ID: ${agentConfig.voice_id}`);
+        console.log(`Generating speech using ElevenLabs with voice ID: ${selectedVoiceId}`);
         
         // Call the generate-speech edge function
         const speechResponse = await supabaseAdmin.functions.invoke('generate-speech', {
           body: {
             text: aiResponse,
-            voiceId: agentConfig.voice_id,
+            voiceId: selectedVoiceId,
             model: 'eleven_multilingual_v2'
           }
         });
@@ -382,6 +388,7 @@ serve(async (req) => {
         prospect_id: prospectId,
         agent_config_id: agentConfigId,
         user_id: userId,
+        voice_id: selectedVoiceId,
         conversation_count: nextConversationCount,
         bypass_validation: bypassValidation ? 'true' : undefined,
         debug_mode: debugMode ? 'true' : undefined
@@ -407,12 +414,14 @@ serve(async (req) => {
       // Add the Say element inside the Gather element
       gather.say("Please go ahead with your response.");
       
-      // Note: We don't need to call .endGather() - that's not valid with the Twilio SDK
+      // Note: the Gather element is automatically closed when we move to the next command
       
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       
       // Add a fallback in case gather times out (outside the Gather element)
+      // IMPORTANT: This must be after the gather element
       response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
+      
     } else {
       // End the conversation
       if (isPositiveResponse) {
@@ -442,6 +451,11 @@ serve(async (req) => {
     
     const twimlString = response.toString();
     console.log(`Returning TwiML response (truncated): ${twimlString.substring(0, 200)}...`);
+    
+    // Verify the TwiML structure is correct
+    if (!twimlString.includes('</Gather>') && !isEndingCall) {
+      console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
+    }
     
     return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 

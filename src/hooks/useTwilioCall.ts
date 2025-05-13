@@ -10,7 +10,7 @@ export interface CallOptions {
   userId: string;
   bypassValidation?: boolean;
   debugMode?: boolean;
-  voiceId?: string; // Added for ElevenLabs voice selection
+  voiceId?: string; // ElevenLabs voice selection
 }
 
 export interface CallResponse {
@@ -32,7 +32,10 @@ export function useTwilioCall() {
     setError(null);
     
     try {
-      console.log('Initiating call with options:', options);
+      console.log('Initiating call with options:', {
+        ...options,
+        voiceId: options.voiceId ? `${options.voiceId.substring(0, 8)}...` : undefined
+      });
       
       // Make API call to Supabase Edge Function
       const { data, error: invokeError } = await supabase.functions.invoke('twilio-make-call', {

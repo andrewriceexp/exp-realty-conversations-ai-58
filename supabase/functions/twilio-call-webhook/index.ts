@@ -27,10 +27,11 @@ serve(async (req) => {
     const prospectId = url.searchParams.get('prospect_id');
     const agentConfigId = url.searchParams.get('agent_config_id');
     const userId = url.searchParams.get('user_id');
+    const voiceId = url.searchParams.get('voice_id');
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
     
-    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
+    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
     
     // Check path to see if this is a status callback
     const isStatusCallback = url.pathname.endsWith('/status');
@@ -144,7 +145,8 @@ serve(async (req) => {
         prospectId,
         agentConfigId,
         userId,
-        bypassValidation
+        bypassValidation,
+        voiceId
       });
       
       return new Response(debugResponse, { 
@@ -171,6 +173,7 @@ serve(async (req) => {
         prospect_id: prospectId,
         agent_config_id: agentConfigId,
         user_id: userId,
+        voice_id: voiceId,
         conversation_count: 0,
         bypass_validation: bypassValidation ? 'true' : undefined, 
         debug_mode: debugMode ? 'true' : undefined
@@ -196,9 +199,8 @@ serve(async (req) => {
       // Add the Say element inside the Gather element
       gather.say("How can I assist you with your real estate needs today?");
       
-      console.log(`Set process-response URL for trial account: ${processResponseUrl}`);
-      
-      // IMPORTANT: The Gather element is automatically closed when we move to the next command on the response object
+      // Important: We need to close the Gather element before proceeding
+      // This is handled implicitly by the twiml library
       
       // If gather times out, redirect to the process-response endpoint anyway
       // This must be outside the Gather element
@@ -229,6 +231,8 @@ serve(async (req) => {
     
     // Fetch agent configuration to use the correct greeting
     let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs.";
+    let useElevenLabs = false;
+    let agentVoiceId = voiceId || null; 
     
     try {
       if (agentConfigId) {
@@ -251,6 +255,16 @@ serve(async (req) => {
               }
             }
           }
+          
+          // Check if we should use ElevenLabs from the agent config
+          if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
+            useElevenLabs = true;
+            // If no specific voice ID was passed, use the one from the agent config
+            if (!voiceId) {
+              agentVoiceId = agentConfig.voice_id;
+            }
+            console.log(`Using ElevenLabs voice from agent config: ${agentVoiceId}`);
+          }
         }
       }
     } catch (error) {
@@ -261,12 +275,22 @@ serve(async (req) => {
     const elevenLabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
     if (!elevenLabsApiKey) {
       console.warn('ELEVENLABS_API_KEY is not set in environment variables. Using default Twilio voice.');
-    } else {
+      useElevenLabs = false;
+    } else if (useElevenLabs || voiceId) {
       console.log('ELEVENLABS_API_KEY is available. Voice synthesis will use ElevenLabs.');
+      useElevenLabs = true;
     }
     
-    // Say the greeting
-    const sayElement = response.say(greeting);
+    // Say the greeting - if using ElevenLabs, set voice to alice for now
+    // (we'll use ElevenLabs in the process-response webhook)
+    if (useElevenLabs) {
+      // Use a nicer Twilio voice as we don't have ElevenLabs synthesis in this initial greeting
+      response.say({
+        voice: 'Polly.Amy-Neural' // Use a higher quality voice
+      }, greeting);
+    } else {
+      response.say(greeting);
+    }
     
     // Add a pause to make it more natural
     response.pause({ length: 1 });
@@ -277,6 +301,7 @@ serve(async (req) => {
       prospect_id: prospectId,
       agent_config_id: agentConfigId,
       user_id: userId,
+      voice_id: agentVoiceId,
       conversation_count: 0,
       bypass_validation: bypassValidation ? 'true' : undefined, 
       debug_mode: debugMode ? 'true' : undefined
@@ -289,7 +314,7 @@ serve(async (req) => {
     // Create XML-encoded URL
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a separate Gather element for user input
+    // Create a gather element for user input
     const gather = response.gather({
       input: 'speech dtmf',
       action: processResponseUrl,
@@ -300,14 +325,16 @@ serve(async (req) => {
     });
     
     // Add a Say element inside the Gather element
-    gather.say({
-      voice: 'alice' // Specify a voice explicitly
-    }, "How can I assist you with your real estate needs today?");
+    // Use a better voice for the main question
+    if (useElevenLabs) {
+      gather.say({
+        voice: 'Polly.Amy-Neural'
+      }, "How can I assist you with your real estate needs today?");
+    } else {
+      gather.say("How can I assist you with your real estate needs today?");
+    }
     
-    console.log(`Set process-response URL: ${processResponseUrl}`);
-    
-    // FIXED: The Gather element is automatically closed when we move to the next command on the response object.
-    // We should not add the Redirect inside the Gather block.
+    // Gather element is automatically closed by the library when we move on
     
     // If gather times out, redirect to the process-response endpoint anyway
     // This must be outside the Gather element
@@ -475,4 +502,3 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any): Promise<R
     });
   }
 }
-
