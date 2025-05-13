@@ -1,15 +1,15 @@
 // supabase/functions/twilio-call-webhook/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import "https://deno.land/x/xhr@0.1.0/mod.ts"; // Polyfill for btoa if not globally available
+import "https://deno.land/x/xhr@0.1.0/mod.ts"; 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// Ensure this path is correct and the helper functions are as expected.
 import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createDebugTwiML } from "../_shared/twilio-helper.ts";
-import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts"; 
+// We still need encodeXmlUrl and createErrorResponse
+import { encodeXmlUrl, createErrorResponse } from "../_shared/twiml-helpers.ts"; 
 
 serve(async (req) => {
   const requestTimestamp = new Date().toISOString();
-  console.log(`--- [${requestTimestamp}] twilio-call-webhook: INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
-  console.log(`[${requestTimestamp}] Request headers: ${JSON.stringify([...req.headers.entries()].reduce((acc, [key, val]) => ({ ...acc, [key]: val }), {}))}`);
+  console.log(`--- [${requestTimestamp}] twilio-call-webhook V3: INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
+  // console.log(`[${requestTimestamp}] Request headers: ${JSON.stringify([...req.headers.entries()].reduce((acc, [key, val]) => ({ ...acc, [key]: val }), {}))}`);
 
 
   if (req.method === 'OPTIONS') {
@@ -19,7 +19,7 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const fullUrl = url.origin + url.pathname; // Used for validation
+    const fullUrl = url.origin + url.pathname; 
     console.log(`[${requestTimestamp}] Parsed URL: ${fullUrl}, Search params: ${url.search}`);
 
     const callLogId = url.searchParams.get('call_log_id');
@@ -42,7 +42,7 @@ serve(async (req) => {
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
       console.error(`[${requestTimestamp}] CRITICAL ERROR: Missing Supabase environment variables in twilio-call-webhook.`);
-      return new Response(createErrorResponse("I'm sorry, there was an error with the configuration. Please try again later."), {
+      return new Response(createErrorResponse("I'm sorry, there was an error with the server configuration. Please try again later."), { // Updated error message
         headers: { 'Content-Type': 'text/xml', ...corsHeaders }
       });
     }
@@ -120,150 +120,148 @@ serve(async (req) => {
 
     if (debugMode) {
       console.log(`[${requestTimestamp}] Debug mode active for twilio-call-webhook. Adding debug TwiML.`);
-      response.say(`Debug Mode Active. SID: ${callSid || 'N/A'}. User: ${userId || 'N/A'}. VoiceID: ${voiceId || 'N/A'}`);
+      const debugMessage = `Debug Mode Active. SID: ${callSid || 'N/A'}. User: ${userId || 'N/A'}. VoiceID: ${voiceId || 'N/A'}`;
+      response.say(debugMessage);
+      console.log(`[${requestTimestamp}] Debug <Say>: ${debugMessage}`);
       response.pause({length: 1});
     }
     
     const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
-    const processResponseParams: Record<string, string | undefined> = { 
+    let finalAgentVoiceId = voiceId || null; // Start with URL voice_id
+
+    // Determine greeting and finalAgentVoiceId
+    let greeting = "Hello! This is a helpful assistant calling."; // More generic default
+    const defaultGreeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs.";
+    let useElevenLabs = false;
+
+    if (agentConfigId) {
+        try {
+            console.log(`[${requestTimestamp}] Fetching agent config ${agentConfigId} for greeting in twilio-call-webhook.`);
+            const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
+                .from('agent_configs')
+                .select('system_prompt, config_name, voice_provider, voice_id')
+                .eq('id', agentConfigId)
+                .maybeSingle();
+
+            if (agentConfigError) {
+                console.error(`[${requestTimestamp}] Error fetching agent config in twilio-call-webhook: ${agentConfigError.message}`);
+                greeting = defaultGreeting;
+            } else if (agentConfig) {
+                console.log(`[${requestTimestamp}] Found agent config: ${agentConfig.config_name} for twilio-call-webhook.`);
+                if (agentConfig.system_prompt && agentConfig.system_prompt.trim() !== "") {
+                    const promptLines = agentConfig.system_prompt.split(/[.!?]/);
+                    if (promptLines.length > 0) {
+                        const introLine = promptLines[0].trim();
+                        if (introLine.length > 10) {
+                            greeting = introLine + (/[.!?]$/.test(introLine) ? "" : ".");
+                        } else {
+                            greeting = defaultGreeting;
+                        }
+                    } else {
+                        greeting = defaultGreeting;
+                    }
+                } else {
+                    console.warn(`[${requestTimestamp}] Agent config system_prompt is empty. Using default greeting.`);
+                    greeting = defaultGreeting;
+                }
+
+                if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
+                    useElevenLabs = true;
+                    if (!finalAgentVoiceId) finalAgentVoiceId = agentConfig.voice_id; // Prioritize URL, then config
+                    console.log(`[${requestTimestamp}] Agent config suggests ElevenLabs. Voice ID: ${finalAgentVoiceId}`);
+                }
+            } else {
+                console.warn(`[${requestTimestamp}] Agent config ${agentConfigId} not found. Using default greeting.`);
+                greeting = defaultGreeting;
+            }
+        } catch (error) {
+            console.error(`[${requestTimestamp}] Exception fetching agent config:`, error.message);
+            greeting = defaultGreeting;
+        }
+    } else {
+        greeting = defaultGreeting; // No agentConfigId, use default
+    }
+    
+    const elevenLabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    if (useElevenLabs && !elevenLabsApiKey) {
+        console.warn(`[${requestTimestamp}] ElevenLabs intended but ELEVENLABS_API_KEY is not set. Defaulting Twilio voice.`);
+        useElevenLabs = false;
+    } else if (voiceId && elevenLabsApiKey && !useElevenLabs) { 
+        // If voiceId is passed in URL and API key exists, assume ElevenLabs even if not in agent_config
+        useElevenLabs = true;
+        finalAgentVoiceId = voiceId; // Ensure finalAgentVoiceId is set from URL if this path is taken
+        console.log(`[${requestTimestamp}] URL voice_id ${voiceId} provided with ElevenLabs API key. Will attempt ElevenLabs.`);
+    }
+
+
+    // Construct final processResponseUrl with determined finalAgentVoiceId
+    const finalProcessResponseParams: Record<string, string | undefined> = {
         prospect_id: prospectId || undefined,
         agent_config_id: agentConfigId || undefined,
         user_id: userId || undefined,
-        voice_id: voiceId || undefined, 
+        voice_id: finalAgentVoiceId || undefined,
         conversation_count: '0',
         bypass_validation: bypassValidation ? 'true' : undefined,
         debug_mode: debugMode ? 'true' : undefined
     };
-    if (callLogId) {
-        processResponseParams.call_log_id = callLogId;
+    if (callLogId) finalProcessResponseParams.call_log_id = callLogId;
+    const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, finalProcessResponseParams);
+    console.log(`[${requestTimestamp}] Final processResponseUrl (encoded): ${processResponseUrl}`);
+
+    // --- Explicit TwiML Construction ---
+    const greetingToSay = (greeting && greeting.trim() !== "") ? greeting.trim() : "Hello.";
+    const gatherPromptToSay = "How can I assist you with your real estate needs today?";
+    
+    const initialSayAttributes: Record<string, string> = {};
+    const gatherSayAttributes: Record<string, string> = {};
+
+    if (useElevenLabs) {
+        initialSayAttributes.voice = 'Polly.Amy-Neural'; // High-quality base for ElevenLabs simulation
+        gatherSayAttributes.voice = 'Polly.Amy-Neural'; // Consistent voice for gather prompt
+    } else {
+        initialSayAttributes.voice = 'alice'; // Default Twilio voice
+        gatherSayAttributes.voice = 'alice';
     }
-    // Ensure encodeXmlUrl is used here as it's critical for action attributes
-    const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
 
+    response.say(initialSayAttributes, greetingToSay);
+    console.log(`[${requestTimestamp}] Initial <Say voice="${initialSayAttributes.voice}">: "${greetingToSay}"`);
+    response.pause({ length: 1 });
 
-    if (isTrial) {
-      console.log(`[${requestTimestamp}] Trial account detected for twilio-call-webhook. Providing modified TwiML.`);
-      response.say("Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
-      response.pause({ length: 1 });
-      
-      createGatherWithSay(
-        response,
-        processResponseUrl, // Already encoded
-        "How can I assist you with your real estate needs today?", // Explicit string
-        {
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          method: 'POST'
-        }
-      );
-      // Fallback redirect URL must also be encoded
-      response.redirect({ method: 'POST' }, processResponseUrl); 
+    // Create the <Gather> verb directly
+    const gather = response.gather({
+        input: 'speech dtmf',
+        action: processResponseUrl, // Already encoded
+        method: 'POST',
+        timeout: 10,
+        speechTimeout: 'auto', 
+        language: 'en-US',
+        actionOnEmptyResult: true 
+    });
+    // Nest the <Say> for the gather prompt directly
+    gather.say(gatherSayAttributes, gatherPromptToSay);
+    console.log(`[${requestTimestamp}] Nested <Say voice="${gatherSayAttributes.voice}"> in Gather: "${gatherPromptToSay}"`);
+    console.log(`[${requestTimestamp}] Gather action set to: ${processResponseUrl}`);
 
-    } else { // Standard Account Logic
-      let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs."; // Default greeting
-      let useElevenLabs = false;
-      let agentVoiceId = voiceId || null; 
-
-      if (agentConfigId) {
-        try {
-          console.log(`[${requestTimestamp}] Fetching agent config ${agentConfigId} for greeting in twilio-call-webhook.`);
-          const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
-            .from('agent_configs')
-            .select('system_prompt, config_name, voice_provider, voice_id') 
-            .eq('id', agentConfigId)
-            .maybeSingle();
-
-          if (agentConfigError) {
-            console.error(`[${requestTimestamp}] Error fetching agent config in twilio-call-webhook: ${agentConfigError.message}`);
-          } else if (agentConfig) {
-            console.log(`[${requestTimestamp}] Found agent config: ${agentConfig.config_name} for twilio-call-webhook.`);
-            if (agentConfig.system_prompt && agentConfig.system_prompt.trim() !== "") { // Check if not empty
-              const promptLines = agentConfig.system_prompt.split(/[.!?]/); 
-              if (promptLines.length > 0) {
-                const introLine = promptLines[0].trim();
-                if (introLine.length > 10) { 
-                   greeting = introLine + (/[.!?]$/.test(introLine) ? "" : ".");
-                }
-              }
-            } else {
-                console.warn(`[${requestTimestamp}] Agent config system_prompt is empty. Using default greeting.`);
-            }
-            if (agentConfig.voice_provider === 'elevenlabs' && agentConfig.voice_id) {
-              useElevenLabs = true;
-              if (!agentVoiceId) agentVoiceId = agentConfig.voice_id; 
-              console.log(`[${requestTimestamp}] Using ElevenLabs voice from agent config: ${agentVoiceId}`);
-            }
-          } else {
-            console.warn(`[${requestTimestamp}] Agent config ${agentConfigId} not found for twilio-call-webhook. Using default greeting/voice.`);
-          }
-        } catch (error) {
-          console.error(`[${requestTimestamp}] Exception fetching agent config for greeting in twilio-call-webhook:`, error.message);
-        }
-      }
-      
-      const elevenLabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
-      if (useElevenLabs && !elevenLabsApiKey) {
-          console.warn(`[${requestTimestamp}] ElevenLabs selected but ELEVENLABS_API_KEY is not set. Falling back to default Twilio voice.`);
-          useElevenLabs = false;
-      } else if (useElevenLabs || (voiceId && elevenLabsApiKey)) { 
-          console.log(`[${requestTimestamp}] ELEVENLABS_API_KEY is available. Voice synthesis will attempt ElevenLabs if configured/requested.`);
-          useElevenLabs = true; 
-          if (!agentVoiceId && voiceId) agentVoiceId = voiceId; 
-      }
-
-      // Construct the final processResponseUrl with the potentially updated agentVoiceId
-      const finalProcessResponseParams: Record<string, string | undefined> = {
-        prospect_id: prospectId || undefined,
-        agent_config_id: agentConfigId || undefined,
-        user_id: userId || undefined,
-        voice_id: agentVoiceId || undefined, // Use determined agentVoiceId
-        conversation_count: '0',
-        bypass_validation: bypassValidation ? 'true' : undefined,
-        debug_mode: debugMode ? 'true' : undefined
-      };
-      if (callLogId) finalProcessResponseParams.call_log_id = callLogId;
-      // Ensure this URL is also encoded
-      const finalProcessResponseUrl = encodeXmlUrl(processResponseBaseUrl, finalProcessResponseParams);
-
-      // Ensure greeting is not an empty string before passing to <Say>
-      const greetingToSay = (greeting && greeting.trim() !== "") ? greeting : "Hello.";
-      if (useElevenLabs) {
-        response.say({ voice: 'Polly.Amy-Neural' }, greetingToSay); 
-      } else {
-        response.say(greetingToSay);
-      }
-      response.pause({ length: 1 });
-
-      // Ensure the message for createGatherWithSay is a string
-      const gatherPrompt = "How can I assist you with your real estate needs today?";
-      createGatherWithSay(
-        response,
-        finalProcessResponseUrl, // Already encoded
-        gatherPrompt, // Explicit string
-        {
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined, 
-          method: 'POST'
-        }
-      );
-      // Fallback redirect URL must also be encoded
-      response.redirect({ method: 'POST' }, finalProcessResponseUrl); 
-    }
+    // Fallback verbs *after* the <Gather> block, as siblings
+    const fallbackMessage = "I'm sorry, I didn't catch a response. We may need to try again later.";
+    response.say(fallbackMessage);
+    console.log(`[${requestTimestamp}] Fallback <Say>: "${fallbackMessage}"`);
+    response.hangup();
+    // --- End of Explicit TwiML Construction ---
 
     const twimlString = response.toString();
     console.log(`[${requestTimestamp}] Returning TwiML from twilio-call-webhook (full TwiML):`);
     console.log(twimlString); 
+    
     if (!twimlString.includes('</Gather>') && twimlString.includes('<Gather')) { 
-        console.error(`[${requestTimestamp}] ERROR: Generated TwiML might be missing a closing Gather tag! Review createGatherWithSay helper.`);
+        console.error(`[${requestTimestamp}] FINAL TwiML CHECK ERROR: Generated TwiML might be missing a closing Gather tag!`);
     }
     if (twimlString.includes("[object Object]")) {
-        console.error(`[${requestTimestamp}] ERROR: Generated TwiML contains "[object Object]". Review Say calls.`);
+        console.error(`[${requestTimestamp}] FINAL TwiML CHECK ERROR: Generated TwiML contains "[object Object]".`);
     }
-    if (twimlString.match(/action="[^"]*&[^a][^m][^p;]/) || twimlString.match(/<Redirect>[^<]*&[^a][^m][^p;]/) ) { // Basic check for unencoded &
-        console.error(`[${requestTimestamp}] ERROR: Generated TwiML likely contains unencoded ampersands in URL! Review encodeXmlUrl usage.`);
+    const unencodedAmpersandRegex = /action="[^"]*&[^a][^m][^p;][^"]*"|<Redirect[^>]*>[^<]*&[^a][^m][^p;][^<]*<\/Redirect>/i;
+    if (unencodedAmpersandRegex.test(twimlString)) { 
+        console.error(`[${requestTimestamp}] FINAL TwiML CHECK ERROR: Generated TwiML likely contains unencoded ampersands in URL attributes! Review encodeXmlUrl usage.`);
     }
 
     return new Response(twimlString, { headers: { 'Content-Type': 'text/xml', ...corsHeaders } });
