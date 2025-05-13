@@ -151,6 +151,21 @@ serve(async (req) => {
       });
     }
     
+    // Helper function to encode URL parameters properly for XML
+    const encodeXmlUrl = (baseUrl, params) => {
+      const url = new URL(baseUrl);
+      
+      // Add each parameter to the URL
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, value.toString());
+        }
+      }
+      
+      // Replace all & with &amp; for XML compatibility
+      return url.toString().replace(/&/g, '&amp;');
+    };
+    
     // For trial accounts, provide a simplified TwiML response that works better but still continues the call
     if (isTrial) {
       console.log('Trial account detected - providing modified TwiML response for trial account');
@@ -165,7 +180,22 @@ serve(async (req) => {
       response.pause({ length: 1 });
       
       // Now set up the process-response call to continue the conversation
-      const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=0${callLogId ? `&call_log_id=${callLogId}` : ''}`;
+      const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
+      const processResponseParams = {
+        prospect_id: prospectId,
+        agent_config_id: agentConfigId,
+        user_id: userId,
+        conversation_count: 0,
+        bypass_validation: bypassValidation ? 'true' : undefined, 
+        debug_mode: debugMode ? 'true' : undefined
+      };
+      
+      if (callLogId) {
+        processResponseParams.call_log_id = callLogId;
+      }
+      
+      // Create XML-encoded URL
+      const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
       // Create a gather to collect user input
       const gather = response.gather({
@@ -233,7 +263,22 @@ serve(async (req) => {
     response.pause({ length: 1 });
     
     // Now set up the process-response call to continue the conversation
-    const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=0${callLogId ? `&call_log_id=${callLogId}` : ''}`;
+    const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
+    const processResponseParams = {
+      prospect_id: prospectId,
+      agent_config_id: agentConfigId,
+      user_id: userId,
+      conversation_count: 0,
+      bypass_validation: bypassValidation ? 'true' : undefined, 
+      debug_mode: debugMode ? 'true' : undefined
+    };
+    
+    if (callLogId) {
+      processResponseParams.call_log_id = callLogId;
+    }
+    
+    // Create XML-encoded URL
+    const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
     // Create a gather to collect user input
     const gather = response.gather({
