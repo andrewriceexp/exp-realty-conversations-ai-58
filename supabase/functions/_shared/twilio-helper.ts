@@ -113,8 +113,39 @@ export const twiml = {
     
     return {
       say: function(text, options = {}) {
-        const voice = options.voice || 'alice';
-        content += `<Say voice="${voice}">${text}</Say>`;
+        if (typeof text === 'object' && text !== null) {
+          // Handle options passed as first argument
+          options = text;
+          text = options.message || '';
+          delete options.message;
+        }
+          
+        // Start the Say tag with any attributes
+        content += '<Say';
+        for (const [key, value] of Object.entries(options)) {
+          if (key !== 'voice' && key !== 'language') {
+            content += ` ${key}="${value}"`;
+          }
+        }
+        
+        // Add voice and language if provided
+        if (options.voice) {
+          content += ` voice="${options.voice}"`;
+        }
+        
+        if (options.language) {
+          content += ` language="${options.language}"`;
+        }
+        
+        // Close the opening tag and add content
+        content += '>';
+        
+        // Add the text content
+        content += text;
+        
+        // Close the Say tag
+        content += '</Say>';
+        
         return this;
       },
       play: function(url) {

@@ -186,7 +186,7 @@ export function useTwilioCall() {
     return makeCall({
       ...options,
       bypassValidation: true,
-      debugMode: true  // Enable debug mode for development calls
+      debugMode: options.debugMode ?? true  // Enable debug mode for development calls by default
     });
   };
 

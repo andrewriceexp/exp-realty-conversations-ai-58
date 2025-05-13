@@ -95,6 +95,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         prospectId,
         agentConfigId: selectedConfigId,
         userId: user.id,
+        bypassValidation,
         debugMode
       });
       
