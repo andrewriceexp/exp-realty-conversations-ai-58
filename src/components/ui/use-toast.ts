@@ -1,5 +1,8 @@
 
 // Re-export from the hook implementation
-import { useToast, toast } from "@/hooks/use-toast";
+import { useToast as useToastHook, toast as toastFunction, ToastProvider } from "@/hooks/use-toast";
 
-export { useToast, toast };
+// Re-export with names that match the expected API
+export const useToast = useToastHook;
+export const toast = toastFunction;
+export { ToastProvider };

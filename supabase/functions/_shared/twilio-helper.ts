@@ -38,20 +38,21 @@ export async function validateTwilioRequest(
   }
   console.log(`${logPrefix} Using TwilioAuthToken (last 4): ...${twilioAuthToken.slice(-4)} for validation.`);
 
-  let dataForSig = "";
   const urlObj = new URL(validationUrl);
-  const baseUrl = `${urlObj.origin}${urlObj.pathname}`;
-
+  let dataForSig = "";
+  
   if (req.method === 'POST') {
+    // IMPORTANT FIX: For POST requests, Twilio builds the signature based on the URL WITHOUT query parameters
+    // concatenated with the sorted POST parameters
+    const baseUrl = `${urlObj.origin}${urlObj.pathname}`; 
+    dataForSig = baseUrl; // Starting with URL without query params for POST requests
+    
     if (!rawBodyText) {
-        console.error(`${logPrefix} Raw POST body (rawBodyText) not provided for validation. Validation FAILED.`);
-        return false;
+      console.error(`${logPrefix} Raw POST body (rawBodyText) not provided for validation. Validation FAILED.`);
+      return false;
     }
+    
     try {
-      // For POST requests, Twilio builds the signature based on the request URL (without query parameters)
-      // concatenated with the POST parameters in alphabetical order by key
-      dataForSig = baseUrl; // Use URL without query params for POST requests
-
       const formData = new URLSearchParams(rawBodyText);
       const paramsArray: [string, string][] = [];
       formData.forEach((value, key) => {
@@ -68,14 +69,14 @@ export async function validateTwilioRequest(
 
       console.log(`${logPrefix} POST params for validation (sorted & concatenated): ${paramsArray.map(p => p[0]+p[1]).join('')}`);
       console.log(`${logPrefix} Base URL for POST validation: "${baseUrl}"`);
-
     } catch (error) {
       console.error(`${logPrefix} Error processing POST body for validation:`, error.message);
       return false;
     }
-  } else { // For GET requests, Twilio includes query parameters in the signature URL
-      dataForSig = validationUrl; // The full URL including query string
-      console.log(`${logPrefix} GET request, using full URL for validation: "${dataForSig}"`);
+  } else {
+    // For GET requests, use the full URL including query parameters
+    dataForSig = validationUrl;
+    console.log(`${logPrefix} GET request, using full URL for validation: "${dataForSig}"`);
   }
 
   console.log(`${logPrefix} Data string for signature (first 100 chars): "${dataForSig.substring(0,100)}..."`);
@@ -86,6 +87,8 @@ export async function validateTwilioRequest(
     { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']
   );
   const signatureBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(dataForSig));
+  
+  // Convert binary signature to Base64
   const calculatedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
 
   console.log(`${logPrefix} Received Twilio signature: ${twilioSignature}`);
@@ -93,11 +96,11 @@ export async function validateTwilioRequest(
 
   const isValid = twilioSignature === calculatedSignature;
   if (!isValid) {
-      console.error(`${logPrefix} Signature validation FAILED ✗. URL: ${validationUrl}, Method: ${req.method}`);
-      console.error(`${logPrefix} Data for Sig: "${dataForSig.substring(0,200)}..."`);
-      console.error(`${logPrefix} Received Sig: ${twilioSignature}, Calculated Sig: ${calculatedSignature}`);
+    console.error(`${logPrefix} Signature validation FAILED ✗. URL: ${validationUrl}, Method: ${req.method}`);
+    console.error(`${logPrefix} Data for Sig: "${dataForSig.substring(0,200)}..."`);
+    console.error(`${logPrefix} Received Sig: ${twilioSignature}, Calculated Sig: ${calculatedSignature}`);
   } else {
-      console.log(`${logPrefix} Signature validation PASSED ✓`);
+    console.log(`${logPrefix} Signature validation PASSED ✓`);
   }
 
   return isValid;

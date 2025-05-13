@@ -9,7 +9,7 @@ import { encodeXmlUrl, createErrorResponse, createDebugTwiML, createGatherWithSa
 
 serve(async (req) => {
   const requestTimestamp = new Date().toISOString();
-  const functionVersion = "FINAL_FIX_V3"; // Updated version marker for this fix
+  const functionVersion = "SIGNATURE_FIX_V4"; // Updated version marker for this fix
   console.log(`--- [${requestTimestamp}] twilio-call-webhook (${functionVersion}): INCOMING REQUEST. Method: ${req.method}, URL: ${req.url} ---`);
 
   if (req.method === 'OPTIONS') {
@@ -19,18 +19,17 @@ serve(async (req) => {
 
   let requestBodyForValidation = "";
   if (req.method === 'POST') {
-      try {
-          const clonedReqForBody = req.clone();
-          requestBodyForValidation = await clonedReqForBody.text();
-          console.log(`[${requestTimestamp}] (${functionVersion}) POST body for validation: ${requestBodyForValidation.substring(0, 100)}...`);
-      } catch (e) {
-          console.warn(`[${requestTimestamp}] (${functionVersion}) Error cloning/reading body for validation: ${e.message}`);
-      }
+    try {
+      const clonedReqForBody = req.clone();
+      requestBodyForValidation = await clonedReqForBody.text();
+      console.log(`[${requestTimestamp}] (${functionVersion}) POST body for validation: ${requestBodyForValidation.substring(0, 100)}...`);
+    } catch (e) {
+      console.warn(`[${requestTimestamp}] (${functionVersion}) Error cloning/reading body for validation: ${e.message}`);
+    }
   }
 
   try {
     const url = new URL(req.url);
-    const fullUrlForValidation = url.toString(); // URL Twilio actually called, used for GET validation
     console.log(`[${requestTimestamp}] (${functionVersion}) Parsed URL: ${url.origin + url.pathname}, Search params: ${url.search}`);
 
     const callLogId = url.searchParams.get('call_log_id');
@@ -64,14 +63,14 @@ serve(async (req) => {
     let callSid = null;
 
     if (req.method === 'POST' && requestBodyForValidation) {
-        try {
-            const formData = new URLSearchParams(requestBodyForValidation);
-            accountSid = formData.get('AccountSid') || null;
-            callSid = formData.get('CallSid') || null;
-            console.log(`[${requestTimestamp}] (${functionVersion}) Parsed form data: AccountSid=${accountSid}, CallSid=${callSid}`);
-        } catch (error) {
-            console.warn(`[${requestTimestamp}] (${functionVersion}) Could not parse POST body string as form data:`, error.message);
-        }
+      try {
+        const formData = new URLSearchParams(requestBodyForValidation);
+        accountSid = formData.get('AccountSid') || null;
+        callSid = formData.get('CallSid') || null;
+        console.log(`[${requestTimestamp}] (${functionVersion}) Parsed form data: AccountSid=${accountSid}, CallSid=${callSid}`);
+      } catch (error) {
+        console.warn(`[${requestTimestamp}] (${functionVersion}) Could not parse POST body string as form data:`, error.message);
+      }
     }
 
     let userTwilioAuthToken = null;
@@ -97,18 +96,22 @@ serve(async (req) => {
       console.warn(`[${requestTimestamp}] (${functionVersion}) No userId in webhook URL. Cannot fetch user-specific Twilio auth token.`);
     }
 
-    // For POST, Twilio signs the URL without its query string. For GET, it signs with query string.
-    // Using baseUrl (without query params) for POST signature validation 
-    const validationUrlForTwilioHelper = req.method === 'POST' ? 
-      `${url.origin}${url.pathname}` : 
-      fullUrlForValidation;
-
     if (!isStatusCallback) {
-      console.log(`[${requestTimestamp}] (${functionVersion}) Attempting to validate Twilio request. Validation URL for helper: ${validationUrlForTwilioHelper}`);
-      const isValidRequest = await validateTwilioRequest(req, validationUrlForTwilioHelper, userTwilioAuthToken, bypassValidation, requestBodyForValidation);
+      // Validation URL should be the full URL for what Twilio is requesting
+      // This is especially important for POST requests where we need the URL without query parameters
+      const fullUrlForValidation = req.url;
+      
+      console.log(`[${requestTimestamp}] (${functionVersion}) Attempting to validate Twilio request. Full validation URL: ${fullUrlForValidation}`);
+      const isValidRequest = await validateTwilioRequest(
+        req, 
+        fullUrlForValidation, 
+        userTwilioAuthToken, 
+        bypassValidation, 
+        requestBodyForValidation
+      );
 
       if (!isValidRequest) {
-        console.error(`[${requestTimestamp}] (${functionVersion}) Twilio request validation FAILED. URL: ${validationUrlForTwilioHelper}. Returning 403 Forbidden.`);
+        console.error(`[${requestTimestamp}] (${functionVersion}) Twilio request validation FAILED. URL: ${fullUrlForValidation}. Returning 403 Forbidden.`);
         return new Response("Twilio signature validation failed.", {
           status: 403,
           headers: { 'Content-Type': 'text/plain', ...corsHeaders }
@@ -223,21 +226,21 @@ serve(async (req) => {
     console.log(twimlString.substring(0, 200));
 
     if (!twimlString.includes('</Gather>') && twimlString.includes('<Gather')) {
-        console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: String missing </Gather>!`);
+      console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: String missing </Gather>!`);
     }
     if (twimlString.includes("[object Object]")) {
-        console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: String contains "[object Object]"!`);
+      console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: String contains "[object Object]"!`);
     }
     const gatherActionMatch = twimlString.match(/<Gather[^>]*action="([^"]*)"/);
     if (gatherActionMatch && gatherActionMatch[1] && gatherActionMatch[1].includes("&") && !gatherActionMatch[1].includes("&amp;")) {
-        console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: Gather action attribute contains unencoded ampersands: "${gatherActionMatch[1]}"`);
+      console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: Gather action attribute contains unencoded ampersands: "${gatherActionMatch[1]}"`);
     }
     if (twimlString.includes("<Redirect")) {
-        console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: TwiML string unexpectedly contains a Redirect tag!`);
+      console.error(`[${requestTimestamp}] (${functionVersion}) FINAL TwiML CHECK ERROR: TwiML string unexpectedly contains a Redirect tag!`);
     }
 
     return new Response(twimlString, {
-        headers: { 'Content-Type': 'text/xml', ...corsHeaders }
+      headers: { 'Content-Type': 'text/xml', ...corsHeaders }
     });
 
   } catch (error) {
@@ -254,14 +257,14 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
   try {
     let formData;
     if (rawBody && rawBody.length > 0) {
-        formData = new URLSearchParams(rawBody);
+      formData = new URLSearchParams(rawBody);
     } else {
-        try {
-            formData = await req.formData();
-        } catch (e) {
-            console.error(`[${requestTimestamp}] Failed to parse formData in handleStatusCallback: ${e.message}.`);
-            formData = new URLSearchParams();
-        }
+      try {
+        formData = await req.formData();
+      } catch (e) {
+        console.error(`[${requestTimestamp}] Failed to parse formData in handleStatusCallback: ${e.message}.`);
+        formData = new URLSearchParams();
+      }
     }
 
     const callSid = formData.get('CallSid')?.toString();
@@ -295,7 +298,7 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
         
         // Add trial information as summary, not in notes which doesn't exist
         if (isTrial) {
-            updateObj.summary = "Call made with Twilio Trial Account";
+          updateObj.summary = "Call made with Twilio Trial Account";
         }
 
         console.log(`[${requestTimestamp}] (${functionVersion}) Updating call log with:`, updateObj);
@@ -310,11 +313,11 @@ async function handleStatusCallback(req: Request, supabaseAdmin: any, requestTim
         } else {
           console.log(`[${requestTimestamp}] (${functionVersion}) Successfully updated call log ${callLog.id}`);
           if (['Completed', 'Failed', 'Busy', 'No-answer'].includes(statusCapitalized) && callLog.prospect_id) {
-              console.log(`[${requestTimestamp}] (${functionVersion}) Updating prospect ${callLog.prospect_id} status to ${statusCapitalized}`);
-              await supabaseAdmin
-                  .from('prospects')
-                  .update({ status: statusCapitalized, last_call_attempted: new Date().toISOString() })
-                  .eq('id', callLog.prospect_id);
+            console.log(`[${requestTimestamp}] (${functionVersion}) Updating prospect ${callLog.prospect_id} status to ${statusCapitalized}`);
+            await supabaseAdmin
+              .from('prospects')
+              .update({ status: statusCapitalized, last_call_attempted: new Date().toISOString() })
+              .eq('id', callLog.prospect_id);
           }
         }
       } else {
