@@ -22,13 +22,13 @@ const alertVariants = cva(
   }
 )
 
-// Extract variant types directly from the cva function to ensure they stay in sync
-type AlertVariantProps = VariantProps<typeof alertVariants>
+// Extract variant types directly from the alertVariants cva function
+type AlertVariants = VariantProps<typeof alertVariants>
 
 const Alert = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
-    variant?: AlertVariantProps["variant"]
+    variant?: AlertVariants["variant"]
   }
 >(({ className, variant, ...props }, ref) => (
   <div
