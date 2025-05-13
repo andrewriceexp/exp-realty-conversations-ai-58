@@ -31,9 +31,15 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
-    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-      console.error(`Missing required Supabase environment variables in process-response function`);
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey || !openAIApiKey) {
+      console.error(`Missing required environment variables in process-response function:
+        SUPABASE_URL: ${supabaseUrl ? 'set' : 'missing'},
+        SUPABASE_ANON_KEY: ${supabaseAnonKey ? 'set' : 'missing'},
+        SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceRoleKey ? 'set' : 'missing'},
+        OPENAI_API_KEY: ${openAIApiKey ? 'set' : 'missing'}`
+      );
       
       const response = twiml.VoiceResponse()
         .say("I'm sorry, there was an error with the configuration. Please try again later.")
@@ -88,18 +94,6 @@ serve(async (req) => {
       console.log('Twilio request validated successfully in process-response');
     }
     
-    // For testing, let's simplify the TwiML response to isolate any potential issues
-    // Return a simple message to confirm the process-response webhook is responding
-    const simpleResponse = twiml.VoiceResponse()
-      .say("Response processed successfully. This is a test message from the process-response webhook.")
-      .hangup();
-    
-    console.log('Returning simplified TwiML response for testing');
-    return new Response(simpleResponse.toString(), { 
-      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-    });
-    
-    /* TEMPORARILY COMMENTED OUT THE COMPLEX TWIML GENERATION FOR TESTING
     // Try to parse the form data from Twilio
     let userInput: string | null = null;
     let digits: string | null = null;
@@ -115,7 +109,7 @@ serve(async (req) => {
       console.error('Error parsing form data:', error);
     }
     
-    // Fetch the agent configuration - CHANGED: now using supabaseAdmin instead of supabaseClient
+    // Fetch the agent configuration - using supabaseAdmin
     console.log(`Fetching agent config with ID: ${agentConfigId}`);
     const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
       .from('agent_configs')
@@ -135,6 +129,28 @@ serve(async (req) => {
     }
     
     console.log(`Using agent config: ${agentConfig.config_name}`);
+    
+    // Fetch prospect details if we have a prospect ID
+    let prospectDetails = null;
+    if (prospectId) {
+      try {
+        console.log(`Fetching prospect details for ID: ${prospectId}`);
+        const { data: prospect, error: prospectError } = await supabaseAdmin
+          .from('prospects')
+          .select('*')
+          .eq('id', prospectId)
+          .maybeSingle();
+          
+        if (!prospectError && prospect) {
+          prospectDetails = prospect;
+          console.log(`Found prospect: ${prospect.first_name} ${prospect.last_name}`);
+        } else {
+          console.error(`Error fetching prospect or not found: ${prospectError?.message || 'Not found'}`);
+        }
+      } catch (error) {
+        console.error('Error fetching prospect details:', error);
+      }
+    }
     
     // Generate appropriate response based on user input
     let aiResponse: string;
@@ -156,25 +172,80 @@ serve(async (req) => {
         console.log(`Using speech input: ${normalizedInput}`);
       }
       
-      // TODO: In a production environment, we would call an LLM here to generate a response
-      // For now, we'll use a simple rule-based approach
-      if (normalizedInput.includes('yes') || normalizedInput.includes('sure') || 
-          normalizedInput.includes('ok') || normalizedInput.includes('interested') ||
-          normalizedInput === 'pressed 1') {
-        console.log('Detected positive response');
-        aiResponse = "Great! I'll make sure an agent follows up with you soon. Is there a specific time that would work best for you?";
-      } else if (normalizedInput.includes('no') || normalizedInput.includes('not') ||
-                normalizedInput.includes('don\'t') || normalizedInput.includes('later') ||
-                normalizedInput === 'pressed 2') {
-        console.log('Detected negative response');
-        aiResponse = "I understand. Thank you for your time. If you change your mind or have questions about real estate opportunities in the future, please don't hesitate to reach out. Have a great day!";
-      } else {
-        console.log('Detected ambiguous response');
-        aiResponse = `I heard you say ${userInput || 'something'}, but I'm not sure if that's a yes or no. Could you please say yes if you're interested in speaking with one of our agents, or no if you're not interested at this time?`;
+      // Call OpenAI to generate a response
+      try {
+        console.log('Calling OpenAI to generate a response');
+        
+        const systemPrompt = agentConfig.system_prompt || 
+          'You are an AI assistant for an eXp Realty agent making calls to potential clients. Your goal is to schedule a meeting with the agent. Be conversational, respectful, and aim to understand the prospect\'s needs.';
+        
+        // Add prospect context if available
+        let contextualPrompt = systemPrompt;
+        if (prospectDetails) {
+          contextualPrompt += `\nYou are speaking with ${prospectDetails.first_name} ${prospectDetails.last_name}`;
+          if (prospectDetails.email) {
+            contextualPrompt += `, their email is ${prospectDetails.email}`;
+          }
+          if (prospectDetails.notes) {
+            contextualPrompt += `. Notes about them: ${prospectDetails.notes}`;
+          }
+        }
+        
+        // Include conversation history if this isn't the first exchange
+        const conversationCountNum = parseInt(conversationCount);
+        if (conversationCountNum > 0) {
+          contextualPrompt += `\nThis is turn ${conversationCountNum + 1} in the conversation.`;
+        }
+        
+        // Construct user message with the normalized input
+        const userMessage = `The prospect said: "${normalizedInput}". Generate a conversational, helpful response as a real estate assistant. Keep your response concise (maximum 3-4 sentences) and end with a question if appropriate.`;
+        
+        // Make the OpenAI API call
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: agentConfig.llm_model || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: contextualPrompt },
+              { role: 'user', content: userMessage }
+            ],
+            temperature: agentConfig.temperature || 0.7,
+            max_tokens: 150, // Keep responses reasonably short for voice
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        aiResponse = data.choices[0].message.content.trim();
+        console.log(`Generated AI response: "${aiResponse}"`);
+        
+      } catch (error) {
+        console.error('Error generating AI response:', error);
+        
+        // Fallback to rule-based responses if AI fails
+        if (normalizedInput.includes('yes') || normalizedInput.includes('sure') || 
+            normalizedInput.includes('ok') || normalizedInput.includes('interested') ||
+            normalizedInput === 'pressed 1') {
+          console.log('Using fallback positive response');
+          aiResponse = "Great! I'll make sure an agent follows up with you soon. Is there a specific time that would work best for you?";
+        } else if (normalizedInput.includes('no') || normalizedInput.includes('not') ||
+                  normalizedInput.includes('don\'t') || normalizedInput.includes('later') ||
+                  normalizedInput === 'pressed 2') {
+          console.log('Using fallback negative response');
+          aiResponse = "I understand. Thank you for your time. If you change your mind or have questions about real estate opportunities in the future, please don't hesitate to reach out. Have a great day!";
+        } else {
+          console.log('Using fallback ambiguous response');
+          aiResponse = `I heard you say ${userInput || 'something'}, but I'm not sure if that's a yes or no. Could you please say yes if you're interested in speaking with one of our agents, or no if you're not interested at this time?`;
+        }
       }
     }
-    
-    console.log(`Generated AI response: "${aiResponse}"`);
     
     // Should we continue the conversation or end the call?
     const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
@@ -239,7 +310,6 @@ serve(async (req) => {
     return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
-    */
   } catch (error) {
     console.error('Error in process-response function:', error);
     

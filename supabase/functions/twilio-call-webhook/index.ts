@@ -151,25 +151,110 @@ serve(async (req) => {
       });
     }
     
-    // For trial accounts, provide a simplified TwiML response that works better
+    // For trial accounts, provide a simplified TwiML response that works better but still continues the call
     if (isTrial) {
-      console.log('Trial account detected - providing simplified TwiML response');
-      const trialResponse = createTrialAccountTwiML(
-        "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs. This is a simplified message for trial accounts. Thank you for calling."
-      );
+      console.log('Trial account detected - providing modified TwiML response for trial account');
       
-      return new Response(trialResponse, { 
+      // Create a response that will redirect to the process-response webhook
+      const response = twiml.VoiceResponse();
+      
+      // First say the trial message
+      response.say("Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
+      
+      // Add a pause to make it more natural
+      response.pause({ length: 1 });
+      
+      // Now set up the process-response call to continue the conversation
+      const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=0${callLogId ? `&call_log_id=${callLogId}` : ''}`;
+      
+      // Create a gather to collect user input
+      const gather = response.gather({
+        input: 'speech dtmf',
+        action: processResponseUrl,
+        method: 'POST',
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US'
+      });
+      
+      gather.say("How can I assist you with your real estate needs today?");
+      console.log(`Set process-response URL for trial account: ${processResponseUrl}`);
+      
+      // If gather times out, redirect to the process-response endpoint anyway
+      response.redirect({
+        method: 'POST'
+      }, processResponseUrl);
+      
+      return new Response(response.toString(), { 
         headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
       });
     }
     
-    // Return a very simple TwiML response for testing
-    const simpleResponse = twiml.VoiceResponse()
-      .say("Hello, this is the eXp Realty AI assistant. I'm here to help you with your real estate needs. This is a test call. Goodbye.")
-      .hangup();
+    // For standard accounts, do the same but without the trial message
+    console.log('Standard account - providing TwiML response');
     
-    console.log('Returning simplified TwiML response');
-    return new Response(simpleResponse.toString(), { 
+    // Create a response that will redirect to the process-response webhook
+    const response = twiml.VoiceResponse();
+    
+    // Fetch agent configuration to use the correct greeting
+    let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs.";
+    
+    try {
+      if (agentConfigId) {
+        console.log(`Fetching agent config with ID: ${agentConfigId}`);
+        const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
+          .from('agent_configs')
+          .select('*')
+          .eq('id', agentConfigId)
+          .maybeSingle();
+          
+        if (agentConfig && !agentConfigError) {
+          console.log(`Found agent config: ${agentConfig.config_name}`);
+          // Use system prompt as a base for the greeting if available
+          if (agentConfig.system_prompt) {
+            const promptLines = agentConfig.system_prompt.split('.');
+            if (promptLines.length > 0) {
+              const introLine = promptLines[0].trim();
+              if (introLine.length > 10) { // Make sure it's not just a short phrase
+                greeting = introLine + ".";
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching agent config:', error);
+    }
+    
+    // Say the greeting
+    response.say(greeting);
+    
+    // Add a pause to make it more natural
+    response.pause({ length: 1 });
+    
+    // Now set up the process-response call to continue the conversation
+    const processResponseUrl = `${url.origin}/twilio-process-response?prospect_id=${prospectId}&agent_config_id=${agentConfigId}&user_id=${userId}&conversation_count=0${callLogId ? `&call_log_id=${callLogId}` : ''}`;
+    
+    // Create a gather to collect user input
+    const gather = response.gather({
+      input: 'speech dtmf',
+      action: processResponseUrl,
+      method: 'POST',
+      timeout: 10,
+      speechTimeout: 'auto',
+      language: 'en-US'
+    });
+    
+    gather.say("How can I assist you with your real estate needs today?");
+    console.log(`Set process-response URL: ${processResponseUrl}`);
+    
+    // If gather times out, redirect to the process-response endpoint anyway
+    response.redirect({
+      method: 'POST'
+    }, processResponseUrl);
+    
+    console.log('Returning full TwiML response');
+    return new Response(response.toString(), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
   } catch (error) {
