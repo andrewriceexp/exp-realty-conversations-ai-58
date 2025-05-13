@@ -74,6 +74,7 @@ export interface CallLog {
   cost: number | null;
   started_at: string;
   ended_at: string | null;
+  updated_at: string; // Added to match the updated database schema
   
   // Added for UI convenience - populated via joins
   prospect_name?: string;
