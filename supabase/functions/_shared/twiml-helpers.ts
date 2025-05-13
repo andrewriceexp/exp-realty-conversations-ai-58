@@ -12,7 +12,7 @@ export function encodeXmlUrl(baseUrl: string, params: Record<string, string | un
   const queryParams = new URLSearchParams();
   for (const key in params) {
     if (params[key] !== undefined) {
-      queryParams.append(key, params[key]!); 
+      queryParams.append(key, params[key]!);
     }
   }
   const queryString = queryParams.toString();
@@ -29,30 +29,30 @@ export function encodeXmlUrl(baseUrl: string, params: Record<string, string | un
  */
 export function createGatherWithSay(
   responseInstance: any, // Should be an instance of new twiml.VoiceResponse()
-  action: string, 
+  action: string, // Expect this to be ALREADY XML-encoded by encodeXmlUrl
   sayText: string,
-  options: Record<string, any> = {} 
+  options: Record<string, any> = {}
 ): void {
   const gatherAttributes: Record<string, any> = {
-    input: 'speech dtmf', 
-    method: 'POST',       
-    actionOnEmptyResult: true, 
-    ...options,         
-    action: action,     // Action URL is mandatory and should be pre-encoded by encodeXmlUrl
+    input: 'speech dtmf',
+    method: 'POST',
+    actionOnEmptyResult: true,
+    ...options,
+    action: action, // Action URL is mandatory and should be pre-encoded
   };
 
   // console.log(`[twiml-helpers] createGatherWithSay: actionUrl="${action}", sayText="${sayText}", gatherAttributes="${JSON.stringify(gatherAttributes)}"`);
 
-  responseInstance.gather(gatherAttributes, (gatherNode: any) => {
+  responseInstance.gather(gatherAttributes, (gatherNode: any) => { // gatherNode is the same responseInstance
     const textToSay = (typeof sayText === 'string' && sayText.trim() !== "") ? sayText.trim() : "How can I assist you today?";
-  
+
     const sayAttributesInGather: Record<string, string> = {};
     if (options.voice) {
       sayAttributesInGather.voice = options.voice;
     } else {
-      sayAttributesInGather.voice = 'alice'; 
+      sayAttributesInGather.voice = 'alice';
     }
-    
+
     gatherNode.say(sayAttributesInGather, textToSay);
     // console.log(`[twiml-helpers] createGatherWithSay: Nested <Say voice="${sayAttributesInGather.voice}">: "${textToSay}"`);
   });
@@ -64,10 +64,10 @@ export function createGatherWithSay(
 export function createErrorResponse(message: string): string {
   const response = new twiml.VoiceResponse(); // FIXED: Added 'new' keyword
   const messageToSay = (message && message.trim() !== "") ? message.trim() : "An application error occurred.";
-  response.say(messageToSay); 
-  response.hangup(); 
+  response.say(messageToSay);
+  response.hangup();
   const twimlString = response.toString();
-  console.log(`[twiml-helpers] createErrorResponse: "${twimlString}"`);
+  // console.log(`[twiml-helpers] createErrorResponse: "${twimlString}"`);
   return twimlString;
 }
 
@@ -76,16 +76,16 @@ export function createErrorResponse(message: string): string {
  */
 export function createDebugTwiML(info: Record<string, any>): string {
   const response = new twiml.VoiceResponse(); // FIXED: Added 'new' keyword
-  response.say("Debug mode active."); 
+  response.say("Debug mode active.");
   for (const key in info) {
     if (info[key] !== undefined && info[key] !== null) {
       const valueStr = typeof info[key] === 'object' ? JSON.stringify(info[key]) : info[key].toString();
       response.say(`${key} is ${valueStr}`);
-      response.pause({length: 1}); 
+      response.pause({length: 1});
     }
   }
   response.hangup();
   const twimlString = response.toString();
-  console.log(`[twiml-helpers] createDebugTwiML: "${twimlString}"`);
+  // console.log(`[twiml-helpers] createDebugTwiML: "${twimlString}"`);
   return twimlString;
 }
