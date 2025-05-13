@@ -326,7 +326,7 @@ serve(async (req) => {
         
         // Use Polly neural voice for higher quality speech
         response.say({
-          voice: 'Polly.Amy-Neural', 
+          voice: 'Polly.Amy-Neural'
         }, aiResponse);
         
       } catch (error) {

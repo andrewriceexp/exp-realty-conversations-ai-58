@@ -1,75 +1,59 @@
 
-import { twiml } from "./twilio-helper.ts";
+import { twiml } from './twilio-helper.ts';
 
 /**
- * Encodes a URL with parameters for safe use in TwiML
- * This ensures that the '&' characters in the URL are properly encoded as '&amp;'
- * @param baseUrl The base URL without query parameters
- * @param params An object containing the query parameters to add
- * @returns A properly encoded URL string safe for use in XML/TwiML
+ * XML encodes URL parameters for Twilio
  */
-export function encodeXmlUrl(baseUrl: string, params: Record<string, string | number | boolean | undefined>) {
+export function encodeXmlUrl(baseUrl: string, params: Record<string, string | undefined>) {
   const url = new URL(baseUrl);
   
-  // Add each parameter to the URL if it's defined
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, value.toString());
+  // Add parameters that are not undefined
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) {
+      url.searchParams.append(key, value);
     }
-  }
-  
-  // Replace all & with &amp; for XML compatibility
-  return url.toString().replace(/&/g, '&amp;');
-}
-
-/**
- * Creates a properly structured TwiML <Gather> with <Say> for collecting speech input
- * @param response The TwiML voice response to build upon
- * @param actionUrl The URL to post gathered input to (already XML-encoded)
- * @param message The text to speak in the gather
- * @param options Additional gather options
- * @returns The modified TwiML response
- */
-export function createGatherWithSay(
-  response: any,
-  actionUrl: string,
-  message: string,
-  options: {
-    timeout?: number;
-    speechTimeout?: string;
-    language?: string;
-    voice?: string;
-    method?: string;
-  } = {}
-) {
-  const gather = response.gather({
-    input: 'speech dtmf',
-    action: actionUrl,
-    method: options.method || 'POST',
-    timeout: options.timeout || 10,
-    speechTimeout: options.speechTimeout || 'auto',
-    language: options.language || 'en-US'
   });
   
-  // Add the message inside the gather
-  if (options.voice) {
-    gather.say({ voice: options.voice }, message);
-  } else {
-    gather.say(message);
-  }
-  
-  return response;
+  return url.toString();
 }
 
 /**
- * Creates a standard error response when something goes wrong
- * @param errorMessage The error message to communicate to the caller
- * @returns TwiML string ready to be included in a Response
+ * Creates a properly structured Gather with Say element
+ * This function ensures proper nesting of Say within Gather
  */
-export function createErrorResponse(errorMessage = "I'm sorry, there was an error processing this call. Please try again later.") {
-  const response = twiml.VoiceResponse();
-  response.say(errorMessage);
-  response.hangup();
+export function createGatherWithSay(
+  response: any, 
+  action: string, 
+  sayText: string,
+  options: Record<string, any> = {}
+) {
+  // Create Gather with specified options
+  const gather = response.gather({
+    input: 'speech dtmf',
+    action: action,
+    ...options
+  });
   
+  // Add the Say element inside Gather with text as string
+  // Make sure the text is definitely a string
+  const textToSay = typeof sayText === 'string' ? sayText : 'How can I assist you today?';
+  
+  if (options.voice) {
+    gather.say({ voice: options.voice }, textToSay);
+  } else {
+    gather.say(textToSay);
+  }
+  
+  // Return the gather element in case it's needed
+  return gather;
+}
+
+/**
+ * Helper to create error response TwiML
+ */
+export function createErrorResponse(message: string): string {
+  const response = twiml.VoiceResponse();
+  response.say(message);
+  response.hangup();
   return response.toString();
 }

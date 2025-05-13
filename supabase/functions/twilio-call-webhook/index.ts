@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -160,7 +161,7 @@ serve(async (req) => {
         agent_config_id: agentConfigId,
         user_id: userId,
         voice_id: voiceId,
-        conversation_count: 0,
+        conversation_count: '0',
         bypass_validation: bypassValidation ? 'true' : undefined, 
         debug_mode: debugMode ? 'true' : undefined
       };
@@ -293,7 +294,7 @@ serve(async (req) => {
       agent_config_id: agentConfigId,
       user_id: userId,
       voice_id: agentVoiceId,
-      conversation_count: 0,
+      conversation_count: '0',
       bypass_validation: bypassValidation ? 'true' : undefined, 
       debug_mode: debugMode ? 'true' : undefined
     };
