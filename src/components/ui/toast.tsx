@@ -1,3 +1,4 @@
+
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -30,6 +31,8 @@ const toastVariants = cva(
         default: "border bg-background text-foreground",
         destructive:
           "destructive group border-destructive bg-destructive text-destructive-foreground",
+        warning:
+          "border-yellow-500/30 bg-yellow-50 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-900/30 dark:text-yellow-500",
       },
     },
     defaultVariants: {
@@ -38,10 +41,13 @@ const toastVariants = cva(
   }
 )
 
+// Define the variant type explicitly to include all variants
+type ToastVariant = "default" | "destructive" | "warning"
+
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants>
+    { variant?: ToastVariant }
 >(({ className, variant, ...props }, ref) => {
   return (
     <ToastPrimitives.Root
