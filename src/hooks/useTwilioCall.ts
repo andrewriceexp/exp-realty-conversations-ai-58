@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
@@ -31,6 +31,16 @@ export function useTwilioCall() {
   const [callInProgress, setCallInProgress] = useState(false);
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
   const [currentCallLogId, setCurrentCallLogId] = useState<string | null>(null);
+  const [statusCheckInterval, setStatusCheckInterval] = useState<number | null>(null);
+
+  // Cleanup function for any active intervals
+  useEffect(() => {
+    return () => {
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+      }
+    };
+  }, [statusCheckInterval]);
 
   /**
    * Make a call to a prospect using Twilio
@@ -108,6 +118,15 @@ export function useTwilioCall() {
         setCurrentCallSid(data.callSid || null);
         setCurrentCallLogId(data.callLogId || null);
         
+        // Set up automatic status checking
+        setupStatusChecking(data.callSid, options.userId);
+        
+        toast({
+          title: "Call initiated",
+          description: "Your ElevenLabs AI agent is now calling the prospect.",
+          variant: "success"
+        });
+        
         return {
           success: true,
           message: data.message || 'ElevenLabs call initiated successfully',
@@ -150,6 +169,15 @@ export function useTwilioCall() {
         setCurrentCallSid(data.callSid || null);
         setCurrentCallLogId(data.callLogId || null);
         
+        // Set up automatic status checking
+        setupStatusChecking(data.callSid, options.userId);
+        
+        toast({
+          title: "Call initiated",
+          description: "Calling the prospect now. You can monitor the call status here.",
+          variant: "success"
+        });
+        
         return {
           success: true,
           message: data.message || 'Call initiated successfully',
@@ -177,13 +205,14 @@ export function useTwilioCall() {
         } else if (error.message.includes('timed out')) {
           errorCode = 'REQUEST_TIMEOUT';
           errorMessage = 'The call request timed out. Please check your internet connection and try again.';
-          toast({
-            variant: "destructive",
-            title: "Request Timeout",
-            description: "The call request timed out. Please check your internet connection and try again."
-          });
         }
       }
+      
+      toast({
+        variant: "destructive",
+        title: "Call Failed",
+        description: errorMessage
+      });
       
       return {
         success: false,
@@ -195,6 +224,61 @@ export function useTwilioCall() {
       setIsLoading(false);
     }
   };
+  
+  /**
+   * Sets up an interval to check call status periodically
+   */
+  const setupStatusChecking = useCallback((callSid: string, userId?: string) => {
+    // Clear any existing interval
+    if (statusCheckInterval) {
+      clearInterval(statusCheckInterval);
+    }
+    
+    // Set up a new interval to check status every 5 seconds
+    const intervalId = window.setInterval(async () => {
+      try {
+        const statusResult = await verifyCallStatus(callSid, userId);
+        if (!statusResult.success || 
+            !statusResult.data?.call_status || 
+            ['completed', 'failed', 'canceled', 'busy', 'no-answer'].includes(statusResult.data.call_status.toLowerCase())) {
+          // Call has ended or failed, clear the interval
+          clearInterval(intervalId);
+          setStatusCheckInterval(null);
+          
+          // Update the UI state
+          setCallInProgress(false);
+          setCurrentCallSid(null);
+          
+          // Show a toast with the result
+          if (statusResult.success) {
+            const status = statusResult.data.call_status.toLowerCase();
+            if (status === 'completed') {
+              toast({
+                title: "Call completed",
+                description: "The call has ended successfully.",
+                variant: "success"
+              });
+            } else {
+              toast({
+                title: `Call ${status}`,
+                description: status === 'failed' ? 
+                  "There was a problem with the call. Please check the logs for details." : 
+                  `The call has ended with status: ${status}`,
+                variant: status === 'failed' ? "destructive" : "warning"
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking call status:", error);
+      }
+    }, 5000);
+    
+    // Save the interval ID for cleanup later
+    setStatusCheckInterval(intervalId);
+    
+    return intervalId;
+  }, [statusCheckInterval]);
   
   /**
    * Make a development call (bypassing validation) to a prospect using Twilio
@@ -308,6 +392,18 @@ export function useTwilioCall() {
       setCallInProgress(false);
       setCurrentCallSid(null);
       
+      // Clear any status checking interval
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+        setStatusCheckInterval(null);
+      }
+      
+      toast({
+        title: "Call ended",
+        description: "You've ended the call successfully.",
+        variant: "success"
+      });
+      
       return {
         success: true,
         message: 'Call ended successfully',
@@ -315,6 +411,12 @@ export function useTwilioCall() {
       };
     } catch (error: any) {
       console.error('Error ending call:', error);
+      
+      toast({
+        variant: "destructive",
+        title: "Error Ending Call",
+        description: error.message || "Failed to end the call. It may have already ended."
+      });
       
       return {
         success: false,

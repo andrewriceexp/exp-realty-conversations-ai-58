@@ -9,6 +9,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import PreLaunchChecklist from '@/components/PreLaunchChecklist';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ActiveCallsCard } from '@/components/dashboard/ActiveCallsCard';
 
 // Dashboard component to show overview of the system
 const Dashboard = () => {
@@ -169,6 +171,9 @@ const Dashboard = () => {
             />
           </div>
 
+          {/* Active Calls Section */}
+          <ActiveCallsCard />
+
           {/* Recent Activity */}
           <Card>
             <CardHeader>
@@ -177,7 +182,11 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="text-center py-4">Loading recent calls...</div>
+                <div className="space-y-3">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
               ) : recentCalls.length > 0 ? (
                 <div className="divide-y">
                   {recentCalls.map((call) => (
@@ -274,9 +283,11 @@ const StatsCard = ({
         <div className="flex justify-between items-start">
           <div>
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold mt-1">
-              {loading ? '—' : value}
-            </p>
+            {loading ? (
+              <Skeleton className="h-8 w-16 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1">{value}</p>
+            )}
             <p className="text-xs text-muted-foreground mt-1">{description}</p>
           </div>
           <div className="p-2 bg-muted rounded-md">
@@ -329,6 +340,7 @@ const CallStatusBadge = ({ status }: { status: string }) => {
       color = "bg-yellow-100 text-yellow-800";
       break;
     case "initiated":
+    case "in-progress":
     case "ringing":
       color = "bg-blue-100 text-blue-800";
       break;
