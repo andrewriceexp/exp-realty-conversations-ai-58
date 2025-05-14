@@ -140,7 +140,7 @@ interface Toast {
   onOpenChange: (open: boolean) => void;
 }
 
-function useToast() {
+export function useToast() {
   const [state, setState] = React.useState<State>(memoryState);
 
   React.useEffect(() => {
@@ -188,10 +188,26 @@ function useToast() {
   };
 }
 
-export { useToast, Toast, type ToasterToast, type ToastActionElement };
+export { type Toast, type ToasterToast, type ToastActionElement };
 
-// Export standalone functions
+// Create a standalone toast function
 export const toast = (props: ToastProps) => {
-  const { toast: toastFunction } = { toast: useToast().toast };
-  return toastFunction(props);
+  const id = generateId();
+  const toastData = {
+    ...props,
+    id,
+    open: true,
+    onOpenChange: (open: boolean) => {
+      if (!open) {
+        dispatch({ type: actionTypes.DISMISS_TOAST, id });
+      }
+    },
+  };
+  
+  dispatch({
+    type: actionTypes.ADD_TOAST,
+    toast: toastData,
+  });
+
+  return id;
 };

@@ -1,22 +1,11 @@
 
+// Re-export from the hooks implementation
 import {
-  Toast,
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast";
+  useToast,
+  toast,
+  type Toast,
+  type ToastProps,
+  type ToastActionElement,
+} from "./use-toast.tsx";
 
-import {
-  useToast as useToastInternal
-} from "@/components/ui/use-toast";
-
-// Re-export types
-export type { Toast, ToastProps, ToastActionElement };
-
-// Proxy the useToast hook
-export const useToast = useToastInternal;
-
-// Export the toast function
-export const toast = (props: ToastProps) => {
-  const { toast: internalToast } = useToastInternal();
-  return internalToast(props);
-};
+export { useToast, toast, type Toast, type ToastProps, type ToastActionElement };
