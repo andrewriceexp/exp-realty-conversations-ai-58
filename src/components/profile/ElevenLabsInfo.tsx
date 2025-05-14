@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { AlertCircle, Check, ExternalLink, Key, Loader2, BookOpen } from 'lucide-react';
+import { withTimeout } from '@/lib/utils';
 
 const ElevenLabsInfo = () => {
   const [apiKey, setApiKey] = useState('');
@@ -54,13 +55,22 @@ const ElevenLabsInfo = () => {
       // Verify the API key before saving
       try {
         setVerificationStatus('idle');
-        const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+        
+        const controller = new AbortController();
+        const verificationPromise = fetch("https://api.elevenlabs.io/v1/voices", {
           method: "GET",
           headers: {
             "xi-api-key": apiKey,
             "Content-Type": "application/json",
           },
+          signal: controller.signal
         });
+        
+        const response = await withTimeout(
+          verificationPromise,
+          10000,
+          "ElevenLabs API key verification timed out"
+        );
         
         if (!response.ok) {
           setVerificationStatus('error');
@@ -166,14 +176,22 @@ const ElevenLabsInfo = () => {
     setVerificationStatus('idle');
 
     try {
-      // Simple validation by trying to fetch voices
-      const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+      // Simple validation by trying to fetch voices with a timeout
+      const controller = new AbortController();
+      const verifyPromise = fetch("https://api.elevenlabs.io/v1/voices", {
         method: "GET",
         headers: {
           "xi-api-key": apiKey,
           "Content-Type": "application/json",
         },
+        signal: controller.signal
       });
+      
+      const response = await withTimeout(
+        verifyPromise, 
+        10000, 
+        "ElevenLabs API key verification timed out"
+      );
 
       if (!response.ok) {
         setVerificationStatus('error');
@@ -368,4 +386,3 @@ const ElevenLabsInfo = () => {
 };
 
 export default ElevenLabsInfo;
-

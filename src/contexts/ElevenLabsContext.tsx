@@ -2,7 +2,8 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
+import { withTimeout } from '@/lib/utils';
 
 interface ElevenLabsContextType {
   getSignedUrl: (agentId?: string) => Promise<string | null>;
@@ -86,8 +87,8 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       console.log("User authenticated:", !!user);
       console.log("ElevenLabs API key configured:", !!profile?.elevenlabs_api_key);
       
-      // Call the Supabase Edge Function that will generate a signed URL
-      const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
+      // Call the Supabase Edge Function that will generate a signed URL with a timeout
+      const functionPromise = supabase.functions.invoke('elevenlabs-signed-url', {
         body: { 
           agentId: agentIdToUse 
         },
@@ -95,6 +96,14 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${session.access_token}`,
         }
       });
+      
+      const result = await withTimeout(
+        functionPromise, 
+        15000, 
+        'Request to elevenlabs-signed-url timed out'
+      );
+      
+      const { data, error: funcError } = result;
 
       if (funcError) {
         console.error('ElevenLabs API error from function:', funcError);

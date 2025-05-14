@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/button';
 import MainLayout from '@/components/MainLayout';
 import ProfileForm from '@/components/profile/ProfileForm';
 import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
+import { toast } from '@/hooks/use-toast';
 
 const ProfileSetup = () => {
   const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
-  const { isReady: isElevenLabsReady, hasApiKey } = useElevenLabsAuth();
+  const { isReady: isElevenLabsReady, hasApiKey, validateApiKey } = useElevenLabsAuth();
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false);
   
   useEffect(() => {
     if (profile) {
@@ -22,10 +24,29 @@ const ProfileSetup = () => {
       console.log("Profile has ElevenLabs API key:", !!profile.elevenlabs_api_key);
       
       if (!!profile.elevenlabs_api_key && !showSuccessBanner) {
-        setShowSuccessBanner(true);
+        // Validate API key when profile loads
+        validateElevenLabsApiKey();
       }
     }
-  }, [profile, showSuccessBanner]);
+  }, [profile]);
+
+  const validateElevenLabsApiKey = async () => {
+    if (!profile?.elevenlabs_api_key) return;
+    
+    setIsValidatingApiKey(true);
+    const isValid = await validateApiKey();
+    setIsValidatingApiKey(false);
+    
+    if (isValid) {
+      setShowSuccessBanner(true);
+    } else {
+      toast({
+        title: "API Key Validation Failed",
+        description: "Your ElevenLabs API key could not be validated. Please update it in your profile.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleNavigateToDashboard = () => {
     navigate('/dashboard');
@@ -67,6 +88,16 @@ const ProfileSetup = () => {
                   Test Now <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {hasApiKey && isValidatingApiKey && (
+          <Alert className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Validating API Key</AlertTitle>
+            <AlertDescription>
+              We're verifying your ElevenLabs API key to ensure it's working properly.
             </AlertDescription>
           </Alert>
         )}
