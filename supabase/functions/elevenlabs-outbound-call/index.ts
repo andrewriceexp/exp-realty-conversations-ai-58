@@ -20,7 +20,9 @@ serve(async (req) => {
   }
   
   try {
-    const { agent_id, to_number, user_id, dynamic_variables, conversation_config_override } = await req.json() as OutboundCallRequest;
+    // Parse and validate request body
+    const requestBody = await req.json();
+    const { agent_id, to_number, user_id, dynamic_variables, conversation_config_override } = requestBody as OutboundCallRequest;
 
     if (!agent_id) {
       throw new Error("Agent ID is required");
@@ -34,11 +36,16 @@ serve(async (req) => {
       throw new Error("User ID is required");
     }
 
-    console.log(`Making outbound call to ${to_number} with agent ${agent_id}`);
+    console.log(`Making outbound call to ${to_number.substring(0, 6)}xxxx with agent ${agent_id}`);
 
     // Initialize Supabase client with service role key
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseAdminKey) {
+      throw new Error("Missing Supabase configuration. Please check your environment variables.");
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseAdminKey);
     
     // Get user's ElevenLabs API key from profile
@@ -51,11 +58,11 @@ serve(async (req) => {
       
     if (profileError || !profile) {
       console.error("Error fetching user profile:", profileError);
-      throw new Error("User profile not found");
+      throw new Error("User profile not found. Please ensure your account is properly set up.");
     }
     
     if (!profile.elevenlabs_api_key) {
-      throw new Error("ElevenLabs API key not configured in your profile");
+      throw new Error("ElevenLabs API key not configured in your profile. Please add it in your profile settings.");
     }
     
     // Use the ElevenLabs Conversational AI API to make the outbound call
@@ -78,21 +85,27 @@ serve(async (req) => {
       })
     });
     
+    // Handle HTTP errors from ElevenLabs API
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("ElevenLabs API error:", errorText);
+      let errorMessage = `ElevenLabs API error: ${response.status} ${response.statusText}`;
       try {
-        const errorJson = JSON.parse(errorText);
-        throw new Error(`ElevenLabs API error: ${errorJson.message || errorJson.detail || response.statusText}`);
+        const errorJson = await response.json();
+        errorMessage = `ElevenLabs API error: ${errorJson.message || errorJson.detail || response.statusText}`;
       } catch (e) {
-        throw new Error(`ElevenLabs API error: ${errorText || response.statusText}`);
+        // If parsing JSON fails, use text instead
+        const errorText = await response.text();
+        if (errorText) {
+          errorMessage = `ElevenLabs API error: ${errorText}`;
+        }
       }
+      
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
     console.log("ElevenLabs API response:", data);
     
-    // Store the call in our call logs - check if fields exist first
+    // Store the call in our call logs
     let callLogId = null;
     try {
       const { data: callLog, error: callLogError } = await supabase
@@ -106,12 +119,13 @@ serve(async (req) => {
           started_at: new Date().toISOString()
         })
         .select('id')
-        .maybeSingle();
+        .single();
         
       if (callLogError) {
         console.error("Error creating call log:", callLogError);
       } else if (callLog) {
         callLogId = callLog.id;
+        console.log(`Created call log with ID: ${callLogId}`);
       }
     } catch (error) {
       console.error("Error creating call log:", error);
@@ -121,7 +135,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Outbound call initiated",
+        message: "Outbound call initiated successfully",
         callSid: data.callSid,
         callLogId: callLogId
       }),
@@ -134,10 +148,19 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in elevenlabs-outbound-call:", error);
     
+    // Get more specific error type if possible
+    let errorCode = "GENERAL_ERROR";
+    if (error.message?.includes("ElevenLabs API key")) {
+      errorCode = "ELEVENLABS_API_KEY_MISSING";
+    } else if (error.message?.includes("timed out")) {
+      errorCode = "REQUEST_TIMEOUT";
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
-        message: error.message || "An error occurred while making the outbound call"
+        message: error.message || "An error occurred while making the outbound call",
+        code: errorCode
       }),
       {
         status: 200, // Return 200 instead of error code to prevent client errors

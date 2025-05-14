@@ -1,248 +1,236 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
-console.log(`Twilio WebSocket Media Stream Handler running.`);
+console.log(`Function "twilio-media-stream" up and running!`);
 
 serve(async (req) => {
-  // We need to check if this is a WebSocket upgrade request
-  const upgradeHeader = req.headers.get("upgrade") || "";
-
-  if (upgradeHeader.toLowerCase() !== "websocket") {
-    return new Response("Expected WebSocket connection", { 
-      status: 400,
-      headers: corsHeaders
-    });
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
+  // Initialize error variable to track issues
+  let error = null;
+  
   try {
-    // Initialize WebSocket connection
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    
-    let streamSid: string | null = null;
-    let elevenlabsWs: WebSocket | null = null;
-    let agentId: string | null = null;
     const url = new URL(req.url);
-    
-    // Extract parameters from the URL
-    agentId = url.searchParams.get("agent_id") || "6Optf6WRTzp3rEyj2aiL"; // Default agent ID
+    const agentId = url.searchParams.get("agent_id");
     const voiceId = url.searchParams.get("voice_id");
-    const callLogId = url.searchParams.get("call_log_id");
     const userId = url.searchParams.get("user_id");
-    const debugMode = url.searchParams.get("debug") === "true";
-
-    // Log connection details
-    console.log(`New WebSocket connection with params:
+    const callLogId = url.searchParams.get("call_log_id");
+    
+    if (!agentId) {
+      throw new Error("Agent ID is required");
+    }
+    
+    console.log(`Initializing media stream with:
       Agent ID: ${agentId}
       Voice ID: ${voiceId || 'not specified'}
-      Call Log ID: ${callLogId || 'not specified'}
       User ID: ${userId || 'not specified'}
-      Debug Mode: ${debugMode ? 'enabled' : 'disabled'}
+      Call Log ID: ${callLogId || 'not specified'}
     `);
-
-    // Handle WebSocket connection from Twilio
-    socket.onopen = () => {
-      console.log("[Twilio] WebSocket connection opened");
+    
+    // Prepare for WebSocket upgrade
+    const { socket: clientSocket, response } = Deno.upgradeWebSocket(req);
+    
+    // Initialize Supabase client for database operations
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // If we have a userId, fetch the ElevenLabs API key
+    let elevenlabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    
+    if (userId) {
+      console.log(`Fetching ElevenLabs API key for user: ${userId}`);
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('elevenlabs_api_key')
+        .eq('id', userId)
+        .single();
+        
+      if (profileError) {
+        console.error("Error fetching user profile:", profileError);
+      } else if (profile && profile.elevenlabs_api_key) {
+        elevenlabsApiKey = profile.elevenlabs_api_key;
+        console.log("Successfully retrieved user's ElevenLabs API key");
+      } else {
+        console.warn("User doesn't have an ElevenLabs API key configured");
+      }
+    }
+    
+    if (!elevenlabsApiKey) {
+      throw new Error("ElevenLabs API key not available. Please add it to your profile or environment variables.");
+    }
+    
+    // Prepare WebSocket URL for ElevenLabs
+    const wsParams = new URLSearchParams();
+    wsParams.append("agent_id", agentId);
+    
+    if (voiceId) {
+      wsParams.append("voice_id", voiceId);
+    }
+    
+    const elevenlabsWsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?${wsParams.toString()}`;
+    console.log(`Connecting to ElevenLabs WebSocket: ${elevenlabsWsUrl}`);
+    
+    // Connect to ElevenLabs WebSocket
+    const elevenlabsWebSocket = new WebSocket(elevenlabsWsUrl);
+    
+    // Set authorization header
+    elevenlabsWebSocket.onopen = () => {
+      console.log("Connected to ElevenLabs WebSocket");
+      
+      // Send authorization
+      const authMessage = JSON.stringify({
+        "xi-api-key": elevenlabsApiKey
+      });
+      
+      elevenlabsWebSocket.send(authMessage);
+      console.log("Sent authorization to ElevenLabs");
     };
-
-    socket.onmessage = async (event) => {
+    
+    // Handle messages from Twilio
+    clientSocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.event === "start") {
+          console.log(`Twilio stream started with ID: ${message.start.streamSid}`);
+        } else if (message.event === "media") {
+          // Forward audio from Twilio to ElevenLabs
+          if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
+            const audioChunk = {
+              user_audio_chunk: message.media.payload
+            };
+            elevenlabsWebSocket.send(JSON.stringify(audioChunk));
+          }
+        } else if (message.event === "stop") {
+          console.log("Twilio stream stopped");
+          elevenlabsWebSocket.close();
+        }
+      } catch (err) {
+        console.error("Error handling message from Twilio:", err);
+      }
+    };
+    
+    // Handle messages from ElevenLabs
+    elevenlabsWebSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         
-        // Handle Twilio events
-        switch (data.event) {
-          case "start":
-            // Store Stream SID when stream starts
-            streamSid = data.start.streamSid;
-            console.log(`[Twilio] Stream started with ID: ${streamSid}`);
-            
-            try {
-              // Build the WebSocket URL with query parameters
-              let wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${agentId}`;
-              
-              if (voiceId) {
-                wsUrl += `&voice_id=${voiceId}`;
-              }
-              
-              console.log(`[ElevenLabs] Connecting to WebSocket at: ${wsUrl.substring(0, wsUrl.indexOf('?') + 20)}...`);
-              
-              // Connect to ElevenLabs WebSocket
-              elevenlabsWs = new WebSocket(wsUrl);
-              
-              // Handle ElevenLabs WebSocket events
-              elevenlabsWs.onopen = () => {
-                console.log("[ElevenLabs] Connected to Conversational AI service");
-              };
-              
-              elevenlabsWs.onmessage = (elevenlabsEvent) => {
-                try {
-                  const message = JSON.parse(elevenlabsEvent.data);
-                  handleElevenLabsMessage(message, socket);
-                } catch (error) {
-                  console.error("[ElevenLabs] Error parsing message:", error);
-                }
-              };
-              
-              elevenlabsWs.onerror = (error) => {
-                console.error("[ElevenLabs] WebSocket error:", error);
-                // Send an error message back to Twilio
-                if (streamSid) {
-                  const errorMessage = {
-                    event: "mark",
-                    streamSid,
-                    mark: { name: "error", value: "elevenlabs_connection_error" }
-                  };
-                  socket.send(JSON.stringify(errorMessage));
-                }
-              };
-              
-              elevenlabsWs.onclose = (closeEvent) => {
-                console.log(`[ElevenLabs] Disconnected from Conversational AI service. Code: ${closeEvent.code}, Reason: ${closeEvent.reason}`);
-              };
-            } catch (error) {
-              console.error("[ElevenLabs] Error connecting to service:", error);
-              // Send an error message back to Twilio
-              if (streamSid) {
-                const errorMessage = {
-                  event: "mark",
-                  streamSid,
-                  mark: { name: "error", value: "elevenlabs_connection_failed" }
-                };
-                socket.send(JSON.stringify(errorMessage));
-              }
+        if (data.type === "audio" && data.audio_event?.audio_base_64) {
+          const audioData = {
+            event: "media",
+            media: {
+              payload: data.audio_event.audio_base_64
             }
-            break;
-            
-          case "media":
-            // Forward audio from Twilio to ElevenLabs
-            if (elevenlabsWs && elevenlabsWs.readyState === WebSocket.OPEN) {
-              const audioMessage = {
-                user_audio_chunk: data.media.payload // Already base64 encoded
-              };
-              elevenlabsWs.send(JSON.stringify(audioMessage));
-              
-              if (debugMode) {
-                console.log("[Twilio] Received audio chunk of size: " + 
-                  data.media.payload.length + " bytes");
-              }
-            }
-            break;
-            
-          case "stop":
-            // Close ElevenLabs WebSocket when Twilio stream stops
-            if (elevenlabsWs) {
-              console.log(`[Twilio] Stream ${streamSid} stopped. Closing ElevenLabs connection.`);
-              elevenlabsWs.close();
-              elevenlabsWs = null;
-            }
-            streamSid = null;
-            break;
-            
-          default:
-            if (debugMode) {
-              console.log(`[Twilio] Received unhandled event: ${data.event}`);
-            }
-        }
-      } catch (error) {
-        console.error("[Twilio] Error processing message:", error);
-      }
-    };
-
-    socket.onclose = (closeEvent) => {
-      console.log(`[Twilio] WebSocket connection closed. Code: ${closeEvent.code}, Reason: ${closeEvent.reason}`);
-      if (elevenlabsWs) {
-        elevenlabsWs.close();
-        elevenlabsWs = null;
-      }
-    };
-
-    socket.onerror = (error) => {
-      console.error("[Twilio] WebSocket error:", error);
-      if (elevenlabsWs) {
-        elevenlabsWs.close();
-        elevenlabsWs = null;
-      }
-    };
-
-    // Function to handle messages from ElevenLabs
-    function handleElevenLabsMessage(message: any, twilioSocket: WebSocket) {
-      if (debugMode && message.type !== 'ping') {
-        console.log(`[ElevenLabs] Received message type: ${message.type}`);
-      }
-      
-      switch (message.type) {
-        case "conversation_initiation_metadata":
-          console.info("[ElevenLabs] Received conversation initiation metadata");
-          break;
-          
-        case "audio":
-          if (message.audio_event?.audio_base_64) {
-            // Send audio data to Twilio
-            const audioData = {
-              event: "media",
-              streamSid,
-              media: {
-                payload: message.audio_event.audio_base_64,
-              },
-            };
-            twilioSocket.send(JSON.stringify(audioData));
-            
-            if (debugMode) {
-              console.log("[ElevenLabs] Sent audio chunk of size: " + 
-                message.audio_event.audio_base_64.length + " bytes");
-            }
-          }
-          break;
-          
-        case "interruption":
+          };
+          clientSocket.send(JSON.stringify(audioData));
+        } else if (data.type === "interruption") {
           // Clear Twilio's audio queue
-          console.log("[ElevenLabs] Received interruption event, clearing audio queue");
-          twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
-          break;
-          
-        case "ping":
+          const clearMessage = JSON.stringify({ event: "clear" });
+          clientSocket.send(clearMessage);
+        } else if (data.type === "ping" && data.ping_event?.event_id) {
           // Respond to ping events from ElevenLabs
-          if (message.ping_event?.event_id) {
-            const pongResponse = {
-              type: "pong",
-              event_id: message.ping_event.event_id,
-            };
-            elevenlabsWs?.send(JSON.stringify(pongResponse));
-          }
-          break;
+          const pongResponse = {
+            type: "pong",
+            event_id: data.ping_event.event_id
+          };
+          elevenlabsWebSocket.send(JSON.stringify(pongResponse));
+        } else if (data.type === "user_transcript" || data.type === "agent_response") {
+          // Log transcript for debugging
+          console.log(`${data.type}: ${JSON.stringify(data)}`);
           
-        case "transcript":
-          // Log transcript events from ElevenLabs
-          if (message.transcript_event?.text) {
-            console.log(`[ElevenLabs] Transcript: ${message.transcript_event.text}`);
+          // Store transcript in call log if we have callLogId
+          if (callLogId) {
+            updateCallLog(supabase, callLogId, data).catch(console.error);
           }
-          break;
-          
-        case "error":
-          console.error(`[ElevenLabs] Error from service: ${message.error_event?.message || "Unknown error"}`);
-          // Send an error message back to Twilio
-          if (streamSid) {
-            const errorMessage = {
-              event: "mark",
-              streamSid,
-              mark: { name: "error", value: "elevenlabs_error" }
-            };
-            twilioSocket.send(JSON.stringify(errorMessage));
-          }
-          break;
+        }
+      } catch (err) {
+        console.error("Error handling message from ElevenLabs:", err);
       }
-    }
-
-    // Return the response that successfully upgrades the connection to WebSocket
+    };
+    
+    // Handle socket closures
+    clientSocket.onclose = () => {
+      console.log("Twilio WebSocket closed");
+      if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
+        elevenlabsWebSocket.close();
+      }
+    };
+    
+    elevenlabsWebSocket.onclose = () => {
+      console.log("ElevenLabs WebSocket closed");
+      if (clientSocket.readyState === WebSocket.OPEN) {
+        clientSocket.close();
+      }
+    };
+    
+    // Handle errors
+    clientSocket.onerror = (e) => {
+      console.error("Twilio WebSocket error:", e);
+      error = e;
+    };
+    
+    elevenlabsWebSocket.onerror = (e) => {
+      console.error("ElevenLabs WebSocket error:", e);
+      error = e;
+    };
+    
     return response;
-  } catch (error) {
-    console.error("Error handling WebSocket connection:", error);
-    return new Response(JSON.stringify({ error: "Failed to establish WebSocket connection" }), {
-      status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json"
+    
+  } catch (err) {
+    console.error("Error in twilio-media-stream:", err);
+    
+    // Return a proper error response
+    return new Response(
+      JSON.stringify({
+        error: err.message || "An unexpected error occurred",
+        details: error ? String(error) : undefined
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       }
-    });
+    );
   }
 });
+
+// Helper function to update call log with transcript data
+async function updateCallLog(supabase, callLogId, data) {
+  try {
+    let updateData = {};
+    
+    if (data.type === "user_transcript" && data.user_transcription_event?.user_transcript) {
+      const transcript = data.user_transcription_event.user_transcript;
+      updateData.transcript = supabase.rpc('append_to_transcript', {
+        call_log_id: callLogId,
+        speaker: 'user',
+        text: transcript
+      });
+    } else if (data.type === "agent_response" && data.agent_response_event?.agent_response) {
+      const response = data.agent_response_event.agent_response;
+      updateData.transcript = supabase.rpc('append_to_transcript', {
+        call_log_id: callLogId,
+        speaker: 'agent',
+        text: response
+      });
+    }
+    
+    if (Object.keys(updateData).length > 0) {
+      const { error } = await supabase
+        .from('call_logs')
+        .update(updateData)
+        .eq('id', callLogId);
+        
+      if (error) {
+        console.error("Error updating call log:", error);
+      }
+    }
+  } catch (err) {
+    console.error("Error in updateCallLog:", err);
+  }
+}

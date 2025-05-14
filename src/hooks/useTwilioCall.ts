@@ -28,33 +28,37 @@ interface TwilioCallResponse {
 export function useTwilioCall() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [callInProgress, setCallInProgress] = useState(false);
+  const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
+  const [currentCallLogId, setCurrentCallLogId] = useState<string | null>(null);
 
   /**
    * Make a call to a prospect using Twilio
    */
   const makeCall = async (options: TwilioCallOptions): Promise<TwilioCallResponse> => {
+    if (callInProgress) {
+      return {
+        success: false,
+        message: "A call is already in progress. Please wait for it to complete or check its status.",
+        code: "CALL_IN_PROGRESS"
+      };
+    }
+    
     setIsLoading(true);
     try {
-      console.log('Making call with:', options);
-      
-      // Anonymize logs for privacy if needed
-      const phoneDisplay = isAnonymizationEnabled() ? '[REDACTED]' : 'prospect with phone';
-      console.log(`Attempting to call prospect with phone: ${phoneDisplay}`);
-      
-      console.log('Initiating call with options:', {
+      console.log('Making call with:', {
         ...options,
-        // Truncate voiceId for security/privacy in logs
+        // Redact sensitive info for logs
         voiceId: options.voiceId ? `${options.voiceId.substring(0, 8)}...` : undefined
       });
       
-      // If using ElevenLabs agent, use the new edge function
+      // Anonymize logs for privacy if needed
+      const phoneDisplay = isAnonymizationEnabled() ? '[REDACTED]' : 'prospect with phone';
+      console.log(`Attempting to call ${phoneDisplay}`);
+      
+      // If using ElevenLabs agent, use the elevenlabs-outbound-call edge function
       if (options.useElevenLabsAgent && options.elevenLabsAgentId) {
         console.log(`Using ElevenLabs agent: ${options.elevenLabsAgentId}`);
-        
-        // Add a more robust timeout to the Supabase function call
-        const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-          setTimeout(() => reject(new Error("ElevenLabs call request timed out")), 25000) // Increased timeout
-        );
         
         // Get prospect info to get the phone number
         const { data: prospectData, error: prospectError } = await supabase
@@ -67,6 +71,11 @@ export function useTwilioCall() {
           throw new Error(`Could not find prospect with ID: ${options.prospectId}`);
         }
         
+        // Add a more robust timeout to the Supabase function call
+        const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
+          setTimeout(() => reject(new Error("ElevenLabs call request timed out")), 30000) // Increased timeout
+        );
+        
         // Make the actual API call to our ElevenLabs edge function
         const fetchPromise = supabase.functions.invoke('elevenlabs-outbound-call', {
           body: {
@@ -74,7 +83,7 @@ export function useTwilioCall() {
             to_number: prospectData.phone_number,
             user_id: options.userId,
             dynamic_variables: {
-              user_name: `${prospectData.first_name} ${prospectData.last_name}`.trim()
+              user_name: `${prospectData.first_name || ''} ${prospectData.last_name || ''}`.trim() || 'there'
             },
             conversation_config_override: options.voiceId ? {
               tts: {
@@ -95,6 +104,9 @@ export function useTwilioCall() {
         }
         
         console.log('ElevenLabs call response:', data);
+        setCallInProgress(true);
+        setCurrentCallSid(data.callSid || null);
+        setCurrentCallLogId(data.callLogId || null);
         
         return {
           success: true,
@@ -106,7 +118,7 @@ export function useTwilioCall() {
         // Use the regular Twilio edge function for non-ElevenLabs calls
         // Add a more robust timeout to the Supabase function call
         const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-          setTimeout(() => reject(new Error("Twilio call request timed out")), 25000) // Increased timeout
+          setTimeout(() => reject(new Error("Twilio call request timed out")), 30000) // Increased timeout
         );
         
         // Make the actual API call
@@ -134,6 +146,10 @@ export function useTwilioCall() {
           message: data.message
         });
         
+        setCallInProgress(true);
+        setCurrentCallSid(data.callSid || null);
+        setCurrentCallLogId(data.callLogId || null);
+        
         return {
           success: true,
           message: data.message || 'Call initiated successfully',
@@ -154,10 +170,13 @@ export function useTwilioCall() {
         // Detect specific error types for better user feedback
         if (error.message.includes('trial account')) {
           errorCode = 'TWILIO_TRIAL_ACCOUNT';
+          errorMessage = 'Your Twilio trial account can only call verified numbers. Please verify the number in your Twilio console or upgrade your account.';
         } else if (error.message.includes('ElevenLabs API key')) {
           errorCode = 'ELEVENLABS_API_KEY_MISSING';
+          errorMessage = 'ElevenLabs API key is missing or invalid. Please check your profile settings.';
         } else if (error.message.includes('timed out')) {
           errorCode = 'REQUEST_TIMEOUT';
+          errorMessage = 'The call request timed out. Please check your internet connection and try again.';
           toast({
             variant: "destructive",
             title: "Request Timeout",
@@ -194,9 +213,19 @@ export function useTwilioCall() {
    * Verify the status of a call using its SID
    * This function checks the current status of a Twilio call
    */
-  const verifyCallStatus = async (callSid: string, userId?: string): Promise<TwilioCallResponse> => {
+  const verifyCallStatus = async (callSid?: string, userId?: string): Promise<TwilioCallResponse> => {
+    const sidToCheck = callSid || currentCallSid;
+    
+    if (!sidToCheck) {
+      return {
+        success: false,
+        message: 'No call SID provided or available',
+        error: new Error('Missing call SID')
+      };
+    }
+    
     try {
-      console.log('Checking status for call:', callSid);
+      console.log('Checking status for call:', sidToCheck);
       
       // Add a timeout to the status check
       const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
@@ -206,7 +235,7 @@ export function useTwilioCall() {
       // Make the actual API call - pass userId if available
       const fetchPromise = supabase.functions.invoke('twilio-call-status', {
         body: {
-          callSid,
+          callSid: sidToCheck,
           userId
         }
       }).then(({data, error}) => {
@@ -231,6 +260,13 @@ export function useTwilioCall() {
       
       console.log('Call status data:', data);
       
+      // If call is completed or failed, update our state
+      const finalStatuses = ['completed', 'failed', 'canceled', 'busy', 'no-answer'];
+      if (data.call_status && finalStatuses.includes(data.call_status.toLowerCase())) {
+        setCallInProgress(false);
+        setCurrentCallSid(null);
+      }
+      
       return {
         success: data.success || false,
         message: `Call status: ${data?.call_status || 'unknown'}`,
@@ -242,6 +278,47 @@ export function useTwilioCall() {
       return {
         success: false,
         message: error.message || 'Failed to verify call status',
+        error: error
+      };
+    }
+  };
+  
+  /**
+   * End the current call if it's in progress
+   */
+  const endCurrentCall = async (): Promise<TwilioCallResponse> => {
+    if (!callInProgress || !currentCallSid) {
+      return {
+        success: false,
+        message: 'No active call to end',
+      };
+    }
+    
+    try {
+      const result = await supabase.functions.invoke('twilio-end-call', {
+        body: {
+          callSid: currentCallSid
+        }
+      });
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      setCallInProgress(false);
+      setCurrentCallSid(null);
+      
+      return {
+        success: true,
+        message: 'Call ended successfully',
+        data: result.data
+      };
+    } catch (error: any) {
+      console.error('Error ending call:', error);
+      
+      return {
+        success: false,
+        message: error.message || 'Failed to end call',
         error: error
       };
     }
@@ -260,7 +337,11 @@ export function useTwilioCall() {
     makeCall,
     makeDevelopmentCall,
     verifyCallStatus,
+    endCurrentCall,
     handleTwiMLTimeout,
-    isLoading
+    isLoading,
+    callInProgress,
+    currentCallSid,
+    currentCallLogId
   };
 }
