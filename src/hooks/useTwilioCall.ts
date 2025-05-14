@@ -94,11 +94,42 @@ export function useTwilioCall() {
       }
       
       if (data.success) {
+        // Enhanced toast message with more details
+        let toastDescription = "The AI agent is now calling the prospect.";
+        
+        if (data.callSid) {
+          const anonymize = isAnonymizationEnabled();
+          const phoneIdentifier = anonymize ? "prospect" : `prospect at ${options.prospectId}`;
+          toastDescription = `Call initiated to ${phoneIdentifier}. Call SID: ${data.callSid.substring(0, 8)}...`;
+        }
+        
+        // Add debug info if in debug mode
+        if (options.debugMode) {
+          toastDescription += " (Debug mode active)";
+        }
+        
+        // Show an enhanced success toast
         toast({
           title: "Call initiated",
-          description: data.message || "The AI agent is now calling the prospect.",
+          description: data.message || toastDescription,
           variant: "default",
         });
+        
+        // Log additional details about the call for debugging
+        console.log('Call initiated successfully:', {
+          callSid: data.callSid,
+          callLogId: data.callLogId,
+          message: data.message
+        });
+        
+        // Add a follow-up toast with instructions for any observed issues
+        setTimeout(() => {
+          toast({
+            title: "Waiting for call",
+            description: "If you don't receive the call within 30 seconds, check your phone's blocked numbers or Twilio account limits.",
+            variant: "default",
+          });
+        }, 5000); // Show follow-up toast after 5 seconds
         
         return data;
       } else {
@@ -173,12 +204,30 @@ export function useTwilioCall() {
           errorDescription = cleanedMessage;
         }
       }
+      // New error case for phone number verification
+      else if (errorMessage.includes('verify') || errorMessage.includes('verification') || errorCode === 'PHONE_VERIFICATION_FAILED') {
+        errorTitle = "Phone number verification required";
+        errorDescription = "Your Twilio account may require phone number verification before making outbound calls.";
+      }
+      // New error case for recipient not answering
+      else if (errorMessage.includes('no-answer') || errorMessage.includes('busy') || errorCode === 'NO_ANSWER') {
+        errorTitle = "Call not answered";
+        errorDescription = "The call was placed but the recipient didn't answer. Please try again later.";
+      }
       
       setError(errorMessage);
       toast({
         title: errorTitle,
         description: errorDescription,
         variant: variant,
+      });
+      
+      // Add a more detailed console log
+      console.error('Call failed with additional details:', {
+        errorCode,
+        errorTitle,
+        errorDescription,
+        originalError: err
       });
       
       return {
@@ -200,9 +249,32 @@ export function useTwilioCall() {
     });
   };
 
+  const verifyCallStatus = async (callSid: string): Promise<any> => {
+    try {
+      console.log(`Checking status for call: ${callSid}`);
+      const { data, error } = await supabase
+        .from('call_logs')
+        .select('*')
+        .eq('twilio_call_sid', callSid)
+        .single();
+        
+      if (error) {
+        console.error('Error fetching call status:', error);
+        return { success: false, error: error.message };
+      }
+      
+      console.log('Call status data:', data);
+      return { success: true, data };
+    } catch (err) {
+      console.error('Error verifying call status:', err);
+      return { success: false, error: String(err) };
+    }
+  };
+
   return {
     makeCall,
-    makeDevelopmentCall, // Add this development-only function
+    makeDevelopmentCall,
+    verifyCallStatus, // Add this new function
     isLoading,
     error,
   };

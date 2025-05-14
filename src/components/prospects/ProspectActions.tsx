@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -38,8 +37,11 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
   const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
+  const [callSid, setCallSid] = useState<string | null>(null);
+  const [isVerifyingCall, setIsVerifyingCall] = useState(false);
+  const [callStatus, setCallStatus] = useState<string | null>(null);
   
-  const { makeCall, makeDevelopmentCall, isLoading: isCallingLoading } = useTwilioCall();
+  const { makeCall, makeDevelopmentCall, verifyCallStatus, isLoading: isCallingLoading } = useTwilioCall();
   const { getVoices } = useElevenLabs();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -50,6 +52,71 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
     { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" }, 
     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria" }
   ];
+
+  // Add effect to periodically check call status
+  useEffect(() => {
+    let statusCheckInterval: number | null = null;
+    
+    if (callSid) {
+      // Check immediately
+      checkCallStatus();
+      
+      // Then check every 5 seconds
+      statusCheckInterval = window.setInterval(checkCallStatus, 5000);
+    }
+    
+    return () => {
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+      }
+    };
+  }, [callSid]);
+  
+  const checkCallStatus = async () => {
+    if (!callSid) return;
+    
+    setIsVerifyingCall(true);
+    try {
+      const result = await verifyCallStatus(callSid);
+      if (result.success && result.data) {
+        const newStatus = result.data.call_status;
+        setCallStatus(newStatus);
+        
+        // Show toast for status updates
+        if (newStatus !== callStatus) {
+          toast({
+            title: `Call status: ${newStatus}`,
+            description: getStatusDescription(newStatus),
+            variant: "default",
+          });
+        }
+        
+        // Clear interval once call is completed
+        if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(newStatus?.toLowerCase() || '')) {
+          setCallSid(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking call status:", error);
+    } finally {
+      setIsVerifyingCall(false);
+    }
+  };
+  
+  const getStatusDescription = (status: string): string => {
+    switch (status?.toLowerCase()) {
+      case 'queued': return 'Call has been queued and will be initiated shortly';
+      case 'initiated': return 'Call has been initiated and is connecting';
+      case 'ringing': return 'Phone is ringing';
+      case 'in-progress': return 'Call is in progress';
+      case 'completed': return 'Call has completed successfully';
+      case 'busy': return 'Recipient was busy';
+      case 'failed': return 'Call failed to complete';
+      case 'no-answer': return 'Recipient did not answer';
+      case 'canceled': return 'Call was canceled';
+      default: return `Current status: ${status}`;
+    }
+  };
 
   useEffect(() => {
     if (useElevenLabsVoice) {
@@ -141,6 +208,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const handleMakeCall = async () => {
     setCallError(null);
     setErrorCode(null);
+    setCallSid(null);
+    setCallStatus(null);
     
     if (!selectedConfigId || !user?.id) {
       toast({
@@ -161,6 +230,17 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
       });
       
+      // Get prospect phone number for additional logging
+      const { data: prospectData } = await supabase
+        .from('prospects')
+        .select('phone_number')
+        .eq('id', prospectId)
+        .single();
+      
+      if (prospectData?.phone_number) {
+        console.log(`Attempting to call prospect with phone: ${isAnonymizationEnabled() ? '[REDACTED]' : prospectData.phone_number}`);
+      }
+      
       // Use either regular or development call method based on bypass setting
       const callMethod = bypassValidation ? makeDevelopmentCall : makeCall;
       const response = await callMethod({
@@ -176,9 +256,16 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       
       if (response.success) {
         setIsDialogOpen(false);
+        
+        // Store the call SID for status checking
+        if (response.callSid) {
+          setCallSid(response.callSid);
+          setCallStatus('initiated');
+        }
+        
         toast({
           title: 'Call initiated',
-          description: `Call to ${prospectName} initiated successfully.`,
+          description: `Call to ${prospectName} initiated successfully. ${bypassValidation ? '(Development Mode)' : ''}`,
         });
       } else {
         // Store the error code if available
@@ -189,7 +276,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       console.error("Error making call:", error);
       setCallError(error.message || 'An error occurred while trying to make the call');
       
-      // If this is a profile setup error, we need to show a toast with a link
+      // Handle specific error cases
       if (error.message?.includes('Profile setup') || 
           error.message?.includes('Twilio configuration') ||
           error.code === 'PROFILE_NOT_FOUND' ||
@@ -273,6 +360,23 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                   )}
                 </AlertDescription>
               </Alert>
+            )}
+            
+            {callStatus && (
+              <Alert variant={callStatus.toLowerCase() === 'completed' ? 'success' : 'default'} className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Call status: {callStatus}
+                  {isVerifyingCall && <Loader2 className="ml-2 h-4 w-4 inline animate-spin" />}
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {/* Show additional info for development mode */}
+            {bypassValidation && callSid && (
+              <div className="text-xs text-muted-foreground mb-4 p-2 bg-muted rounded">
+                <p>Call SID: {callSid}</p>
+              </div>
             )}
             
             {isLoadingConfigs ? (

@@ -41,8 +41,11 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+  const [lastCallSid, setLastCallSid] = useState<string | null>(null);
+  const [callStatus, setCallStatus] = useState<string | null>(null);
+  const [isVerifyingCall, setIsVerifyingCall] = useState(false);
   
-  const { makeCall, makeDevelopmentCall } = useTwilioCall();
+  const { makeCall, makeDevelopmentCall, verifyCallStatus } = useTwilioCall();
   const { getVoices } = useElevenLabs();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -53,6 +56,74 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
     { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" }, 
     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria" }
   ];
+
+  // Periodically check call status if we have a call SID
+  useEffect(() => {
+    let statusCheckInterval: number | null = null;
+    
+    if (lastCallSid) {
+      // Check immediately
+      checkCallStatus();
+      
+      // Then check every 5 seconds
+      statusCheckInterval = window.setInterval(checkCallStatus, 5000);
+    }
+    
+    return () => {
+      if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+      }
+    };
+  }, [lastCallSid]);
+  
+  const checkCallStatus = async () => {
+    if (!lastCallSid) return;
+    
+    setIsVerifyingCall(true);
+    try {
+      const result = await verifyCallStatus(lastCallSid);
+      if (result.success && result.data) {
+        const newStatus = result.data.call_status;
+        setCallStatus(newStatus);
+        
+        // Show toast for significant status updates
+        if (newStatus !== callStatus) {
+          if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(newStatus?.toLowerCase() || '')) {
+            toast({
+              title: `Call ${newStatus}`,
+              description: getStatusDescription(newStatus),
+              variant: newStatus.toLowerCase() === 'completed' ? 'default' : 'destructive',
+            });
+          }
+        }
+        
+        // Clear tracking once call is completed
+        if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(newStatus?.toLowerCase() || '')) {
+          setLastCallSid(null);
+          // Don't clear status so the user can see the final status
+        }
+      }
+    } catch (error) {
+      console.error("Error checking call status:", error);
+    } finally {
+      setIsVerifyingCall(false);
+    }
+  };
+  
+  const getStatusDescription = (status: string): string => {
+    switch (status?.toLowerCase()) {
+      case 'queued': return 'Call has been queued and will be initiated shortly';
+      case 'initiated': return 'Call has been initiated and is connecting';
+      case 'ringing': return 'Phone is ringing';
+      case 'in-progress': return 'Call is in progress';
+      case 'completed': return 'Call has completed successfully';
+      case 'busy': return 'Recipient was busy';
+      case 'failed': return 'Call failed to complete';
+      case 'no-answer': return 'Recipient did not answer';
+      case 'canceled': return 'Call was canceled';
+      default: return `Current status: ${status}`;
+    }
+  };
 
   useEffect(() => {
     if (prospectListId) {
@@ -157,6 +228,12 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
     
     try {
       setIsCalling(true);
+      setLastCallSid(null);
+      setCallStatus(null);
+      
+      // Log the phone number for debugging (with privacy option)
+      console.log(`Attempting to call prospect: ${prospect.first_name} ${prospect.last_name}`);
+      console.log(`Phone number: ${isAnonymizationEnabled() ? '[REDACTED]' : prospect.phone_number}`);
       
       // Use appropriate call method based on bypass setting
       const callMethod = bypassValidation ? makeDevelopmentCall : makeCall;
@@ -170,6 +247,17 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
       });
       
       if (response.success) {
+        // Store callSid for status tracking
+        if (response.callSid) {
+          setLastCallSid(response.callSid);
+          setCallStatus('initiated');
+          
+          console.log(`Call initiated with SID: ${response.callSid}`);
+          if (response.callLogId) {
+            console.log(`Call log ID: ${response.callLogId}`);
+          }
+        }
+        
         // Update campaign call count
         await supabase
           .from('campaigns')
@@ -181,9 +269,14 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         // Move to next prospect
         setCurrentProspectIndex(prev => prev + 1);
         
+        const phoneDisplay = isAnonymizationEnabled() 
+          ? '(number hidden)' 
+          : prospect.phone_number;
+          
         toast({
           title: 'Call initiated',
-          description: `Calling ${prospect.first_name || ''} ${prospect.last_name || ''} at ${prospect.phone_number}`,
+          description: `Calling ${prospect.first_name || ''} ${prospect.last_name || ''} at ${phoneDisplay}`,
+          duration: 8000, // Show for longer
         });
       }
     } catch (error: any) {
@@ -235,6 +328,20 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         </Alert>
       )}
       
+      {/* Display current call status if available */}
+      {callStatus && (
+        <Alert variant={callStatus.toLowerCase() === 'completed' ? 'success' : 'default'} className="mb-4">
+          <AlertCircle className="h-4 w-4 mr-2" />
+          <div>
+            <AlertTitle>Call Status: {callStatus}</AlertTitle>
+            <AlertDescription>
+              {getStatusDescription(callStatus)}
+              {isVerifyingCall && <Loader2 className="ml-2 h-4 w-4 inline animate-spin" />}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+      
       {isLoading ? (
         <div className="flex items-center justify-center p-4">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -253,7 +360,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
             {currentProspectIndex < prospects.length && (
               <div className="border-l-2 border-green-500 pl-2 py-1">
                 <p className="font-medium">Next: {prospects[currentProspectIndex].first_name} {prospects[currentProspectIndex].last_name}</p>
-                <p className="text-muted-foreground text-xs">{prospects[currentProspectIndex].phone_number}</p>
+                <p className="text-muted-foreground text-xs">{isAnonymizationEnabled() ? '(number hidden)' : prospects[currentProspectIndex].phone_number}</p>
               </div>
             )}
           </div>
@@ -340,6 +447,17 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
               </div>
             </div>
           )}
+          
+          {/* Call troubleshooting hints */}
+          <div className="text-xs text-muted-foreground bg-muted p-2 rounded mt-2">
+            <p className="font-medium mb-1">Troubleshooting tips:</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Make sure your phone isn't blocking unknown numbers</li>
+              <li>Twilio trial accounts have limitations on outbound calls</li>
+              <li>Check the Edge Function logs for detailed error messages</li>
+              <li>Try enabling Development Mode if calls fail</li>
+            </ul>
+          </div>
           
           <Button 
             className="w-full"
