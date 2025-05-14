@@ -5,12 +5,15 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
 interface ElevenLabsContextType {
-  getSignedUrl: (agentId: string) => Promise<string | null>;
+  getSignedUrl: (agentId?: string) => Promise<string | null>;
   isLoading: boolean;
   error: string | null;
 }
 
 const ElevenLabsContext = createContext<ElevenLabsContextType | undefined>(undefined);
+
+// Default agent ID - we'll use this if no specific agent ID is provided
+const DEFAULT_AGENT_ID = '6Optf6WRTzp3rEyj2aiL';
 
 export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +21,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const getSignedUrl = async (agentId: string): Promise<string | null> => {
+  const getSignedUrl = async (agentId?: string): Promise<string | null> => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -28,7 +31,10 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    if (!agentId || agentId.trim() === '') {
+    // Use the provided agent ID or fall back to the default one
+    const agentIdToUse = agentId || DEFAULT_AGENT_ID;
+
+    if (!agentIdToUse || agentIdToUse.trim() === '') {
       toast({
         title: "Invalid agent ID",
         description: "A valid ElevenLabs agent ID is required",
@@ -41,11 +47,11 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      console.log("Calling elevenlabs-signed-url function with agentId:", agentId);
+      console.log("Calling elevenlabs-signed-url function with agentId:", agentIdToUse);
       // Call the Supabase Edge Function that will generate a signed URL
       const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
         body: { 
-          agentId 
+          agentId: agentIdToUse 
         }
       });
 

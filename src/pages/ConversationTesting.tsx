@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +18,8 @@ interface AgentOption {
 }
 
 const ConversationTesting = () => {
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  // Default to the provided agent ID
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("6Optf6WRTzp3rEyj2aiL");
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [prospectName, setProspectName] = useState("");
@@ -27,42 +28,21 @@ const ConversationTesting = () => {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // Initialize with the known agent
+  useEffect(() => {
+    // Set default agent in the list
+    setAgents([
+      { id: "6Optf6WRTzp3rEyj2aiL", name: "Real Estate Prospecting Agent (Default)" },
+      { id: "948f15c2-a0a9-4429-b566-905724459054", name: "Real Estate Prospecting Agent" },
+      { id: "a6f2619c-9bdb-4a5c-b1d8-3680a0fb6149", name: "Property Information Agent" },
+      { id: "c703a492-59e9-48a4-88c0-b91124c6a357", name: "Appointment Scheduling Agent" },
+    ]);
+  }, []);
+
   // Fetch available ElevenLabs agents (this would be replaced with your actual agent IDs)
   const fetchAgents = async () => {
-    setIsLoadingAgents(true);
-    try {
-      // This is a placeholder. In a real implementation, you would:
-      // 1. Either fetch agent IDs from your database
-      // 2. Or call an ElevenLabs API endpoint to get your agents
-      
-      // For demo purposes, we'll use some example agents
-      const demoAgents = [
-        { id: "948f15c2-a0a9-4429-b566-905724459054", name: "Real Estate Prospecting Agent" },
-        { id: "a6f2619c-9bdb-4a5c-b1d8-3680a0fb6149", name: "Property Information Agent" },
-        { id: "c703a492-59e9-48a4-88c0-b91124c6a357", name: "Appointment Scheduling Agent" },
-      ];
-      
-      setAgents(demoAgents);
-      
-      // If you have actual agent IDs stored in your database:
-      // const { data, error } = await supabase
-      //   .from('elevenlabs_agents')
-      //   .select('id, name')
-      //   .eq('user_id', user?.id);
-      //
-      // if (error) throw error;
-      // setAgents(data || []);
-      
-    } catch (error) {
-      console.error("Error fetching agents:", error);
-      toast({
-        title: "Failed to load agents",
-        description: "Could not retrieve conversation agents. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingAgents(false);
-    }
+    // The agents list is already initialized with the default agent
+    // This function remains for future API integration
   };
 
   const handleStartTest = () => {
@@ -135,11 +115,6 @@ const ConversationTesting = () => {
                   <Select 
                     value={selectedAgentId} 
                     onValueChange={setSelectedAgentId}
-                    onOpenChange={() => {
-                      if (agents.length === 0) {
-                        fetchAgents();
-                      }
-                    }}
                   >
                     <SelectTrigger id="agent">
                       <SelectValue placeholder="Select an agent" />

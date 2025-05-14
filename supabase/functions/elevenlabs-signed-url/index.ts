@@ -61,12 +61,10 @@ serve(async (req) => {
       );
     }
 
+    // Default agent ID if none provided (using the one specified by the user)
     if (!agentId) {
-      console.error('Agent ID is required but was not provided');
-      return new Response(
-        JSON.stringify({ error: 'Agent ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      agentId = '6Optf6WRTzp3rEyj2aiL';
+      console.log(`No agent ID provided, using default: ${agentId}`);
     }
 
     // Get the ElevenLabs API key from environment variables
