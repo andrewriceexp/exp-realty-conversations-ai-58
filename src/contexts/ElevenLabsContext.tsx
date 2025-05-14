@@ -26,6 +26,10 @@ export const ElevenLabsProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       clearError();
       
+      if (!agentId) {
+        throw new Error('Agent ID is required to get a signed URL');
+      }
+      
       console.log('Getting signed URL for agent:', agentId);
       
       const functionPromise = supabase.functions.invoke('elevenlabs-signed-url', {

@@ -75,7 +75,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       setError("ElevenLabs API key required. Please add it in your profile settings");
       setApiKeyStatus('missing');
     } else {
-      // Only auto-validate if we haven't validated recently
+      // Only auto-validate if we haven't validated recently or never validated
       const shouldValidate = 
         !lastValidated || 
         Date.now() - lastValidated > MIN_VALIDATION_INTERVAL_MS;
@@ -89,7 +89,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     }
     
     setIsLoading(false);
-  }, [isAuthenticated, hasApiKey, hasValidSession, profile]);
+  }, [isAuthenticated, hasApiKey, hasValidSession, profile, lastValidated]);
   
   /**
    * Validates the currently stored ElevenLabs API key
@@ -102,9 +102,11 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       return false;
     }
     
-    // Check if we've validated recently
-    if (lastValidated && Date.now() - lastValidated < MIN_VALIDATION_INTERVAL_MS) {
-      console.log(`Skipping validation, last validated ${Math.round((Date.now() - lastValidated) / 1000)}s ago`);
+    // Skip if we've validated recently unless it's an explicit revalidation call
+    const now = Date.now();
+    const timeSinceLastValidation = lastValidated ? now - lastValidated : Infinity;
+    if (lastValidated && timeSinceLastValidation < MIN_VALIDATION_INTERVAL_MS && apiKeyStatus === 'valid') {
+      console.log(`Skipping validation, last validated ${Math.round(timeSinceLastValidation / 1000)}s ago`);
       // Return the last known status
       return apiKeyStatus === 'valid';
     }
@@ -147,11 +149,20 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         return false;
       }
       
+      // Check if the response contains the expected user data
+      const userData = await response.json();
+      if (!userData || !userData.subscription) {
+        console.error("ElevenLabs API key validation failed: Unexpected response format");
+        setError("Received invalid response from ElevenLabs API");
+        setApiKeyStatus('invalid');
+        return false;
+      }
+      
       console.log("ElevenLabs API key validation successful");
       setError(null);
       setApiKeyStatus('valid');
       retryCount.current = 0;
-      setLastValidated(Date.now());
+      setLastValidated(now);
       return true;
     } catch (err) {
       console.error("Error validating ElevenLabs API key:", err);
@@ -166,7 +177,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
             throttledToast({
               title: "API Key Validation Timed Out",
               description: "Connection to ElevenLabs timed out. Please check your internet connection and try again.",
-              variant: "default"  // Changed from "warning" to "default"
+              variant: "default"
             });
           } else {
             throttledToast({

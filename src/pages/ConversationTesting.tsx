@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from "@/contexts/AuthContext";
 import ConversationPanel from "@/components/conversations/ConversationPanel";
-import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
 import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -25,6 +26,7 @@ const ConversationTesting = () => {
   const [prospectName, setProspectName] = useState("");
   const [prospectPhone, setProspectPhone] = useState("");
   const [isTestingActive, setIsTestingActive] = useState(false);
+  const [lastApiKeyValidation, setLastApiKeyValidation] = useState<number | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const { 
@@ -33,7 +35,8 @@ const ConversationTesting = () => {
     hasApiKey, 
     validateApiKey, 
     apiKeyStatus,
-    isLoading: isAuthLoading
+    isLoading: isAuthLoading,
+    lastValidated
   } = useElevenLabsAuth();
 
   // Initialize with known agents
@@ -51,6 +54,7 @@ const ConversationTesting = () => {
   const validateApiKeyIfNeeded = useCallback(async () => {
     if (hasApiKey && apiKeyStatus !== 'valid' && !isAuthLoading) {
       await validateApiKey();
+      setLastApiKeyValidation(Date.now());
     }
   }, [hasApiKey, validateApiKey, apiKeyStatus, isAuthLoading]);
   
@@ -59,6 +63,21 @@ const ConversationTesting = () => {
       validateApiKeyIfNeeded();
     }
   }, [hasApiKey, validateApiKeyIfNeeded]);
+
+  // Force a re-validation of the API key
+  const handleForceRevalidate = async () => {
+    if (hasApiKey) {
+      await validateApiKey();
+      setLastApiKeyValidation(Date.now());
+      
+      toast({
+        title: apiKeyStatus === 'valid' ? "API Key Validated" : "API Key Validation Failed",
+        description: apiKeyStatus === 'valid' 
+          ? "Your ElevenLabs API key is valid and ready to use."
+          : "Please check that your API key is correct in your profile settings.",
+      });
+    }
+  };
 
   // Handle navigation to conversation testing
   const handleStartTest = async () => {
@@ -145,8 +164,36 @@ const ConversationTesting = () => {
             <AlertCircle className="h-5 w-5" />
             <AlertDescription className="space-y-2">
               <p>Your ElevenLabs API key appears to be invalid. Please check and update it in your profile settings.</p>
-              <Button variant="outline" size="sm" onClick={navigateToProfile}>
-                Update API Key
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={navigateToProfile}>
+                  Update API Key
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleForceRevalidate}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Re-validate Key
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {hasApiKey && apiKeyStatus === 'valid' && (
+          <Alert variant="default" className="border-green-500">
+            <AlertCircle className="h-5 w-5 text-green-500" />
+            <AlertDescription className="flex justify-between items-center">
+              <div>
+                <p>Your ElevenLabs API key is valid and ready to use.</p>
+                <p className="text-sm text-muted-foreground">
+                  Last validated: {lastValidated ? new Date(lastValidated).toLocaleTimeString() : 'Never'}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleForceRevalidate} disabled={isAuthLoading}>
+                {isAuthLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Re-validate
               </Button>
             </AlertDescription>
           </Alert>
@@ -237,6 +284,7 @@ const ConversationTesting = () => {
                   <Button 
                     onClick={handleStartTest}
                     disabled={!hasApiKey || isAuthLoading || apiKeyStatus === 'invalid'}
+                    className="w-full"
                   >
                     {isAuthLoading ? (
                       <>
@@ -252,7 +300,7 @@ const ConversationTesting = () => {
                     </p>
                   )}
                   
-                  <Alert variant="info" className="mt-4">
+                  <Alert className="mt-4">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription className="text-sm flex justify-between items-center">
                       <span>
