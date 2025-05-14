@@ -80,7 +80,7 @@ serve(async (req) => {
       )
     }
 
-    // Get user's ElevenLabs API key
+    // Get user's ElevenLabs API key from profile
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('elevenlabs_api_key')
