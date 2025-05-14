@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 
 export interface MakeCallParams {
@@ -57,56 +57,61 @@ export function useTwilioCall() {
       setIsLoading(true);
       console.log("[TwilioCall] Making call to prospect ID:", params.prospectId);
 
-      const { data, error } = await supabase.functions.invoke('twilio-make-call', {
-        body: {
-          prospect_id: params.prospectId,
-          agent_config_id: params.agentConfigId,
-          user_id: params.userId,
-          voice_id: params.voiceId,
-          use_elevenlabs_agent: params.useElevenLabsAgent || false,
-          elevenlabs_agent_id: params.elevenLabsAgentId
-        }
-      });
-
-      if (error) {
-        console.error("[TwilioCall] Error making call:", error);
-        toast({
-          title: "Call Error",
-          description: `Failed to initiate call: ${error.message}`,
-          variant: "destructive"
-        });
-        return {
-          success: false,
-          message: `Failed to initiate call: ${error.message}`,
-          error: error.message
-        };
-      }
-
-      if (data?.callSid) {
-        console.log("[TwilioCall] Call initiated successfully, SID:", data.callSid);
-        setCurrentCallSid(data.callSid);
-        toast({
-          title: "Call Initiated",
-          description: `Call has been initiated`,
-          variant: "success"
-        });
-        return {
-          success: true,
-          message: "Call initiated successfully",
-          callSid: data.callSid,
-          callLogId: data.callLogId
-        };
+      // Determine whether to use ElevenLabs agent or regular Twilio call
+      if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
+        return await makeElevenLabsCall(params);
       } else {
-        console.error("[TwilioCall] No call SID returned");
-        toast({
-          title: "Call Error",
-          description: "Failed to initiate call: No call ID returned",
-          variant: "destructive"
+        const { data, error } = await supabase.functions.invoke('twilio-make-call', {
+          body: {
+            prospect_id: params.prospectId,
+            agent_config_id: params.agentConfigId,
+            user_id: params.userId,
+            voice_id: params.voiceId,
+            use_elevenlabs_agent: params.useElevenLabsAgent || false,
+            elevenlabs_agent_id: params.elevenLabsAgentId
+          }
         });
-        return {
-          success: false,
-          message: "Failed to initiate call: No call ID returned"
-        };
+
+        if (error) {
+          console.error("[TwilioCall] Error making call:", error);
+          toast({
+            title: "Call Error",
+            description: `Failed to initiate call: ${error.message}`,
+            variant: "destructive"
+          });
+          return {
+            success: false,
+            message: `Failed to initiate call: ${error.message}`,
+            error: error.message
+          };
+        }
+
+        if (data?.callSid) {
+          console.log("[TwilioCall] Call initiated successfully, SID:", data.callSid);
+          setCurrentCallSid(data.callSid);
+          toast({
+            title: "Call Initiated",
+            description: `Call has been initiated`,
+            variant: "success"
+          });
+          return {
+            success: true,
+            message: "Call initiated successfully",
+            callSid: data.callSid,
+            callLogId: data.callLogId
+          };
+        } else {
+          console.error("[TwilioCall] No call SID returned");
+          toast({
+            title: "Call Error",
+            description: "Failed to initiate call: No call ID returned",
+            variant: "destructive"
+          });
+          return {
+            success: false,
+            message: "Failed to initiate call: No call ID returned"
+          };
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -126,6 +131,120 @@ export function useTwilioCall() {
     }
   };
 
+  const makeElevenLabsCall = async (params: MakeCallParams): Promise<CallResponse> => {
+    try {
+      console.log("[TwilioCall] Making ElevenLabs call with agent ID:", params.elevenLabsAgentId);
+      
+      // Fetch the prospect details to get the phone number
+      const { data: prospectData, error: prospectError } = await supabase
+        .from('prospects')
+        .select('phone_number')
+        .eq('id', params.prospectId)
+        .single();
+        
+      if (prospectError || !prospectData?.phone_number) {
+        console.error("[TwilioCall] Error fetching prospect data:", prospectError);
+        return {
+          success: false,
+          message: "Failed to fetch prospect phone number",
+          error: prospectError?.message
+        };
+      }
+      
+      // Fetch the agent config for any prompt customization
+      let agentConfig = null;
+      if (params.agentConfigId) {
+        const { data: configData } = await supabase
+          .from('agent_configs')
+          .select('*')
+          .eq('id', params.agentConfigId)
+          .single();
+          
+        if (configData) {
+          agentConfig = configData;
+        }
+      }
+      
+      // Prepare the conversation config override
+      let configOverride = {
+        agent: {} as any,
+        tts: {} as any
+      };
+      
+      // Add voice ID if provided
+      if (params.voiceId) {
+        configOverride.tts.voice_id = params.voiceId;
+      }
+      
+      // Add prompt and first message if available in agent config
+      if (agentConfig?.system_prompt) {
+        configOverride.agent.prompt = { prompt: agentConfig.system_prompt };
+      }
+      
+      if (agentConfig?.first_message) {
+        configOverride.agent.first_message = agentConfig.first_message;
+      }
+      
+      // Call the elevenlabs-outbound-call edge function
+      const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
+        body: {
+          agent_id: params.elevenLabsAgentId,
+          to_number: prospectData.phone_number,
+          user_id: params.userId || session.user.id,
+          dynamic_variables: {
+            prospect_name: prospectData.first_name,
+            prospect_id: params.prospectId
+          },
+          conversation_config_override: configOverride
+        }
+      });
+      
+      if (error) {
+        console.error("[TwilioCall] Error making ElevenLabs call:", error);
+        return {
+          success: false,
+          message: `Failed to initiate ElevenLabs call: ${error.message}`,
+          error: error.message
+        };
+      }
+      
+      if (data?.success) {
+        console.log("[TwilioCall] ElevenLabs call initiated successfully, SID:", data.callSid);
+        if (data.callSid) {
+          setCurrentCallSid(data.callSid);
+        }
+        
+        toast({
+          title: "ElevenLabs Call Initiated",
+          description: "Call has been initiated via ElevenLabs",
+          variant: "success"
+        });
+        
+        return {
+          success: true,
+          message: "ElevenLabs call initiated successfully",
+          callSid: data.callSid,
+          callLogId: data.callLogId
+        };
+      } else {
+        console.error("[TwilioCall] ElevenLabs call failed:", data?.message);
+        return {
+          success: false,
+          message: data?.message || "Failed to initiate ElevenLabs call",
+          code: data?.code
+        };
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("[TwilioCall] Unexpected error making ElevenLabs call:", errorMessage);
+      return {
+        success: false,
+        message: `Unexpected error with ElevenLabs call: ${errorMessage}`,
+        error: errorMessage
+      };
+    }
+  };
+
   // Add makeDevelopmentCall function for development/testing purposes
   const makeDevelopmentCall = async (params: MakeCallParams): Promise<CallResponse> => {
     if (!session?.access_token) {
@@ -137,43 +256,51 @@ export function useTwilioCall() {
       setIsLoading(true);
       console.log("[TwilioCall:Dev] Making development call to prospect ID:", params.prospectId);
 
-      const { data, error } = await supabase.functions.invoke('twilio-make-call', {
-        body: {
-          prospect_id: params.prospectId,
-          agent_config_id: params.agentConfigId,
-          user_id: params.userId,
-          bypass_validation: true,
-          debug_mode: params.debugMode || false,
-          voice_id: params.voiceId,
-          use_elevenlabs_agent: params.useElevenLabsAgent || false,
-          elevenlabs_agent_id: params.elevenLabsAgentId
-        }
-      });
-
-      if (error) {
-        console.error("[TwilioCall:Dev] Error making development call:", error);
-        return {
-          success: false,
-          message: `Failed to initiate development call: ${error.message}`,
-          error: error.message
-        };
-      }
-
-      if (data?.callSid) {
-        console.log("[TwilioCall:Dev] Development call initiated successfully, SID:", data.callSid);
-        setCurrentCallSid(data.callSid);
-        return {
-          success: true,
-          message: "Development call initiated successfully",
-          callSid: data.callSid,
-          callLogId: data.callLogId
-        };
+      if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
+        return await makeElevenLabsCall({
+          ...params,
+          bypassValidation: true,
+          debugMode: params.debugMode || true
+        });
       } else {
-        console.error("[TwilioCall:Dev] No call SID returned");
-        return {
-          success: false,
-          message: "Failed to initiate development call: No call ID returned"
-        };
+        const { data, error } = await supabase.functions.invoke('twilio-make-call', {
+          body: {
+            prospect_id: params.prospectId,
+            agent_config_id: params.agentConfigId,
+            user_id: params.userId,
+            bypass_validation: true,
+            debug_mode: params.debugMode || false,
+            voice_id: params.voiceId,
+            use_elevenlabs_agent: params.useElevenLabsAgent || false,
+            elevenlabs_agent_id: params.elevenLabsAgentId
+          }
+        });
+
+        if (error) {
+          console.error("[TwilioCall:Dev] Error making development call:", error);
+          return {
+            success: false,
+            message: `Failed to initiate development call: ${error.message}`,
+            error: error.message
+          };
+        }
+
+        if (data?.callSid) {
+          console.log("[TwilioCall:Dev] Development call initiated successfully, SID:", data.callSid);
+          setCurrentCallSid(data.callSid);
+          return {
+            success: true,
+            message: "Development call initiated successfully",
+            callSid: data.callSid,
+            callLogId: data.callLogId
+          };
+        } else {
+          console.error("[TwilioCall:Dev] No call SID returned");
+          return {
+            success: false,
+            message: "Failed to initiate development call: No call ID returned"
+          };
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);

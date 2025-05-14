@@ -64,7 +64,6 @@ serve(async (req) => {
     }
     
     // Prepare the payload for ElevenLabs API
-    // Ensure proper audio format configuration for telephony
     const payload = {
       agent_id,
       to_number,
@@ -120,8 +119,18 @@ serve(async (req) => {
           }
         }
         
+        // Get detailed error information
+        let errorDetails;
+        try {
+          errorDetails = await response.json();
+          console.error("ElevenLabs API error details:", errorDetails);
+        } catch (parseError) {
+          console.error("Could not parse error response", parseError);
+          errorDetails = { message: await response.text() };
+        }
+        
         // For other errors, throw and capture below
-        throw new Error(`ElevenLabs API error: ${response.status}`);
+        throw new Error(`ElevenLabs API error: ${response.status} - ${errorDetails.message || errorDetails.detail || "Unknown error"}`);
       } catch (error) {
         if (retries >= MAX_RETRIES) throw error;
         retries++;
@@ -130,15 +139,16 @@ serve(async (req) => {
       }
     }
     
-    // Enhanced error handling
-    if (!response.ok) {
-      let errorMessage = `ElevenLabs API error: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.detail || errorMessage;
-      } catch {
-        const errorText = await response.text();
-        if (errorText) errorMessage = errorText;
+    // Double-check for response
+    if (!response || !response.ok) {
+      let errorMessage = "Failed to connect to ElevenLabs API";
+      if (response) {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.detail || `Error code: ${response.status}`;
+        } catch {
+          errorMessage = `ElevenLabs API error: ${response.status}`;
+        }
       }
       throw new Error(errorMessage);
     }
@@ -167,8 +177,7 @@ serve(async (req) => {
           call_type: "outbound_elevenlabs"
         }
       }])
-      .select()
-      .single();
+      .select();
       
     if (callLogError) {
       console.error("Error creating call log:", callLogError);
