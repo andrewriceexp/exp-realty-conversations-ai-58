@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Phone, Loader2, Bug, Headphones, AlertCircle } from 'lucide-react';
+import { Phone, Loader2, Bug, Headphones, AlertCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
@@ -44,6 +44,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   const [lastCallSid, setLastCallSid] = useState<string | null>(null);
   const [callStatus, setCallStatus] = useState<string | null>(null);
   const [isVerifyingCall, setIsVerifyingCall] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
   
   const { makeCall, makeDevelopmentCall, verifyCallStatus } = useTwilioCall();
   const { getVoices } = useElevenLabs();
@@ -60,13 +61,31 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   // Periodically check call status if we have a call SID
   useEffect(() => {
     let statusCheckInterval: number | null = null;
+    let timeoutCounter = 0;
+    const MAX_TIMEOUTS = 12; // 1 minute total (12 * 5 seconds)
     
     if (lastCallSid) {
       // Check immediately
       checkCallStatus();
       
       // Then check every 5 seconds
-      statusCheckInterval = window.setInterval(checkCallStatus, 5000);
+      statusCheckInterval = window.setInterval(() => {
+        checkCallStatus();
+        
+        // If status stays as "queued" for too long, show an error
+        if (callStatus === "queued") {
+          timeoutCounter++;
+          
+          if (timeoutCounter >= MAX_TIMEOUTS) {
+            setCallError("Call appears to be stuck in queue. You may need to try again.");
+            setLastCallSid(null);
+            clearInterval(statusCheckInterval!);
+          }
+        } else {
+          // Reset counter if status changes
+          timeoutCounter = 0;
+        }
+      }, 5000);
     }
     
     return () => {
@@ -74,7 +93,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         clearInterval(statusCheckInterval);
       }
     };
-  }, [lastCallSid]);
+  }, [lastCallSid, callStatus]);
   
   const checkCallStatus = async () => {
     if (!lastCallSid) return;
@@ -102,9 +121,14 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
           setLastCallSid(null);
           // Don't clear status so the user can see the final status
         }
+      } else if (!result.success) {
+        // Handle error from status check
+        console.error("Error checking call status:", result.message);
+        setCallError(result.message || "Failed to check call status");
       }
     } catch (error) {
       console.error("Error checking call status:", error);
+      setCallError("An unexpected error occurred when checking call status");
     } finally {
       setIsVerifyingCall(false);
     }
@@ -226,6 +250,9 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
 
     const prospect = prospects[currentProspectIndex];
     
+    // Clear any previous errors
+    setCallError(null);
+    
     try {
       setIsCalling(true);
       setLastCallSid(null);
@@ -278,37 +305,49 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
           description: `Calling ${prospect.first_name || ''} ${prospect.last_name || ''} at ${phoneDisplay}`,
           duration: 8000, // Show for longer
         });
+      } else {
+        // Handle call error
+        setCallError(response.message || "Failed to initiate call");
+        
+        // Show specific error messages based on error code
+        if (response.code === 'TWILIO_TRIAL_ACCOUNT') {
+          toast({
+            title: "Twilio Trial Account",
+            description: "Your Twilio trial account has limitations. Try enabling Development Mode for basic functionality.",
+            variant: "warning"
+          });
+        } else if (response.code === 'ELEVENLABS_API_KEY_MISSING') {
+          toast({
+            title: "ElevenLabs API Key Missing",
+            description: "Please add your ElevenLabs API key in your profile settings to use custom voices.",
+            variant: "warning"
+          });
+          
+          // Automatically disable ElevenLabs voice if the API key is missing
+          setUseElevenLabsVoice(false);
+        } else if (response.code === 'REQUEST_TIMEOUT') {
+          toast({
+            title: "Request Timeout",
+            description: "The call request timed out. Please try again later.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: 'Call failed',
+            description: response.message || 'An error occurred while making the call',
+            variant: 'destructive',
+          });
+        }
       }
     } catch (error: any) {
+      setCallError(error.message || "An unexpected error occurred");
+      
       toast({
         title: 'Call failed',
         description: error.message || 'An error occurred while making the call',
         variant: 'destructive',
       });
       
-      // Special handling for trial accounts
-      if (error.message?.includes('trial account') || 
-          error.message?.includes('Trial account') ||
-          error.code === 'TWILIO_TRIAL_ACCOUNT') {
-        toast({
-          title: "Twilio Trial Account",
-          description: "Your Twilio trial account has limitations. Try enabling Development Mode for basic functionality.",
-          variant: "warning"
-        });
-      }
-      
-      // Special handling for missing ElevenLabs API key
-      if (error.message?.includes('ElevenLabs API key') || 
-          error.code === 'ELEVENLABS_API_KEY_MISSING') {
-        toast({
-          title: "ElevenLabs API Key Missing",
-          description: "Please add your ElevenLabs API key in your profile settings to use custom voices.",
-          variant: "warning"
-        });
-        
-        // Automatically disable ElevenLabs voice if the API key is missing
-        setUseElevenLabsVoice(false);
-      }
     } finally {
       setIsCalling(false);
     }
@@ -325,6 +364,17 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
           <AlertDescription>
             Twilio webhook validation is bypassed. Use only for testing.
           </AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Display error message if present */}
+      {callError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4 mr-2" />
+          <div>
+            <AlertTitle>Call Error</AlertTitle>
+            <AlertDescription>{callError}</AlertDescription>
+          </div>
         </Alert>
       )}
       
