@@ -1,105 +1,70 @@
 
-import { twiml } from './twilio-helper.ts';
+import { corsHeaders } from "./cors.ts";
 
 /**
- * Properly XML encodes URL parameters for Twilio
- * This function ensures URLs are properly encoded for XML attributes
+ * Creates a TwiML response for establishing a WebSocket connection
+ * @param host The host URL for the WebSocket connection
+ * @returns TwiML string to establish a WebSocket connection
  */
-export function encodeXmlUrl(baseUrl: string, params: Record<string, string | undefined>) {
-  // First, build a URL object with parameters
-  const url = new URL(baseUrl);
+export function createWebSocketStreamTwiML(host: string): string {
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="wss://${host}/twilio-media-stream" />
+  </Connect>
+</Response>`;
+  return twiml;
+}
+
+/**
+ * Creates a TwiML response that handles timeouts and errors
+ * @param debugMode If true, adds additional debugging information
+ * @returns TwiML string with timeout handling
+ */
+export function createTimeoutSafetyTwiML(debugMode = false): string {
+  const debugInfo = debugMode ? 
+    "<Say>Debug mode active. This is a voice connection test.</Say>" : "";
+    
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${debugInfo}
+  <Say>Connecting to your ElevenLabs agent. Please wait a moment.</Say>
+  <Pause length="2"/>
+  <Say>We're experiencing a brief connection delay. Please stay on the line.</Say>
+  <Pause length="5"/>
+  <Say>Sorry, we're having trouble establishing the connection. Please try again later.</Say>
+</Response>`;
+  return twiml;
+}
+
+/**
+ * Helper function for responding with a TwiML in case of errors
+ * @param errorMessage The error message to include
+ * @param debugMode If true, includes more detailed error information
+ * @returns TwiML string with error information
+ */
+export function createErrorTwiML(errorMessage: string, debugMode = false): string {
+  const debugInfo = debugMode ? 
+    `<Say>Debug information: ${errorMessage}</Say>` : "";
   
-  // Add parameters that are not undefined
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined) {
-      url.searchParams.append(key, value);
-    }
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Sorry, we encountered an error connecting to our AI system.</Say>
+  ${debugInfo}
+</Response>`;
+  return twiml;
+}
+
+/**
+ * Creates a Response object with TwiML content and proper headers
+ * @param twiml The TwiML string to include in the response
+ * @returns Response object with TwiML content
+ */
+export function createTwiMLResponse(twiml: string): Response {
+  return new Response(twiml, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/xml",
+    },
   });
-  
-  // Now, get the full URL and XML-encode special characters
-  // This is critical for XML attributes to prevent parsing errors
-  let fullUrl = url.toString();
-  
-  // Encode ampersands for XML attributes (& -> &amp;)
-  fullUrl = fullUrl.replace(/&/g, '&amp;');
-  
-  console.log(`Encoded XML URL: ${fullUrl}`);
-  return fullUrl;
 }
-
-/**
- * Creates a properly structured Gather with Say element
- * This function ensures proper nesting of Say within Gather
- */
-export function createGatherWithSay(
-  response: any, 
-  action: string, 
-  sayText: string,
-  options: Record<string, any> = {}
-) {
-  // Ensure action URL is XML-encoded
-  const xmlEncodedAction = action.replace(/&/g, '&amp;');
-  
-  // Make sure the text is definitely a string
-  const textToSay = typeof sayText === 'string' ? sayText : 'How can I assist you today?';
-  
-  // Extract voice from options before creating Gather
-  const voice = options.voice;
-  delete options.voice; // Remove voice from Gather options
-  
-  // Create Gather with the clean options (no voice attribute)
-  const gather = response.gather({
-    input: 'speech dtmf',
-    action: xmlEncodedAction,
-    timeout: options.timeout || 5,  // Default to 5 seconds if not specified
-    speechTimeout: options.speechTimeout || "auto",
-    ...options
-  });
-  
-  // Add the Say element inside Gather with voice if provided
-  if (voice) {
-    gather.say({ voice }, textToSay);
-  } else {
-    gather.say(textToSay);
-  }
-  
-  // Return the response object for chaining
-  return response;
-}
-
-/**
- * Helper to create error response TwiML
- */
-export function createErrorResponse(message: string): string {
-  const response = twiml.VoiceResponse();
-  response.say({
-    voice: 'Polly.Amy-Neural'  // Use a high-quality voice for error messages
-  }, message || "I'm sorry, there was an error with the call. Please try again later.");
-  response.pause({ length: 1 });
-  response.hangup();
-  return response.toString();
-}
-
-/**
- * Create a timeout safety net TwiML
- * This prevents the dreaded "application error has occurred" message
- */
-export function createTimeoutSafetyTwiML(redirectUrl: string): string {
-  const response = twiml.VoiceResponse();
-  
-  // Add a short timeout to prevent Twilio's default error message
-  response.say({
-    voice: 'Polly.Amy-Neural'
-  }, "Please wait while I process your request.");
-  
-  // Add a short pause
-  response.pause({ length: 2 });
-  
-  // Redirect to the same URL to retry
-  response.redirect({
-    method: 'POST'
-  }, redirectUrl);
-  
-  return response.toString();
-}
-
