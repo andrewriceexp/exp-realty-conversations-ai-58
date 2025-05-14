@@ -1,7 +1,8 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
+import { withTimeout } from '@/lib/utils';
 
 export interface VoiceOptions {
   text: string;
@@ -31,9 +32,19 @@ export function useElevenLabs() {
     
     try {
       console.log('Fetching available ElevenLabs voices...');
-      const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
+      
+      const functionPromise = supabase.functions.invoke('elevenlabs-voices', {
         body: {},
       });
+      
+      // Add timeout to prevent hanging
+      const result = await withTimeout(
+        functionPromise,
+        10000,
+        'Request to elevenlabs-voices timed out'
+      );
+      
+      const { data, error } = result;
       
       if (error) {
         console.error('Error fetching ElevenLabs voices:', error);
@@ -81,7 +92,7 @@ export function useElevenLabs() {
     try {
       console.log(`Generating speech with ElevenLabs, voice ID: ${voiceId.substring(0, 8)}...`);
       
-      const { data, error } = await supabase.functions.invoke('generate-speech', {
+      const functionPromise = supabase.functions.invoke('generate-speech', {
         body: {
           text,
           voiceId,
@@ -92,6 +103,15 @@ export function useElevenLabs() {
           }
         },
       });
+      
+      // Add timeout of 15 seconds
+      const result = await withTimeout(
+        functionPromise,
+        15000,
+        'Speech generation request timed out'
+      );
+      
+      const { data, error } = result;
       
       if (error) {
         console.error('Error invoking generate-speech function:', error);

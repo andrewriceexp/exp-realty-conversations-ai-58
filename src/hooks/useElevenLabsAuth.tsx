@@ -1,7 +1,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/use-toast';
+import { withTimeout } from '@/lib/utils';
 
 interface UseElevenLabsAuthReturn {
   isReady: boolean;
@@ -59,20 +60,21 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     }
     
     try {
-      // Add a timeout to the fetch call to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch("https://api.elevenlabs.io/v1/user", {
+      // Use our withTimeout utility to prevent hanging
+      const validatePromise = fetch("https://api.elevenlabs.io/v1/user", {
         method: "GET",
         headers: {
           "xi-api-key": profile.elevenlabs_api_key,
           "Content-Type": "application/json",
         },
-        signal: controller.signal
       });
       
-      clearTimeout(timeoutId);
+      // Set 8 second timeout which is reasonable for API validation
+      const response = await withTimeout(
+        validatePromise,
+        8000,
+        "ElevenLabs API key validation timed out"
+      );
       
       if (!response.ok) {
         setError("Your ElevenLabs API key appears to be invalid");
@@ -89,7 +91,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       console.error("Error validating ElevenLabs API key:", err);
       setError(err instanceof Error ? err.message : "Failed to validate ElevenLabs API key");
       
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if (err instanceof Error && err.message.includes("timed out")) {
         toast({
           title: "API Key Validation Timed Out",
           description: "Connection to ElevenLabs timed out. Please check your internet connection and try again.",
