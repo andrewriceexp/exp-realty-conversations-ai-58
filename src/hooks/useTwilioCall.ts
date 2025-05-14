@@ -45,14 +45,21 @@ export function useTwilioCall() {
         voiceId: options.voiceId ? `${options.voiceId.substring(0, 8)}...` : undefined
       });
       
-      const { data, error } = await supabase.functions.invoke('twilio-make-call', {
+      // Add a more robust timeout to the Supabase function call
+      const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
+        setTimeout(() => reject(new Error("Twilio call request timed out")), 15000)
+      );
+      
+      // Make the actual API call
+      const fetchPromise = supabase.functions.invoke('twilio-make-call', {
         body: options
+      }).then(({data, error}) => {
+        if (error) throw error;
+        return data;
       });
       
-      if (error) {
-        console.error('Error making call:', error);
-        throw error;
-      }
+      // Race the timeout against the actual request
+      const data = await Promise.race([fetchPromise, timeoutPromise]);
       
       if (!data?.success) {
         throw new Error(data?.message || 'Failed to initiate call');
@@ -88,6 +95,11 @@ export function useTwilioCall() {
           errorCode = 'ELEVENLABS_API_KEY_MISSING';
         } else if (error.message.includes('timed out')) {
           errorCode = 'REQUEST_TIMEOUT';
+          toast({
+            variant: "destructive",
+            title: "Request Timeout",
+            description: "The call request timed out. Please check your internet connection and try again."
+          });
         }
       }
       
@@ -123,15 +135,23 @@ export function useTwilioCall() {
     try {
       console.log('Checking status for call:', callSid);
       
-      const { data, error } = await supabase.functions.invoke('twilio-call-status', {
+      // Add a timeout to the status check
+      const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
+        setTimeout(() => reject(new Error("Status check timed out")), 10000)
+      );
+      
+      // Make the actual API call
+      const fetchPromise = supabase.functions.invoke('twilio-call-status', {
         body: {
           callSid
         }
+      }).then(({data, error}) => {
+        if (error) throw error;
+        return data;
       });
       
-      if (error) {
-        throw error;
-      }
+      // Race the timeout against the actual request
+      const data = await Promise.race([fetchPromise, timeoutPromise]);
       
       // If no data is returned, the call might have failed or been disconnected
       if (!data) {

@@ -1,70 +1,123 @@
 
-import { corsHeaders } from "./cors.ts";
+// Helper functions for TwiML generation
 
 /**
- * Creates a TwiML response for establishing a WebSocket connection
- * @param host The host URL for the WebSocket connection
- * @returns TwiML string to establish a WebSocket connection
+ * Create a TwiML response with a WebSocket stream
+ * @param host - The host server URL
+ * @param agentId - Optional ElevenLabs agent ID
+ * @returns XML string for TwiML response
  */
-export function createWebSocketStreamTwiML(host: string): string {
+export function createWebSocketStreamTwiML(host: string, params?: Record<string, string>): string {
+  // Build the WebSocket URL for media streaming
+  let mediaStreamUrl = `wss://${host}/twilio-media-stream`;
+  
+  // Add URL parameters if present
+  if (params) {
+    const urlParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value) {
+        urlParams.append(key, value);
+      }
+    }
+    
+    const paramString = urlParams.toString();
+    if (paramString) {
+      mediaStreamUrl += `?${paramString}`;
+    }
+  }
+
+  // Create the TwiML response with WebSocket stream
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://${host}/twilio-media-stream" />
+    <Stream url="${mediaStreamUrl}" />
   </Connect>
 </Response>`;
+
   return twiml;
 }
 
 /**
- * Creates a TwiML response that handles timeouts and errors
- * @param debugMode If true, adds additional debugging information
- * @returns TwiML string with timeout handling
+ * Create a standard TwiML HTTP response
+ * @param twimlString - TwiML XML string
+ * @param headers - Additional headers to include
+ * @returns Response object
  */
-export function createTimeoutSafetyTwiML(debugMode = false): string {
-  const debugInfo = debugMode ? 
-    "<Say>Debug mode active. This is a voice connection test.</Say>" : "";
-    
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  ${debugInfo}
-  <Say>Connecting to your ElevenLabs agent. Please wait a moment.</Say>
-  <Pause length="2"/>
-  <Say>We're experiencing a brief connection delay. Please stay on the line.</Say>
-  <Pause length="5"/>
-  <Say>Sorry, we're having trouble establishing the connection. Please try again later.</Say>
-</Response>`;
-  return twiml;
-}
-
-/**
- * Helper function for responding with a TwiML in case of errors
- * @param errorMessage The error message to include
- * @param debugMode If true, includes more detailed error information
- * @returns TwiML string with error information
- */
-export function createErrorTwiML(errorMessage: string, debugMode = false): string {
-  const debugInfo = debugMode ? 
-    `<Say>Debug information: ${errorMessage}</Say>` : "";
-  
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Sorry, we encountered an error connecting to our AI system.</Say>
-  ${debugInfo}
-</Response>`;
-  return twiml;
-}
-
-/**
- * Creates a Response object with TwiML content and proper headers
- * @param twiml The TwiML string to include in the response
- * @returns Response object with TwiML content
- */
-export function createTwiMLResponse(twiml: string): Response {
-  return new Response(twiml, {
+export function createTwiMLResponse(twimlString: string, headers: Record<string, string> = {}): Response {
+  return new Response(twimlString, {
     headers: {
-      ...corsHeaders,
-      "Content-Type": "text/xml",
-    },
+      'Content-Type': 'text/xml',
+      ...headers
+    }
   });
+}
+
+/**
+ * Create an error response in TwiML format
+ * @param errorMessage - Error message to include
+ * @returns TwiML string with error message
+ */
+export function createErrorResponse(errorMessage: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Error: ${errorMessage}</Say>
+  <Hangup />
+</Response>`;
+}
+
+/**
+ * Encode URL parameters safely for use in TwiML
+ * @param baseUrl - Base URL for the webhook
+ * @param params - URL parameters to encode
+ * @returns XML-safe encoded URL 
+ */
+export function encodeXmlUrl(baseUrl: string, params: Record<string, string | undefined>): string {
+  // Build URL with parameters
+  const url = new URL(baseUrl);
+  
+  // Add parameters that are defined
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      url.searchParams.append(key, value);
+    }
+  }
+  
+  // XML-encode the URL
+  return url.toString().replace(/&/g, '&amp;');
+}
+
+/**
+ * Helper to create a TwiML Gather with Say element 
+ * Ensures proper nesting and voice attributes are applied correctly
+ */
+export function createGatherWithSay(
+  response: any, 
+  actionUrl: string, 
+  sayText: string, 
+  gatherOptions: Record<string, any> = {}
+) {
+  // Create the Gather element with proper action URL
+  const gather = response.gather({
+    input: 'speech dtmf',
+    action: actionUrl,
+    ...gatherOptions
+  });
+  
+  // Add Say element inside the Gather
+  gather.say(sayText);
+  
+  return gather;
+}
+
+/**
+ * Create a safe TwiML response with timeout protection
+ * This prevents the function from hanging if TwiML generation times out
+ */
+export function createTimeoutSafetyTwiML(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>I'm sorry, but I'm having trouble understanding. Please try again later.</Say>
+  <Pause length="1"/>
+  <Hangup />
+</Response>`;
 }

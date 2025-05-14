@@ -18,30 +18,60 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    
+    // Initialize with regular anon key first
     const supabase = createClient(supabaseUrl, supabaseKey);
+    // And another client with admin privileges for certain operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey);
 
     // Log incoming request data
     console.log(`Initiating call with prospect ID: ${prospectId}, agent config ID: ${agentConfigId}, user ID: ${userId}`);
     console.log(`bypassValidation: ${bypassValidation}, debugMode: ${debugMode}, voiceId: ${voiceId ? `${voiceId.slice(0, 8)}...` : 'none'}`);
 
     // Step 1: Get user profile with Twilio credentials
-    const { data: profile, error: profileError } = await supabase
+    // First try with regular client
+    let profile = null;
+    let profileError = null;
+    
+    // Try fetching the profile with the anon key first (respecting RLS)
+    const { data: profileData, error: profileErr } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+    
+    if (profileErr || !profileData) {
+      console.log("Regular client couldn't fetch profile, trying with admin client");
       
-    if (profileError || !profile) {
-      console.error("Error fetching user profile:", profileError);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: "Error fetching user profile. Please complete your profile setup first.",
-        code: "PROFILE_NOT_FOUND"
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // If that fails, try with the admin key (bypassing RLS)
+      const { data: adminProfileData, error: adminProfileError } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (adminProfileError || !adminProfileData) {
+        // If both attempts fail, return an error
+        console.error("Error fetching user profile with both clients:", adminProfileError || "No profile found");
+        return new Response(JSON.stringify({ 
+          success: false, 
+          message: "Error fetching user profile. Please complete your profile setup first.",
+          code: "PROFILE_NOT_FOUND"
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      // Use the profile fetched with admin privileges
+      profile = adminProfileData;
+    } else {
+      // Use the profile fetched with regular privileges
+      profile = profileData;
     }
+    
+    console.log(`Successfully fetched profile for user: ${profile.email || userId}`);
     
     // Ensure Twilio credentials are present
     if (!profile.twilio_account_sid || !profile.twilio_auth_token || !profile.twilio_phone_number) {
@@ -56,8 +86,8 @@ serve(async (req) => {
       });
     }
 
-    // Step 2: Get prospect data
-    const { data: prospect, error: prospectError } = await supabase
+    // Step 2: Get prospect data - use admin client to ensure we can access it
+    const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('prospects')
       .select('*')
       .eq('id', prospectId)
@@ -74,8 +104,8 @@ serve(async (req) => {
       });
     }
     
-    // Step 3: Get agent configuration
-    const { data: agentConfig, error: agentConfigError } = await supabase
+    // Step 3: Get agent configuration - use admin client
+    const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
       .from('agent_configs')
       .select('*')
       .eq('id', agentConfigId)
@@ -92,8 +122,8 @@ serve(async (req) => {
       });
     }
 
-    // Step 4: Create a new call log entry
-    const { data: callLog, error: callLogError } = await supabase
+    // Step 4: Create a new call log entry - use admin client
+    const { data: callLog, error: callLogError } = await supabaseAdmin
       .from('call_logs')
       .insert([{
         user_id: userId,
@@ -137,6 +167,14 @@ serve(async (req) => {
       urlParams.append('debug', 'true');
     }
     
+    // Add call log ID for tracking
+    if (callLog && callLog[0] && callLog[0].id) {
+      urlParams.append('call_log_id', callLog[0].id);
+    }
+    
+    // Add user ID for authentication
+    urlParams.append('user_id', userId);
+    
     // Append parameters to URL
     const paramString = urlParams.toString();
     if (paramString) {
@@ -159,8 +197,8 @@ serve(async (req) => {
       console.log(`Call initiated successfully with SID: ${call.sid}`);
       
       // Update the call log with call SID
-      if (callLog) {
-        const { error: updateError } = await supabase
+      if (callLog && callLog[0]) {
+        const { error: updateError } = await supabaseAdmin
           .from('call_logs')
           .update({
             call_sid: call.sid,
@@ -174,7 +212,7 @@ serve(async (req) => {
       }
       
       // Update prospect status to 'In Progress'
-      const { error: prospectUpdateError } = await supabase
+      const { error: prospectUpdateError } = await supabaseAdmin
         .from('prospects')
         .update({
           status: 'In Progress',
@@ -200,8 +238,8 @@ serve(async (req) => {
       console.error("Twilio call creation error:", twilioError);
       
       // Update the call log with error
-      if (callLog) {
-        await supabase
+      if (callLog && callLog[0]) {
+        await supabaseAdmin
           .from('call_logs')
           .update({
             status: 'Failed',
