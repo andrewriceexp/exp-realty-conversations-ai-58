@@ -1,12 +1,12 @@
 
-// Re-export everything from the implementation file
+// Export everything from the hooks implementation 
 export {
   useToast,
-  ToastAction,
+  toast,
   Toaster,
+  ToastAction,
   type Toast,
   type ToastProps,
   type ToastActionElement,
   type ToasterToast
 } from "./use-toast.tsx";
-export { toast } from "./toast-utils";

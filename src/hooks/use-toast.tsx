@@ -11,7 +11,6 @@ import {
   Toast as ToastPrimitive,
   ToastProvider as ToastProviderPrimitive,
 } from "@/components/ui/toast";
-import { useToast as useToastPrimitive } from "@radix-ui/react-toast";
 
 const TOAST_LIMIT = 5;
 const TOAST_REMOVE_DELAY = 1000000;
@@ -210,15 +209,13 @@ export const useToast = () => {
 };
 
 export function ToastAction({
-  className,
   children,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { className: _, ...otherProps } = props;
   return (
     <button
       className="inline-flex h-8 items-center justify-center rounded-md bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
-      {...otherProps}
+      {...props}
     >
       {children}
     </button>
