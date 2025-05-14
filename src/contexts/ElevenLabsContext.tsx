@@ -8,6 +8,7 @@ interface ElevenLabsContextType {
   getSignedUrl: (agentId?: string) => Promise<string | null>;
   isLoading: boolean;
   error: string | null;
+  clearError: () => void;
 }
 
 const ElevenLabsContext = createContext<ElevenLabsContextType | undefined>(undefined);
@@ -18,14 +19,21 @@ const DEFAULT_AGENT_ID = '6Optf6WRTzp3rEyj2aiL';
 export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user, profile, session } = useAuth(); // Get session from AuthContext
+  const { user, profile, session } = useAuth();
   const { toast } = useToast();
 
+  const clearError = () => setError(null);
+
   const getSignedUrl = async (agentId?: string): Promise<string | null> => {
+    // Reset any previous errors
+    setError(null);
+    
     if (!user) {
+      const errorMsg = "Authentication required to use conversation features";
+      setError(errorMsg);
       toast({
-        title: "Authentication required",
-        description: "You need to be logged in to use the conversation AI features",
+        title: "Authentication Required",
+        description: errorMsg,
         variant: "destructive"
       });
       return null;
@@ -33,9 +41,24 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
 
     // Check if user has an ElevenLabs API key configured
     if (!profile?.elevenlabs_api_key) {
+      const errorMsg = "Please configure your ElevenLabs API key in your profile settings";
+      setError(errorMsg);
       toast({
         title: "ElevenLabs API Key Required",
-        description: "Please configure your ElevenLabs API key in your profile",
+        description: errorMsg,
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    // Check if we have a valid session and access token
+    if (!session?.access_token) {
+      const errorMsg = "Authentication session is missing or expired. Please log in again.";
+      setError(errorMsg);
+      console.error(errorMsg);
+      toast({
+        title: "Session Error",
+        description: errorMsg,
         variant: "destructive"
       });
       return null;
@@ -45,27 +68,21 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     const agentIdToUse = agentId || DEFAULT_AGENT_ID;
 
     if (!agentIdToUse || agentIdToUse.trim() === '') {
+      const errorMsg = "A valid ElevenLabs agent ID is required";
+      setError(errorMsg);
       toast({
-        title: "Invalid agent ID",
-        description: "A valid ElevenLabs agent ID is required",
+        title: "Invalid Configuration",
+        description: errorMsg,
         variant: "destructive"
       });
       return null;
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
       console.log("Calling elevenlabs-signed-url function with agentId:", agentIdToUse);
-      
-      // Check if we have a valid session and access token
-      if (!session || !session.access_token) {
-        console.error("No valid session or access token available");
-        throw new Error("Authentication session is missing or expired. Please log in again.");
-      }
-      
-      console.log("Session access token is available for Auth");
+      console.log("Session access token available:", !!session.access_token);
       
       // Call the Supabase Edge Function that will generate a signed URL
       const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
@@ -103,7 +120,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       setError(errorMessage);
       console.error('ElevenLabs getSignedUrl error:', err);
       toast({
-        title: "Error connecting to ElevenLabs",
+        title: "Error Connecting to ElevenLabs",
         description: errorMessage,
         variant: "destructive"
       });
@@ -116,7 +133,8 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const value = {
     getSignedUrl,
     isLoading,
-    error
+    error,
+    clearError
   };
 
   return (

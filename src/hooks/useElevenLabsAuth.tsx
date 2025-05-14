@@ -9,6 +9,7 @@ interface UseElevenLabsAuthReturn {
   hasApiKey: boolean;
   isAuthenticated: boolean;
   hasValidSession: boolean;
+  apiKeyStatus: 'missing' | 'configured' | 'unknown';
 }
 
 /**
@@ -26,16 +27,19 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
   const hasApiKey = !!profile?.elevenlabs_api_key;
   const hasValidSession = !!session?.access_token;
   
+  const apiKeyStatus = !isAuthenticated ? 'unknown' : 
+                      (hasApiKey ? 'configured' : 'missing');
+  
   const isReady = isAuthenticated && hasApiKey && hasValidSession;
   
   useEffect(() => {
     // Check authentication and API key requirements
     if (!isAuthenticated) {
-      setError("Authentication required");
+      setError("Authentication required to use ElevenLabs features");
     } else if (!hasValidSession) {
-      setError("Session expired, please log in again");
+      setError("Your session has expired. Please log in again to refresh your authentication");
     } else if (!hasApiKey) {
-      setError("ElevenLabs API key required");
+      setError("ElevenLabs API key required. Please add it in your profile settings");
     } else {
       setError(null);
     }
@@ -49,6 +53,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     error,
     hasApiKey,
     isAuthenticated,
-    hasValidSession
+    hasValidSession,
+    apiKeyStatus
   };
 }

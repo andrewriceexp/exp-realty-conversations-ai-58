@@ -4,10 +4,11 @@ import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
 
 interface ConversationPanelProps {
   agentId: string;
@@ -35,7 +36,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   prospectPhone,
   onConversationEnd,
 }) => {
-  const { getSignedUrl, isLoading: isLoadingUrl } = useElevenLabs();
+  const { getSignedUrl, isLoading: isLoadingUrl, error: urlError, clearError } = useElevenLabs();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [conversationStarted, setConversationStarted] = useState(false);
@@ -45,6 +46,15 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, profile, session } = useAuth();
+  const { isReady, error: authError, hasApiKey, apiKeyStatus } = useElevenLabsAuth();
+  
+  // Reset error states when component unmounts or when key dependencies change
+  useEffect(() => {
+    return () => {
+      clearError();
+      setConnectionError(null);
+    };
+  }, [clearError, agentId]);
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
@@ -79,6 +89,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         variant: "destructive"
       });
       setIsStarting(false);
+      setIsMicEnabled(false);
     },
     onConnect: () => {
       console.log('Conversation connected successfully');
@@ -133,21 +144,11 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Check for authentication and API key requirements on component mount
-  useEffect(() => {
-    if (!user) {
-      setConnectionError("You must be logged in to use the conversation feature");
-    } else if (!profile?.elevenlabs_api_key) {
-      setConnectionError("You need to add an ElevenLabs API key in your profile settings");
-    } else if (!session?.access_token) {
-      setConnectionError("Your session has expired. Please log in again");
-    }
-  }, [user, profile, session]);
-
   // Start the conversation
   const handleStartConversation = async () => {
     try {
       setIsStarting(true);
+      setConnectionError(null);
       
       // Request microphone permissions
       try {
@@ -170,15 +171,13 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
       console.log('Starting conversation with agent ID:', agentId);
       
-      // Reset any previous errors
-      setConnectionError(null);
-      
       // Get the signed URL from our backend
       console.log('Getting signed URL...');
       const signedUrl = await getSignedUrl(agentId);
       
       if (!signedUrl) {
-        throw new Error("Failed to get conversation URL from ElevenLabs");
+        const errorMsg = urlError || "Failed to get conversation URL from ElevenLabs. Check your API key.";
+        throw new Error(errorMsg);
       }
       
       console.log('Got signed URL, starting session...', signedUrl);
@@ -194,6 +193,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       console.error("Error starting conversation:", error);
       setConnectionError(error instanceof Error ? error.message : "An unknown error occurred");
       setIsStarting(false);
+      setIsMicEnabled(false);
       toast({
         title: "Failed to start conversation",
         description: error instanceof Error ? error.message : "Please check microphone permissions and try again",
@@ -257,16 +257,20 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const handleToggleVolume = async (volume: number) => {
     try {
       await conversation.setVolume({ volume });
+      toast({
+        title: volume === 0 ? "Audio Muted" : "Audio Unmuted",
+        description: volume === 0 ? "AI voice has been muted" : "AI voice has been unmuted"
+      });
     } catch (error) {
       console.error("Error setting volume:", error);
     }
   };
 
-  // Show a friendly error message if we don't have the ElevenLabs API key
-  if (!profile?.elevenlabs_api_key) {
+  // Determine what to show based on auth status and API key
+  if (apiKeyStatus === 'missing') {
     return (
       <div className="flex flex-col h-[500px] border rounded-md">
-        <div className="flex-1 p-4 flex items-center justify-center">
+        <div className="flex-1 p-6 flex items-center justify-center">
           <div className="text-center space-y-4">
             <h3 className="text-lg font-medium">ElevenLabs API Key Required</h3>
             <p className="text-muted-foreground">
@@ -291,7 +295,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         {messages.length === 0 && !conversationStarted && !isStarting && (
           <div className="flex items-center justify-center h-full text-center text-muted-foreground">
             <div>
-              <p>Click the button below to start a conversation with the AI assistant</p>
+              <p>Click the microphone button below to start a conversation with the AI assistant</p>
               <p className="text-sm mt-2">Make sure your microphone is connected and permissions are granted</p>
             </div>
           </div>
@@ -307,16 +311,29 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           </div>
         )}
         
-        {connectionError && (
+        {(connectionError || authError) && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription className="space-y-2">
-              <p className="font-medium">{connectionError}</p>
-              {!profile?.elevenlabs_api_key && (
+              <p className="font-medium">{connectionError || authError}</p>
+              {!hasApiKey && (
                 <p className="text-sm">Please add your ElevenLabs API key in your profile settings.</p>
               )}
               {!user && (
                 <p className="text-sm">Please log in to use this feature.</p>
               )}
+              <div className="flex justify-end mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setConnectionError(null);
+                    clearError();
+                  }}
+                >
+                  <RefreshCcw className="h-3 w-3 mr-2" />
+                  Try Again
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}

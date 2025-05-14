@@ -7,11 +7,12 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { AlertCircle, Check, Key } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Key, Loader2 } from 'lucide-react';
 
 const ElevenLabsInfo = () => {
   const [apiKey, setApiKey] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   
@@ -34,6 +35,16 @@ const ElevenLabsInfo = () => {
         toast({
           title: "Missing API Key",
           description: "Please enter an ElevenLabs API key",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Basic validation - API keys should be at least 32 characters
+      if (apiKey.length < 32) {
+        toast({
+          title: "Invalid API Key Format",
+          description: "The API key you entered appears to be invalid. Please check and try again.",
           variant: "destructive",
         });
         return;
@@ -112,12 +123,54 @@ const ElevenLabsInfo = () => {
     }
   };
 
+  const verifyApiKey = async () => {
+    if (!apiKey) {
+      toast({
+        title: "Missing API Key",
+        description: "Please enter an ElevenLabs API key to verify",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsVerifying(true);
+
+    try {
+      // Simple validation by trying to fetch voices
+      const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+        method: "GET",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Invalid API key or ElevenLabs API error (${response.status})`);
+      }
+
+      toast({
+        title: "API Key Valid",
+        description: "Your ElevenLabs API key has been verified successfully.",
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "API Key Verification Failed",
+        description: error.message || "Failed to verify API key with ElevenLabs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   return (
     <div className="border-t pt-6 mt-6">
       <div className="mb-4">
         <h2 className="text-lg font-semibold mb-2">ElevenLabs Integration</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Add your ElevenLabs API key to enable voice features in the application.
+          Add your ElevenLabs API key to enable voice conversation features in the application.
         </p>
         
         {!hasApiKey ? (
@@ -125,15 +178,24 @@ const ElevenLabsInfo = () => {
             <Alert variant="warning" className="mb-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                You need an ElevenLabs API key to use the voice features. Get your API key from{" "}
-                <a 
-                  href="https://elevenlabs.io/app/api-key" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary underline"
-                >
-                  ElevenLabs Dashboard
-                </a>.
+                <p className="mb-2">You need an ElevenLabs API key to use the voice conversation features.</p>
+                <ol className="list-decimal pl-5 space-y-1 text-sm">
+                  <li>Create an account at <a 
+                      href="https://elevenlabs.io/sign-up" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >ElevenLabs</a>
+                  </li>
+                  <li>Go to your <a 
+                      href="https://elevenlabs.io/app/api-key" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >ElevenLabs Dashboard</a> and copy your API key
+                  </li>
+                  <li>Paste your API key below and click "Save"</li>
+                </ol>
               </AlertDescription>
             </Alert>
             
@@ -146,22 +208,58 @@ const ElevenLabsInfo = () => {
                   placeholder="Enter your ElevenLabs API key"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
+                  className="flex-1"
                 />
-                <Button onClick={handleSaveApiKey} disabled={isSubmitting}>
-                  {isSubmitting ? "Saving..." : "Save"}
+                <Button 
+                  onClick={verifyApiKey} 
+                  variant="outline" 
+                  disabled={isVerifying || !apiKey}
+                >
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 
+                      Verifying
+                    </>
+                  ) : "Verify"}
                 </Button>
+              </div>
+              <div className="flex space-x-2 mt-2">
+                <Button 
+                  onClick={handleSaveApiKey} 
+                  disabled={isSubmitting || isVerifying}
+                  className="flex-1"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 
+                      Saving...
+                    </>
+                  ) : "Save API Key"}
+                </Button>
+              </div>
+              <div className="mt-3">
+                <a 
+                  href="https://elevenlabs.io/app/api-key" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary flex items-center"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Get your API key from ElevenLabs Dashboard
+                </a>
               </div>
             </div>
           </>
         ) : (
           <>
-            <Alert variant="default" className="border-green-500">
+            <Alert variant="default" className="border-green-500 mb-4">
               <Check className="h-4 w-4 text-green-500" />
               <AlertDescription>
-                ElevenLabs API key has been configured.
+                <p>ElevenLabs API key has been configured.</p>
+                <p className="text-sm mt-1 text-muted-foreground">You can now use the voice conversation features.</p>
               </AlertDescription>
             </Alert>
-            <div className="flex space-x-2 mt-4">
+            <div className="flex space-x-2">
               <Button
                 variant="outline"
                 onClick={handleRemoveApiKey}
@@ -169,6 +267,12 @@ const ElevenLabsInfo = () => {
               >
                 <Key className="h-4 w-4 mr-2" />
                 Replace API Key
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => window.location.href = '/conversation-testing'}
+              >
+                Test Conversation
               </Button>
             </div>
           </>
