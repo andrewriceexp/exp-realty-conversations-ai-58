@@ -29,7 +29,7 @@ export default function ConversationTesting() {
   const [isTestingActive, setIsTestingActive] = useState(false);
   const [lastApiKeyValidation, setLastApiKeyValidation] = useState<number | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { 
     isReady, 
     error: authError, 
@@ -53,11 +53,17 @@ export default function ConversationTesting() {
 
   // Validate API key when component mounts, but only once
   const validateApiKeyIfNeeded = useCallback(async () => {
+    if (!profile) return;
+    
     if (hasApiKey && apiKeyStatus !== 'valid' && !isAuthLoading) {
-      await validateApiKey();
-      setLastApiKeyValidation(Date.now());
+      try {
+        await validateApiKey();
+        setLastApiKeyValidation(Date.now());
+      } catch (error) {
+        console.error("API key validation failed:", error);
+      }
     }
-  }, [hasApiKey, validateApiKey, apiKeyStatus, isAuthLoading]);
+  }, [hasApiKey, validateApiKey, apiKeyStatus, isAuthLoading, profile]);
   
   useEffect(() => {
     if (hasApiKey) {
@@ -68,15 +74,23 @@ export default function ConversationTesting() {
   // Force a re-validation of the API key
   const handleForceRevalidate = async () => {
     if (hasApiKey) {
-      await validateApiKey();
-      setLastApiKeyValidation(Date.now());
-      
-      toast({
-        title: apiKeyStatus === 'valid' ? "API Key Validated" : "API Key Validation Failed",
-        description: apiKeyStatus === 'valid' 
-          ? "Your ElevenLabs API key is valid and ready to use."
-          : "Please check that your API key is correct in your profile settings.",
-      });
+      try {
+        const isValid = await validateApiKey();
+        setLastApiKeyValidation(Date.now());
+        
+        toast({
+          title: isValid ? "API Key Validated" : "API Key Validation Failed",
+          description: isValid 
+            ? "Your ElevenLabs API key is valid and ready to use."
+            : "Please check that your API key is correct in your profile settings.",
+        });
+      } catch (error) {
+        toast({
+          title: "API Key Validation Failed",
+          description: "An error occurred while validating your API key. Please try again.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -91,31 +105,33 @@ export default function ConversationTesting() {
       return;
     }
     
-    if (!isReady) {
-      if (!hasApiKey) {
-        toast({
-          title: "ElevenLabs API Key Required",
-          description: "Please configure your ElevenLabs API key in your profile settings",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      if (authError) {
-        toast({
-          title: "Cannot start conversation",
-          description: authError || "Please check your authentication and API key",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // If API key status isn't valid, try to validate it now
-      if (apiKeyStatus !== 'valid') {
+    if (!hasApiKey) {
+      toast({
+        title: "ElevenLabs API Key Required",
+        description: "Please configure your ElevenLabs API key in your profile settings",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (apiKeyStatus !== 'valid') {
+      try {
         const isValid = await validateApiKey();
         if (!isValid) {
-          return; // The hook will show appropriate error toasts
+          toast({
+            title: "API Key Invalid",
+            description: "Your ElevenLabs API key could not be validated. Please check and update it in your profile.",
+            variant: "destructive",
+          });
+          return;
         }
+      } catch (error) {
+        toast({
+          title: "API Key Validation Failed",
+          description: "An error occurred while validating your API key. Please try again.",
+          variant: "destructive"
+        });
+        return;
       }
     }
     

@@ -8,4 +8,4 @@ export {
   type ToastProps,
   type ToastActionElement,
   type ToasterToast
-} from "@/hooks/use-toast.tsx";
+} from "./use-toast.tsx";

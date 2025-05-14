@@ -11,6 +11,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AgentSettingsProps {
   agentId: string;
@@ -28,6 +29,7 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [agentDetails, setAgentDetails] = useState<any>(null);
+  const { profile } = useAuth();
   
   const form = useForm<AgentSettingsFormValues>({
     defaultValues: {
@@ -41,16 +43,15 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
   // Fetch current agent settings
   useEffect(() => {
     const fetchAgentSettings = async () => {
-      if (!agentId) return;
+      if (!agentId || !profile?.elevenlabs_api_key) return;
       
       setIsLoading(true);
       try {
-        // In a real implementation, you would fetch the current settings from the API
-        // This is just a placeholder - in practice, this would come from the ElevenLabs API
+        // Actually fetch settings from the ElevenLabs API
         const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}/settings`, {
           headers: {
-            'Content-Type': 'application/json'
-            // Include authorization if needed
+            'Content-Type': 'application/json',
+            'xi-api-key': profile.elevenlabs_api_key
           }
         });
         
@@ -65,15 +66,24 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
             enableAuth: data.require_auth !== false, // Default to true if not specified
             enablePromptOverrides: data.enable_prompt_overrides !== false // Default to true if not specified
           });
+        } else {
+          // If we get a 403/401, the API key is likely invalid or doesn't have access
+          if (response.status === 401 || response.status === 403) {
+            toast({
+              title: "Authentication Error",
+              description: "Your ElevenLabs API key doesn't have access to this agent. Please check your API key and permissions.",
+              variant: "destructive"
+            });
+          } else {
+            throw new Error(`Failed to fetch agent settings: ${response.statusText}`);
+          }
         }
       } catch (error) {
         console.error('Error fetching agent settings:', error);
-        // Still provide default values even if fetch fails
-        form.reset({
-          inputFormat: "mulaw_8000",
-          outputFormat: "mulaw_8000",
-          enableAuth: true,
-          enablePromptOverrides: true
+        toast({
+          title: "Error",
+          description: "Failed to load agent settings. Please check your connection and try again.",
+          variant: "destructive"
         });
       } finally {
         setIsLoading(false);
@@ -81,13 +91,13 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
     };
     
     fetchAgentSettings();
-  }, [agentId, form]);
+  }, [agentId, profile?.elevenlabs_api_key, form]);
 
   const onSubmit = async (data: AgentSettingsFormValues) => {
-    if (!agentId) {
+    if (!agentId || !profile?.elevenlabs_api_key) {
       toast({
         title: "Error",
-        description: "Agent ID is required",
+        description: "Missing API key or agent ID",
         variant: "destructive"
       });
       return;
@@ -97,10 +107,10 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
     try {
       // Update agent settings through ElevenLabs API
       const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}/settings`, {
-        method: 'PUT',
+        method: 'PATCH', // Use PATCH instead of PUT to update only specific fields
         headers: {
-          'Content-Type': 'application/json'
-          // Include authorization if needed
+          'Content-Type': 'application/json',
+          'xi-api-key': profile.elevenlabs_api_key
         },
         body: JSON.stringify({
           input_format: data.inputFormat,
@@ -111,7 +121,8 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update agent settings');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to update agent settings: ${response.statusText}`);
       }
 
       toast({
@@ -124,7 +135,7 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
       console.error('Error updating agent settings:', error);
       toast({
         title: "Update Failed",
-        description: "Failed to update agent settings. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to update agent settings. Please try again.",
         variant: "destructive"
       });
     } finally {
