@@ -157,38 +157,50 @@ export const twiml = {
     let content = '<?xml version="1.0" encoding="UTF-8"?><Response>';
     
     return {
-      say: function(text, options = {}) {
-        if (typeof text === 'object' && text !== null) {
-          // Handle options passed as first argument
-          options = text;
+      say: function(textOrOptions, options = {}) {
+        // Handle the case when options are passed as the first parameter
+        let text = '';
+        let attrs = {};
+        
+        if (typeof textOrOptions === 'object' && textOrOptions !== null) {
+          // First parameter is options
+          attrs = textOrOptions;
           text = options.message || '';
-          delete options.message;
+        } else {
+          // First parameter is text
+          text = textOrOptions || '';
+          attrs = options;
         }
-          
+        
+        // Ensure text is a string
+        text = String(text || '');
+        if (text === '[object Object]') {
+          console.error('Invalid text for Say verb: [object Object]');
+          text = 'Hello, this is the eXp Realty AI assistant.';
+        }
+        
         // Start the Say tag with any attributes
         content += '<Say';
-        for (const [key, value] of Object.entries(options)) {
+        for (const [key, value] of Object.entries(attrs)) {
           if (key !== 'voice' && key !== 'language') {
             content += ` ${key}="${value}"`;
           }
         }
         
         // Add voice and language if provided
-        if (options.voice) {
-          content += ` voice="${options.voice}"`;
+        if (attrs.voice) {
+          content += ` voice="${attrs.voice}"`;
         }
         
-        if (options.language) {
-          content += ` language="${options.language}"`;
+        if (attrs.language) {
+          content += ` language="${attrs.language}"`;
         }
         
         // Close the opening tag and add content
         content += '>';
         
-        // Add the text content
+        // Add the text content and close the Say tag
         content += text;
-        
-        // Close the Say tag
         content += '</Say>';
         
         return this;
@@ -221,17 +233,34 @@ export const twiml = {
         return this;
       },
       gather: function(options = {}) {
-        content += '<Gather';
+        // Make sure the action URL is XML-encoded in attributes
+        let gatherContent = '<Gather';
         for (const [key, value] of Object.entries(options)) {
-          content += ` ${key}="${value}"`;
+          if (key === 'action' && typeof value === 'string') {
+            // XML-encode the action URL
+            const xmlEncodedValue = value.replace(/&/g, '&amp;');
+            gatherContent += ` ${key}="${xmlEncodedValue}"`;
+          } else {
+            gatherContent += ` ${key}="${value}"`;
+          }
         }
-        content += '>';
+        gatherContent += '>';
+        
+        content += gatherContent;
+        
         return {
           say: function(text, sayOptions = {}) {
+            // Ensure text is a string
+            const safeText = String(text || '');
+            if (safeText === '[object Object]' || safeText === '') {
+              console.error('Invalid text for Say verb inside Gather');
+              text = 'Please respond with your input.';
+            }
+            
             if (typeof sayOptions === 'object' && sayOptions.voice) {
-              content += `<Say voice="${sayOptions.voice}">${text}</Say>`;
+              content += `<Say voice="${sayOptions.voice}">${safeText}</Say>`;
             } else {
-              content += `<Say>${text}</Say>`;
+              content += `<Say>${safeText}</Say>`;
             }
             return this;
           },
@@ -249,7 +278,24 @@ export const twiml = {
           },
           endGather: function() {
             content += '</Gather>';
-            return twiml.VoiceResponse();
+            return {
+              // Return functions that can operate outside Gather
+              say: function(text, options = {}) {
+                return twiml.VoiceResponse().say(text, options);
+              },
+              pause: function(options = {}) {
+                return twiml.VoiceResponse().pause(options);
+              },
+              redirect: function(options = {}, url = '') {
+                return twiml.VoiceResponse().redirect(options, url);
+              },
+              hangup: function() {
+                return twiml.VoiceResponse().hangup();
+              },
+              toString: function() {
+                return content + '</Response>';
+              }
+            };
           }
         };
       },
@@ -258,18 +304,38 @@ export const twiml = {
         return this;
       },
       redirect: function(options = {}, url = '') {
+        // Handle both options as first parameter or as separate parameters
+        let redirectUrl = '';
+        
+        if (typeof options === 'string') {
+          // If options is a string, it's the URL
+          redirectUrl = options;
+          options = {};
+        } else if (typeof url === 'string') {
+          // If url is provided as second parameter
+          redirectUrl = url;
+        } else if (typeof options === 'object' && options !== null && 'url' in options) {
+          // If options has a url property
+          redirectUrl = options.url;
+          delete options.url;
+        }
+        
+        // XML-encode the URL for the redirect content
+        if (redirectUrl) {
+          redirectUrl = redirectUrl.replace(/&/g, '&amp;');
+        }
+        
         content += '<Redirect';
         if (typeof options === 'object' && options !== null) {
           for (const [key, value] of Object.entries(options)) {
-            content += ` ${key}="${value}"`;
+            if (key !== 'url') {
+              content += ` ${key}="${value}"`;
+            }
           }
         }
         content += '>';
         
-        // If URL is provided as second parameter or options has a url property
-        const redirectUrl = url || (typeof options === 'string' ? options : '');
         content += redirectUrl;
-        
         content += '</Redirect>';
         return this;
       },

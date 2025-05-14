@@ -2,9 +2,11 @@
 import { twiml } from './twilio-helper.ts';
 
 /**
- * XML encodes URL parameters for Twilio
+ * Properly XML encodes URL parameters for Twilio
+ * This function ensures URLs are properly encoded for XML attributes
  */
 export function encodeXmlUrl(baseUrl: string, params: Record<string, string | undefined>) {
+  // First, build a URL object with parameters
   const url = new URL(baseUrl);
   
   // Add parameters that are not undefined
@@ -14,7 +16,15 @@ export function encodeXmlUrl(baseUrl: string, params: Record<string, string | un
     }
   });
   
-  return url.toString();
+  // Now, get the full URL and XML-encode special characters
+  // This is critical for XML attributes to prevent parsing errors
+  let fullUrl = url.toString();
+  
+  // Encode ampersands for XML attributes (& -> &amp;)
+  fullUrl = fullUrl.replace(/&/g, '&amp;');
+  
+  console.log(`Encoded XML URL: ${fullUrl}`);
+  return fullUrl;
 }
 
 /**
@@ -27,17 +37,20 @@ export function createGatherWithSay(
   sayText: string,
   options: Record<string, any> = {}
 ) {
+  // Ensure action URL is XML-encoded
+  const xmlEncodedAction = action.replace(/&/g, '&amp;');
+  
+  // Make sure the text is definitely a string
+  const textToSay = typeof sayText === 'string' ? sayText : 'How can I assist you today?';
+  
   // Create Gather with specified options
   const gather = response.gather({
     input: 'speech dtmf',
-    action: action,
+    action: xmlEncodedAction,
     ...options
   });
   
   // Add the Say element inside Gather with text as string
-  // Make sure the text is definitely a string
-  const textToSay = typeof sayText === 'string' ? sayText : 'How can I assist you today?';
-  
   if (options.voice) {
     gather.say({ voice: options.voice }, textToSay);
   } else {

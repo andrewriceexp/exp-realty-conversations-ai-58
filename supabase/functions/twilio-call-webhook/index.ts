@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -183,7 +184,7 @@ serve(async (req) => {
       response.pause({ length: 1 });
       
       // Create a Gather with Say element
-      const gather = response.gather({
+      const gatherWithSay = response.gather({
         input: 'speech dtmf',
         action: processResponseUrl,
         timeout: 10,
@@ -193,23 +194,22 @@ serve(async (req) => {
       });
       
       // Add the Say element inside Gather
-      gather.say("How can I assist you with your real estate needs today?");
+      gatherWithSay.say("How can I assist you with your real estate needs today?");
       
-      // End the Gather element
-      gather.endGather();
+      // End the Gather element and get the updated response object
+      const responseAfterGather = gatherWithSay.endGather();
       
-      // If gather times out, redirect to the process-response endpoint anyway
-      // This must be outside the Gather element
-      response.redirect({
+      // Now add a redirect outside of Gather (as a sibling, not a child)
+      responseAfterGather.redirect({
         method: 'POST'
       }, processResponseUrl);
       
-      // Log the final TwiML for debugging
-      const twimlString = response.toString();
-      console.log(`Final TwiML response for trial account (full TwiML):`);
-      console.log(twimlString);
+      // Get the final TwiML string
+      const twimlString = responseAfterGather.toString();
+      console.log(`Final TwiML response for trial account (truncated):`);
+      console.log(twimlString.substring(0, 200) + "...");
       
-      // Verify the TwiML structure is correct
+      // Verify the TwiML structure before returning
       if (!twimlString.includes('</Gather>')) {
         console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
       }
@@ -309,8 +309,8 @@ serve(async (req) => {
     // Create XML-encoded URL for the next step
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // Create a Gather with Say element
-    const gather = response.gather({
+    // Create a Gather with Say element using the modified twiml builder
+    const gatherWithSay = response.gather({
       input: 'speech dtmf',
       action: processResponseUrl,
       timeout: 10,
@@ -321,28 +321,29 @@ serve(async (req) => {
     });
     
     // Add the Say element inside Gather
-    gather.say("How can I assist you with your real estate needs today?");
+    gatherWithSay.say("How can I assist you with your real estate needs today?");
     
-    // End the Gather element
-    gather.endGather();
+    // End the Gather element and get the updated response object
+    const responseAfterGather = gatherWithSay.endGather();
     
-    // If gather times out, redirect to the process-response endpoint anyway
-    // This must be outside the Gather element
-    response.redirect({
+    // Add a redirect outside the Gather (as a sibling, not a child)
+    responseAfterGather.redirect({
       method: 'POST'
     }, processResponseUrl);
     
-    // Log the full final TwiML for debugging
-    const twimlString = response.toString();
-    console.log(`Final TwiML response (full TwiML):`);
-    console.log(twimlString);
+    // Get the final TwiML string
+    const twimlString = responseAfterGather.toString();
     
-    // Verify the TwiML structure is correct
+    // Log only a truncated version of the TwiML to avoid cluttering logs
+    console.log(`Final TwiML response (truncated):`);
+    console.log(twimlString.substring(0, 200) + "...");
+    
+    // Verify the TwiML structure before returning
     if (!twimlString.includes('</Gather>')) {
       console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
     }
     
-    console.log('Returning full TwiML response');
+    console.log('Returning TwiML response');
     return new Response(twimlString, { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });

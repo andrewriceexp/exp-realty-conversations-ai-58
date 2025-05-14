@@ -91,7 +91,7 @@ serve(async (req) => {
       isValidRequest = true;
     } else {
       console.log('Attempting to validate Twilio request signature in process-response with user-specific auth token');
-      isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken);
+      isValidRequest = await validateTwilioRequest(req, req.url, userTwilioAuthToken);
       
       if (!isValidRequest) {
         console.error("Twilio request validation FAILED - Returning 403 Forbidden");
@@ -376,7 +376,7 @@ serve(async (req) => {
       const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
       // Create a Gather with Say element
-      const gather = response.gather({
+      const gatherWithSay = response.gather({
         input: 'speech dtmf',
         action: nextActionUrl,
         timeout: 10,
@@ -386,16 +386,29 @@ serve(async (req) => {
       });
       
       // Add the Say element inside Gather
-      gather.say("Please go ahead with your response.");
+      gatherWithSay.say("Please go ahead with your response.");
       
-      // End the Gather element
-      gather.endGather();
+      // End the Gather element and get the updated response object
+      const responseAfterGather = gatherWithSay.endGather();
       
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       
       // Add a fallback in case gather times out (outside the Gather element)
-      response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
+      responseAfterGather.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
       
+      // Get the final TwiML string
+      const twimlString = responseAfterGather.toString();
+      
+      // Verify the TwiML structure before returning
+      if (!twimlString.includes('</Gather>')) {
+        console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
+      }
+      
+      console.log(`Returning TwiML response (truncated): ${twimlString.substring(0, 200)}...`);
+      
+      return new Response(twimlString, { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
     } else {
       // End the conversation
       if (isPositiveResponse) {
@@ -421,19 +434,15 @@ serve(async (req) => {
           console.error('Error updating call log with summary:', error);
         }
       }
+      
+      // Get the final TwiML string
+      const twimlString = response.toString();
+      console.log(`Returning final TwiML response for call end (truncated): ${twimlString.substring(0, 200)}...`);
+      
+      return new Response(twimlString, { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
     }
-    
-    const twimlString = response.toString();
-    console.log(`Returning TwiML response (truncated): ${twimlString.substring(0, 200)}...`);
-    
-    // Verify the TwiML structure is correct
-    if (!twimlString.includes('</Gather>') && !isEndingCall) {
-      console.error('ERROR: Generated TwiML does not contain a closing Gather tag!');
-    }
-    
-    return new Response(twimlString, { 
-      headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
-    });
   } catch (error) {
     console.error('Error in process-response function:', error);
     
