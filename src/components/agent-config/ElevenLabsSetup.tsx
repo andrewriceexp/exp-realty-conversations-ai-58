@@ -71,6 +71,48 @@ export function ElevenLabsSetup() {
     }
   };
 
+  const handleRemoveApiKey = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      if (!user) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in to update your API key",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Update the profile with the new API key
+      const { error } = await supabase
+        .from('profiles')
+        .update({ elevenlabs_api_key: null })
+        .eq('id', user?.id);
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Refresh the user profile to get the updated data
+      await refreshProfile();
+      
+      toast({
+        title: "API Key Removed",
+        description: "Your ElevenLabs API key has been removed.",
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error Removing API Key",
+        description: error.message || "An unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const hasApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
 
   return (
@@ -126,32 +168,7 @@ export function ElevenLabsSetup() {
             <div className="flex space-x-2">
               <Button
                 variant="outline"
-                onClick={() => {
-                  setApiKey('');
-                  setIsSubmitting(true);
-                  supabase
-                    .from('profiles')
-                    .update({ elevenlabs_api_key: null })
-                    .eq('id', user?.id)
-                    .then(async () => {
-                      await refreshProfile();
-                      toast({
-                        title: "API Key Removed",
-                        description: "Your ElevenLabs API key has been removed.",
-                        variant: "default",
-                      });
-                    })
-                    .catch((error) => {
-                      toast({
-                        title: "Error Removing API Key",
-                        description: error.message || "An unknown error occurred",
-                        variant: "destructive",
-                      });
-                    })
-                    .finally(() => {
-                      setIsSubmitting(false);
-                    });
-                }}
+                onClick={handleRemoveApiKey}
                 disabled={isSubmitting}
               >
                 <Key className="h-4 w-4 mr-2" />
