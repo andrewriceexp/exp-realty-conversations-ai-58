@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,13 +11,15 @@ import ConversationPanel from "@/components/conversations/ConversationPanel";
 import { Loader2, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
 import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AgentSettings } from "@/components/agent-config/AgentSettings";
 
 interface AgentOption {
   id: string;
   name: string;
 }
 
-const ConversationTesting = () => {
+// Update the component to include agent settings
+export default function ConversationTesting() {
   // Default to the provided agent ID
   const [selectedAgentId, setSelectedAgentId] = useState<string>("6Optf6WRTzp3rEyj2aiL");
   const [agents, setAgents] = useState<AgentOption[]>([]);
@@ -137,6 +138,7 @@ const ConversationTesting = () => {
     window.location.href = '/profile-setup';
   };
 
+  // Add new sections to the existing return JSX
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -197,6 +199,18 @@ const ConversationTesting = () => {
               </Button>
             </AlertDescription>
           </Alert>
+        )}
+
+        {selectedAgentId && (
+          <AgentSettings 
+            agentId={selectedAgentId}
+            onUpdate={() => {
+              toast({
+                title: "Agent Updated",
+                description: "Agent settings have been successfully updated.",
+              });
+            }}
+          />
         )}
 
         <Card>
@@ -325,6 +339,4 @@ const ConversationTesting = () => {
       </div>
     </MainLayout>
   );
-};
-
-export default ConversationTesting;
+}

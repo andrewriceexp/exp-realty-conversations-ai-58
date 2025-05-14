@@ -10,7 +10,16 @@ interface OutboundCallRequest {
   to_number: string;
   user_id: string;
   dynamic_variables?: Record<string, any>;
-  conversation_config_override?: Record<string, any>;
+  conversation_config_override?: {
+    agent?: {
+      prompt?: { prompt: string };
+      first_message?: string;
+      language?: string;
+    };
+    tts?: {
+      voice_id?: string;
+    };
+  };
 }
 
 serve(async (req) => {
@@ -20,35 +29,27 @@ serve(async (req) => {
   }
   
   try {
-    // Parse and validate request body
     const requestBody = await req.json();
     const { agent_id, to_number, user_id, dynamic_variables, conversation_config_override } = requestBody as OutboundCallRequest;
 
-    if (!agent_id) {
-      throw new Error("Agent ID is required");
-    }
-    
-    if (!to_number) {
-      throw new Error("Phone number is required");
-    }
+    // Validate required fields
+    if (!agent_id) throw new Error("Agent ID is required");
+    if (!to_number) throw new Error("Phone number is required");
+    if (!user_id) throw new Error("User ID is required");
 
-    if (!user_id) {
-      throw new Error("User ID is required");
-    }
+    console.log(`Initiating outbound call to ${to_number.substring(0, 6)}xxxx with agent ${agent_id}`);
 
-    console.log(`Making outbound call to ${to_number.substring(0, 6)}xxxx with agent ${agent_id}`);
-
-    // Initialize Supabase client with service role key
+    // Initialize Supabase clients
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     
     if (!supabaseUrl || !supabaseAdminKey) {
-      throw new Error("Missing Supabase configuration. Please check your environment variables.");
+      throw new Error("Missing Supabase configuration");
     }
     
     const supabase = createClient(supabaseUrl, supabaseAdminKey);
     
-    // Get user's ElevenLabs API key from profile
+    // Get user's ElevenLabs API key
     console.log(`Fetching user profile for ID: ${user_id}`);
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -56,88 +57,83 @@ serve(async (req) => {
       .eq('id', user_id)
       .single();
       
-    if (profileError || !profile) {
-      console.error("Error fetching user profile:", profileError);
-      throw new Error("User profile not found. Please ensure your account is properly set up.");
+    if (profileError || !profile?.elevenlabs_api_key) {
+      throw new Error("ElevenLabs API key not configured in your profile");
     }
     
-    if (!profile.elevenlabs_api_key) {
-      throw new Error("ElevenLabs API key not configured in your profile. Please add it in your profile settings.");
-    }
-    
-    // Use the ElevenLabs Conversational AI API to make the outbound call
-    const elevenlabsApiKey = profile.elevenlabs_api_key;
-    
+    // Make the outbound call request to ElevenLabs
     console.log("Making request to ElevenLabs Conversational AI API");
     const response = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "xi-api-key": elevenlabsApiKey
+        "xi-api-key": profile.elevenlabs_api_key
       },
       body: JSON.stringify({
-        agent_id: agent_id,
-        to_number: to_number,
+        agent_id,
+        to_number,
         conversation_initiation_client_data: {
           dynamic_variables: dynamic_variables || {},
-          conversation_config_override: conversation_config_override || {}
+          conversation_config_override: {
+            ...conversation_config_override,
+            agent: {
+              ...conversation_config_override?.agent,
+              // Ensure audio format is set for telephony
+              input_format: "mulaw_8000",
+              output_format: "mulaw_8000"
+            }
+          }
         }
       })
     });
     
-    // Handle HTTP errors from ElevenLabs API
+    // Enhanced error handling
     if (!response.ok) {
-      let errorMessage = `ElevenLabs API error: ${response.status} ${response.statusText}`;
+      let errorMessage = `ElevenLabs API error: ${response.status}`;
       try {
-        const errorJson = await response.json();
-        errorMessage = `ElevenLabs API error: ${errorJson.message || errorJson.detail || response.statusText}`;
-      } catch (e) {
-        // If parsing JSON fails, use text instead
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.detail || errorMessage;
+      } catch {
         const errorText = await response.text();
-        if (errorText) {
-          errorMessage = `ElevenLabs API error: ${errorText}`;
-        }
+        if (errorText) errorMessage = errorText;
       }
-      
       throw new Error(errorMessage);
     }
     
     const data = await response.json();
-    console.log("ElevenLabs API response:", data);
     
-    // Store the call in our call logs
-    let callLogId = null;
-    try {
-      const { data: callLog, error: callLogError } = await supabase
-        .from('call_logs')
-        .insert({
-          user_id: user_id,
-          prospect_id: null, // This could be added if we have a prospect ID
-          agent_config_id: null, // This is different from the ElevenLabs agent ID
-          twilio_call_sid: data.callSid || "unknown",
-          call_status: "initiated",
-          started_at: new Date().toISOString()
-        })
-        .select('id')
-        .single();
-        
-      if (callLogError) {
-        console.error("Error creating call log:", callLogError);
-      } else if (callLog) {
-        callLogId = callLog.id;
-        console.log(`Created call log with ID: ${callLogId}`);
-      }
-    } catch (error) {
-      console.error("Error creating call log:", error);
-      // Non-critical error, continue execution
+    // Create call log with more details
+    const { data: callLog, error: callLogError } = await supabase
+      .from('call_logs')
+      .insert([{
+        user_id,
+        status: 'initiated',
+        twilio_call_sid: data.callSid || null,
+        agent_id,
+        to_number,
+        started_at: new Date().toISOString(),
+        metadata: {
+          dynamic_variables,
+          conversation_config_override,
+          audio_format: {
+            input: "mulaw_8000",
+            output: "mulaw_8000"
+          }
+        }
+      }])
+      .select()
+      .single();
+      
+    if (callLogError) {
+      console.error("Error creating call log:", callLogError);
     }
-    
+
     return new Response(
       JSON.stringify({
         success: true,
         message: "Outbound call initiated successfully",
         callSid: data.callSid,
-        callLogId: callLogId
+        callLogId: callLog?.id
       }),
       {
         status: 200,
@@ -148,12 +144,16 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in elevenlabs-outbound-call:", error);
     
-    // Get more specific error type if possible
+    // Enhanced error classification
     let errorCode = "GENERAL_ERROR";
+    let status = 200; // Keep 200 to prevent client errors
+    
     if (error.message?.includes("ElevenLabs API key")) {
       errorCode = "ELEVENLABS_API_KEY_MISSING";
     } else if (error.message?.includes("timed out")) {
       errorCode = "REQUEST_TIMEOUT";
+    } else if (error.message?.includes("rate limit")) {
+      errorCode = "RATE_LIMIT_EXCEEDED";
     }
     
     return new Response(
@@ -163,7 +163,7 @@ serve(async (req) => {
         code: errorCode
       }),
       {
-        status: 200, // Return 200 instead of error code to prevent client errors
+        status,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       }
     );
