@@ -183,12 +183,17 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       console.log('Got signed URL, starting session...', signedUrl);
       
       // Start the conversation with ElevenLabs using the signed URL
-      await conversation.startSession({
-        agentId, // Required parameter
-        origin: signedUrl // Use the signed URL as the origin
-      });
-      
-      setIsMicEnabled(true);
+      try {
+        await conversation.startSession({
+          agentId: agentId, // Required parameter
+          origin: signedUrl // Use the signed URL as the origin
+        });
+        
+        setIsMicEnabled(true);
+      } catch (startError) {
+        console.error("Failed to start session:", startError);
+        throw new Error(`Failed to start session: ${startError instanceof Error ? startError.message : 'Unknown error'}`);
+      }
     } catch (error) {
       console.error("Error starting conversation:", error);
       setConnectionError(error instanceof Error ? error.message : "An unknown error occurred");
