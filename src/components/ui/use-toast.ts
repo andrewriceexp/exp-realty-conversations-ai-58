@@ -6,5 +6,6 @@ export {
   ToastProvider,
   type Toast,
   type ToastProps,
-  type ToastActionElement
-} from "@/hooks/use-toast";
+  type ToastActionElement,
+  type ToasterToast
+} from "@/hooks/use-toast.tsx";

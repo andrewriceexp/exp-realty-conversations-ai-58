@@ -1,5 +1,5 @@
 
-// Re-export from the actual implementation
+// Re-export from the actual implementation in tsx file
 export {
   useToast,
   toast,
@@ -7,4 +7,5 @@ export {
   type Toast,
   type ToastProps,
   type ToastActionElement,
-} from "@/components/ui/use-toast";
+  type ToasterToast
+} from "@/hooks/use-toast.tsx";
