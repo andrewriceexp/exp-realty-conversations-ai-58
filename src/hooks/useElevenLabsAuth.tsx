@@ -166,7 +166,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
             throttledToast({
               title: "API Key Validation Timed Out",
               description: "Connection to ElevenLabs timed out. Please check your internet connection and try again.",
-              variant: "warning"
+              variant: "default"  // Changed from "warning" to "default"
             });
           } else {
             throttledToast({
