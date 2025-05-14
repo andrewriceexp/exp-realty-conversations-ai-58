@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -184,28 +183,21 @@ serve(async (req) => {
       response.pause({ length: 1 });
       
       // Create a Gather with Say element
-      const gatherWithSay = response.gather({
-        input: 'speech dtmf',
-        action: processResponseUrl,
+      createGatherWithSay(response, processResponseUrl, "How can I assist you with your real estate needs today?", {
         timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US',
-        method: 'POST'
+        speechTimeout: "auto",
+        language: "en-US",
+        voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
+        method: "POST"
       });
       
-      // Add the Say element inside Gather
-      gatherWithSay.say("How can I assist you with your real estate needs today?");
-      
-      // End the Gather element and get the updated response object
-      const responseAfterGather = gatherWithSay.endGather();
-      
-      // Now add a redirect outside of Gather (as a sibling, not a child)
-      responseAfterGather.redirect({
+      // Add a redirect outside the Gather (as a sibling, not a child)
+      response.redirect({
         method: 'POST'
       }, processResponseUrl);
       
       // Get the final TwiML string
-      const twimlString = responseAfterGather.toString();
+      const twimlString = response.toString();
       console.log(`Final TwiML response for trial account (truncated):`);
       console.log(twimlString.substring(0, 200) + "...");
       
@@ -310,29 +302,21 @@ serve(async (req) => {
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
     // Create a Gather with Say element using the modified twiml builder
-    const gatherWithSay = response.gather({
-      input: 'speech dtmf',
-      action: processResponseUrl,
+    createGatherWithSay(response, processResponseUrl, "How can I assist you with your real estate needs today?", {
       timeout: 10,
-      speechTimeout: 'auto',
-      language: 'en-US',
+      speechTimeout: "auto",
+      language: "en-US",
       voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
-      method: 'POST'
+      method: "POST"
     });
     
-    // Add the Say element inside Gather
-    gatherWithSay.say("How can I assist you with your real estate needs today?");
-    
-    // End the Gather element and get the updated response object
-    const responseAfterGather = gatherWithSay.endGather();
-    
     // Add a redirect outside the Gather (as a sibling, not a child)
-    responseAfterGather.redirect({
+    response.redirect({
       method: 'POST'
     }, processResponseUrl);
     
     // Get the final TwiML string
-    const twimlString = responseAfterGather.toString();
+    const twimlString = response.toString();
     
     // Log only a truncated version of the TwiML to avoid cluttering logs
     console.log(`Final TwiML response (truncated):`);

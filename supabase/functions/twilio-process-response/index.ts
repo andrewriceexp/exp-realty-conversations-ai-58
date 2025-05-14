@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
@@ -376,28 +375,18 @@ serve(async (req) => {
       const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
       // Create a Gather with Say element
-      const gatherWithSay = response.gather({
-        input: 'speech dtmf',
-        action: nextActionUrl,
+      createGatherWithSay(response, nextActionUrl, "Please go ahead with your response.", {
         timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US',
-        method: 'POST'
+        speechTimeout: "auto",
+        language: "en-US",
+        method: "POST"
       });
       
-      // Add the Say element inside Gather
-      gatherWithSay.say("Please go ahead with your response.");
-      
-      // End the Gather element and get the updated response object
-      const responseAfterGather = gatherWithSay.endGather();
-      
-      console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
-      
       // Add a fallback in case gather times out (outside the Gather element)
-      responseAfterGather.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
+      response.say("I didn't catch that. Thank you for your time. Someone from our team will follow up with you soon.");
       
       // Get the final TwiML string
-      const twimlString = responseAfterGather.toString();
+      const twimlString = response.toString();
       
       // Verify the TwiML structure before returning
       if (!twimlString.includes('</Gather>')) {

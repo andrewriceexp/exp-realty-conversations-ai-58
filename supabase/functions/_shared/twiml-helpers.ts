@@ -43,16 +43,23 @@ export function createGatherWithSay(
   // Make sure the text is definitely a string
   const textToSay = typeof sayText === 'string' ? sayText : 'How can I assist you today?';
   
-  // Create Gather with specified options
+  // Extract voice from options before creating Gather
+  const voice = options.voice;
+  
+  // Create a clean options object without the voice attribute for Gather
+  const gatherOptions = { ...options };
+  delete gatherOptions.voice; // Remove voice from Gather options
+  
+  // Create Gather with the clean options (no voice attribute)
   const gather = response.gather({
     input: 'speech dtmf',
     action: xmlEncodedAction,
-    ...options
+    ...gatherOptions
   });
   
-  // Add the Say element inside Gather with text as string
-  if (options.voice) {
-    gather.say({ voice: options.voice }, textToSay);
+  // Add the Say element inside Gather with voice if provided
+  if (voice) {
+    gather.say({ voice }, textToSay);
   } else {
     gather.say(textToSay);
   }
