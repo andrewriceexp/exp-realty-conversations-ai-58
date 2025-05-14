@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,6 +98,7 @@ const ConversationTesting = () => {
       }
     }
     
+    // If we got here, the API key is valid and we can start the test
     setIsTestingActive(true);
   };
 

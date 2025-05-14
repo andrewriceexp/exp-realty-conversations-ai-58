@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
 import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX, Info } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
@@ -49,7 +48,6 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [connectionTimer, setConnectionTimer] = useState<NodeJS.Timeout | null>(null);
-  const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, profile, session } = useAuth();
   const { isReady, error: authError, hasApiKey, apiKeyStatus } = useElevenLabsAuth();

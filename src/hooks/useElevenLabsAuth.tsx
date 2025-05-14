@@ -34,6 +34,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
   const [lastValidated, setLastValidated] = useState<number | null>(null);
   const validationInProgress = useRef(false);
   const retryCount = useRef(0);
+  const toastShownRef = useRef<Map<string, number>>(new Map());
   
   const { user, profile, session } = useAuth();
   
@@ -42,6 +43,19 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
   const hasValidSession = !!session?.access_token;
   
   const isReady = isAuthenticated && hasApiKey && hasValidSession && apiKeyStatus === 'valid';
+  
+  // Toast throttling helper function
+  const throttledToast = (props: { title: string, description: string, variant?: "default" | "destructive" | null }) => {
+    const key = `${props.title}-${props.description}`;
+    const now = Date.now();
+    const lastShown = toastShownRef.current.get(key) || 0;
+    
+    // Only show the toast if it hasn't been shown in the last 5 seconds
+    if (now - lastShown > 5000) {
+      toast(props);
+      toastShownRef.current.set(key, now);
+    }
+  };
   
   // Check basic auth requirements on mount and when auth state changes
   useEffect(() => {
@@ -123,7 +137,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         
         // Only show a toast if this is the first validation attempt
         if (retryCount.current === 0) {
-          toast({
+          throttledToast({
             title: "API Key Validation Failed",
             description: `ElevenLabs API returned ${response.status}: ${response.statusText}`,
             variant: "destructive"
@@ -149,13 +163,13 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         if (retryCount.current === 0 || err.message.includes("timed out")) {
           // Determine appropriate error message based on error type
           if (err.message.includes("timed out")) {
-            toast({
+            throttledToast({
               title: "API Key Validation Timed Out",
               description: "Connection to ElevenLabs timed out. Please check your internet connection and try again.",
               variant: "warning"
             });
           } else {
-            toast({
+            throttledToast({
               title: "API Key Validation Failed",
               description: err.message,
               variant: "destructive"
