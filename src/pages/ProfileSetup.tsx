@@ -27,6 +27,7 @@ const profileSchema = z.object({
   twilio_phone_number: z.string()
     .regex(/^\+[1-9]\d{1,14}$/, 'Phone number must be in E.164 format (e.g., +12125551234)'),
   a2p_10dlc_registered: z.boolean().default(false),
+  elevenlabs_api_key: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -57,6 +58,7 @@ const ProfileSetup = () => {
       twilio_auth_token: '',  // Always start with an empty auth token field
       twilio_phone_number: profile?.twilio_phone_number || '',
       a2p_10dlc_registered: profile?.a2p_10dlc_registered || false,
+      elevenlabs_api_key: profile?.elevenlabs_api_key || '',
     },
   });
 
@@ -70,6 +72,7 @@ const ProfileSetup = () => {
         twilio_auth_token: '', // Keep this empty
         twilio_phone_number: profile.twilio_phone_number || '',
         a2p_10dlc_registered: profile.a2p_10dlc_registered || false,
+        elevenlabs_api_key: profile.elevenlabs_api_key || '',
       });
     }
   }, [profile, form]);
@@ -305,6 +308,25 @@ const ProfileSetup = () => {
                         </FormItem>
                       )}
                     />
+                  </div>
+                  
+                  <div className="border-t pt-6 mt-6">
+                    <h2 className="text-lg font-semibold mb-4">ElevenLabs Integration</h2>
+                    <div className="grid gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="elevenlabs_api_key">ElevenLabs API Key</Label>
+                        <Input
+                          id="elevenlabs_api_key"
+                          type="password"
+                          value={profile?.elevenlabs_api_key || ''}
+                          onChange={(e) => setProfile({ ...profile, elevenlabs_api_key: e.target.value })}
+                          placeholder="Enter your ElevenLabs API key"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Required for ElevenLabs conversational AI features. Get your key from <a href="https://elevenlabs.io/app/api-key" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ElevenLabs</a>
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 

@@ -1,68 +1,52 @@
 
-import { BrowserRouter as Router, Route, Routes, Outlet } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ProtectedRoute from './components/ProtectedRoute';
+import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
+import { AuthProvider } from "./contexts/AuthContext";
+import { ElevenLabsProvider } from "./contexts/ElevenLabsContext";
+import { Toaster } from "@/components/ui/toaster";
 
-import Index from './pages/Index';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import NotFound from './pages/NotFound';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import ProfileSetup from './pages/ProfileSetup';
-import ProspectManagement from './pages/ProspectManagement';
-import CampaignManagement from './pages/CampaignManagement';
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Dashboard from "./pages/Dashboard";
+import ProfileSetup from "./pages/ProfileSetup";
+import NotFound from "./pages/NotFound";
 import AgentConfig from './pages/AgentConfig';
+import CampaignManagement from './pages/CampaignManagement';
+import ProspectManagement from './pages/ProspectManagement';
 import Analytics from './pages/Analytics';
 import Help from './pages/Help';
-import { Toaster } from '@/components/ui/toaster';
-import MainLayout from './components/MainLayout';
+import ConversationTesting from './pages/ConversationTesting';
+import ProtectedRoute from './components/ProtectedRoute';
+import Index from './pages/Index';
 
-// Create a client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
-
-function App() {
+const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
       <AuthProvider>
-        <Router>
+        <ElevenLabsProvider>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            
-            <Route element={
-              <ProtectedRoute>
-                <Outlet />
-              </ProtectedRoute>
-            }>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/profile" element={<ProfileSetup />} />
-              <Route path="/prospects/*" element={<ProspectManagement />} />
-              <Route path="/campaigns/*" element={<CampaignManagement />} />
-              <Route path="/agent-config" element={<AgentConfig />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/help" element={<Help />} />
-            </Route>
-            
-            <Route path="*" element={<NotFound />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
+            <Route path="/agent-config" element={<ProtectedRoute><AgentConfig /></ProtectedRoute>} />
+            <Route path="/campaigns" element={<ProtectedRoute><CampaignManagement /></ProtectedRoute>} />
+            <Route path="/prospects" element={<ProtectedRoute><ProspectManagement /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+            <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+            <Route path="/conversations" element={<ProtectedRoute><ConversationTesting /></ProtectedRoute>} />
+            <Route path="/404" element={<NotFound />} />
+            <Route path="*" element={<Navigate to="/404" />} />
           </Routes>
           <Toaster />
-        </Router>
+        </ElevenLabsProvider>
       </AuthProvider>
-    </QueryClientProvider>
+    </BrowserRouter>
   );
-}
+};
 
 export default App;
