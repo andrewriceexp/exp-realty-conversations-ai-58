@@ -1,5 +1,5 @@
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { withTimeout } from '@/lib/utils';
@@ -46,7 +46,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
   const isReady = isAuthenticated && hasApiKey && hasValidSession && apiKeyStatus === 'valid';
   
   // Toast throttling helper function
-  const throttledToast = (props: { title: string, description: string, variant?: "default" | "destructive" | null }) => {
+  const throttledToast = useCallback((props: { title: string, description: string, variant?: "default" | "destructive" | null }) => {
     const key = `${props.title}-${props.description}`;
     const now = Date.now();
     const lastShown = toastShownRef.current.get(key) || 0;
@@ -56,7 +56,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       toast(props);
       toastShownRef.current.set(key, now);
     }
-  };
+  }, []);
   
   // Check basic auth requirements on mount and when auth state changes
   useEffect(() => {
@@ -88,7 +88,9 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       initialValidationDone.current = true;
       // Slight delay on first validation to avoid race conditions with mount
       const timer = setTimeout(() => {
-        validateApiKey().catch(() => {/* Errors handled inside validateApiKey */});
+        validateApiKey().catch(err => {
+          console.error("API key validation error:", err);
+        });
       }, 1000);
       
       return () => clearTimeout(timer);
@@ -100,7 +102,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
    * Returns true if valid, false otherwise
    * Implements throttling and retries with exponential backoff
    */
-  const validateApiKey = async (): Promise<boolean> => {
+  const validateApiKey = useCallback(async (): Promise<boolean> => {
     // Don't validate if no API key or if a validation is already in progress
     if (!hasApiKey || !profile?.elevenlabs_api_key || validationInProgress.current) {
       return false;
@@ -120,7 +122,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       setIsLoading(true);
       validationInProgress.current = true;
       
-      // Use our withTimeout utility to prevent hanging
+      // Use the user endpoint to validate the API key
       const validatePromise = fetch("https://api.elevenlabs.io/v1/user", {
         method: "GET",
         headers: {
@@ -196,24 +198,22 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       }
       
       // Implement retry with exponential backoff - only if it's not a direct user-initiated validation
-      if (retryCount.current === 0) {
+      if (retryCount.current < MAX_RETRIES) {
         retryCount.current += 1;
         
-        if (retryCount.current <= MAX_RETRIES) {
-          // Exponential backoff: 2^retry * 1000ms (2s, 4s, 8s)
-          const backoffMs = Math.min(Math.pow(2, retryCount.current) * 1000, 8000);
-          console.log(`Retry ${retryCount.current}/${MAX_RETRIES} in ${backoffMs}ms`);
-          
-          // Schedule retry with backoff
-          setTimeout(() => {
-            validationInProgress.current = false;
-            validateApiKey().catch(() => {/* Errors handled inside validateApiKey */});
-          }, backoffMs);
-        } else {
-          retryCount.current = 0;
-          setApiKeyStatus('invalid');
-        }
+        // Exponential backoff: 2^retry * 1000ms (2s, 4s)
+        const backoffMs = Math.min(Math.pow(2, retryCount.current) * 1000, 8000);
+        console.log(`Retry ${retryCount.current}/${MAX_RETRIES} in ${backoffMs}ms`);
+        
+        // Schedule retry with backoff
+        setTimeout(() => {
+          validationInProgress.current = false;
+          validateApiKey().catch(error => {
+            console.error("API key retry validation error:", error);
+          });
+        }, backoffMs);
       } else {
+        retryCount.current = 0;
         setApiKeyStatus('invalid');
       }
       
@@ -222,7 +222,7 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       setIsLoading(false);
       validationInProgress.current = false;
     }
-  };
+  }, [apiKeyStatus, hasApiKey, lastValidated, profile, throttledToast]);
   
   return {
     isReady,

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from "@/contexts/AuthContext";
 import ConversationPanel from "@/components/conversations/ConversationPanel";
-import { Loader2, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
+import { Loader2, AlertCircle, ExternalLink, RefreshCw, InfoIcon } from "lucide-react";
 import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AgentSettings } from "@/components/agent-config/AgentSettings";
 
 interface AgentOption {
@@ -51,6 +50,55 @@ export default function ConversationTesting() {
     ]);
   }, []);
 
+  // Attempt to fetch agents from the API if the user has a valid API key
+  useEffect(() => {
+    const fetchAgents = async () => {
+      if (!profile?.elevenlabs_api_key || apiKeyStatus !== 'valid') return;
+      
+      setIsLoadingAgents(true);
+      try {
+        const response = await fetch("https://api.elevenlabs.io/v1/convai/agents", {
+          headers: {
+            'xi-api-key': profile.elevenlabs_api_key,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            // Auth issue
+            console.error("Authentication error fetching agents");
+          } else {
+            console.error(`Error fetching agents: ${response.status}`);
+          }
+          return;
+        }
+        
+        const data = await response.json();
+        
+        if (data && Array.isArray(data)) {
+          // Map agents to our format
+          const fetchedAgents = data.map((agent: any) => ({
+            id: agent.id,
+            name: agent.name || `Agent ${agent.id.substring(0, 8)}`
+          }));
+          
+          // Keep our default agents and add new ones that don't conflict
+          const existingIds = new Set(agents.map(a => a.id));
+          const uniqueNewAgents = fetchedAgents.filter(a => !existingIds.has(a.id));
+          
+          setAgents([...agents, ...uniqueNewAgents]);
+        }
+      } catch (error) {
+        console.error("Error fetching agents:", error);
+      } finally {
+        setIsLoadingAgents(false);
+      }
+    };
+    
+    fetchAgents();
+  }, [profile?.elevenlabs_api_key, apiKeyStatus]);
+
   // Validate API key when component mounts, but only once
   const validateApiKeyIfNeeded = useCallback(async () => {
     if (!profile) return;
@@ -83,6 +131,7 @@ export default function ConversationTesting() {
           description: isValid 
             ? "Your ElevenLabs API key is valid and ready to use."
             : "Please check that your API key is correct in your profile settings.",
+          variant: isValid ? "default" : "destructive"
         });
       } catch (error) {
         toast({
@@ -215,6 +264,21 @@ export default function ConversationTesting() {
             </AlertDescription>
           </Alert>
         )}
+
+        <Alert variant="default" className="bg-blue-50 border-blue-200">
+          <InfoIcon className="h-5 w-5 text-blue-500" />
+          <AlertDescription>
+            <h4 className="font-medium text-blue-900">Connection Requirements</h4>
+            <p className="text-sm text-muted-foreground mt-1">
+              This feature requires microphone access and a stable internet connection. If you're having issues connecting:
+            </p>
+            <ul className="list-disc list-inside text-sm text-muted-foreground mt-1">
+              <li>Allow microphone permissions when prompted</li>
+              <li>Check your internet connection</li>
+              <li>Try reconnecting if the first attempt fails</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
 
         {selectedAgentId && (
           <AgentSettings 

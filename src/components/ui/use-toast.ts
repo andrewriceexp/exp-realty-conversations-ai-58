@@ -1,11 +1,12 @@
 
-// Export everything from the hooks implementation directly
+// Export everything from the hooks implementation 
 export {
   useToast,
   toast,
-  ToastProvider,
+  Toaster,
+  ToastAction,
   type Toast,
   type ToastProps,
   type ToastActionElement,
   type ToasterToast
-} from "@/hooks/use-toast.tsx";
+} from "@/hooks/use-toast";

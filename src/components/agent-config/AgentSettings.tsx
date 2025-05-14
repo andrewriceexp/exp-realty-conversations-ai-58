@@ -12,6 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
+import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
 
 interface AgentSettingsProps {
   agentId: string;
@@ -30,6 +31,7 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [agentDetails, setAgentDetails] = useState<any>(null);
   const { profile } = useAuth();
+  const { validateApiKey, apiKeyStatus } = useElevenLabsAuth();
   
   const form = useForm<AgentSettingsFormValues>({
     defaultValues: {
@@ -45,44 +47,70 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
     const fetchAgentSettings = async () => {
       if (!agentId || !profile?.elevenlabs_api_key) return;
       
+      // Validate API key first
+      if (apiKeyStatus !== 'valid') {
+        try {
+          const isValid = await validateApiKey();
+          if (!isValid) {
+            toast({
+              title: "API Key Validation Failed",
+              description: "Please check that your ElevenLabs API key is valid in your profile settings.",
+              variant: "destructive"
+            });
+            return;
+          }
+        } catch (err) {
+          console.error("Error validating API key:", err);
+        }
+      }
+      
       setIsLoading(true);
       try {
-        // Actually fetch settings from the ElevenLabs API
+        // Fetch settings from the ElevenLabs API
         const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}/settings`, {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             'xi-api-key': profile.elevenlabs_api_key
           }
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          setAgentDetails(data);
-          
-          // Update form with fetched values
-          form.reset({
-            inputFormat: data.input_format || "mulaw_8000",
-            outputFormat: data.output_format || "mulaw_8000",
-            enableAuth: data.require_auth !== false, // Default to true if not specified
-            enablePromptOverrides: data.enable_prompt_overrides !== false // Default to true if not specified
-          });
-        } else {
-          // If we get a 403/401, the API key is likely invalid or doesn't have access
+        if (!response.ok) {
+          // Handle specific error codes
           if (response.status === 401 || response.status === 403) {
             toast({
               title: "Authentication Error",
               description: "Your ElevenLabs API key doesn't have access to this agent. Please check your API key and permissions.",
               variant: "destructive"
             });
+          } else if (response.status === 404) {
+            toast({
+              title: "Agent Not Found",
+              description: "The agent you're trying to access could not be found. It may have been deleted or you don't have access to it.",
+              variant: "destructive"
+            });
           } else {
-            throw new Error(`Failed to fetch agent settings: ${response.statusText}`);
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch agent settings (${response.status}): ${errorText || response.statusText}`);
           }
+          return;
         }
+        
+        const data = await response.json();
+        setAgentDetails(data);
+        
+        // Update form with fetched values
+        form.reset({
+          inputFormat: data.input_format || "mulaw_8000",
+          outputFormat: data.output_format || "mulaw_8000",
+          enableAuth: data.require_auth !== false, // Default to true if not specified
+          enablePromptOverrides: data.enable_prompt_overrides !== false // Default to true if not specified
+        });
       } catch (error) {
         console.error('Error fetching agent settings:', error);
         toast({
-          title: "Error",
-          description: "Failed to load agent settings. Please check your connection and try again.",
+          title: "Error Loading Settings",
+          description: error instanceof Error ? error.message : "Failed to load agent settings. Please check your connection and try again.",
           variant: "destructive"
         });
       } finally {
@@ -91,7 +119,7 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
     };
     
     fetchAgentSettings();
-  }, [agentId, profile?.elevenlabs_api_key, form]);
+  }, [agentId, profile?.elevenlabs_api_key, form, validateApiKey, apiKeyStatus]);
 
   const onSubmit = async (data: AgentSettingsFormValues) => {
     if (!agentId || !profile?.elevenlabs_api_key) {
@@ -101,6 +129,23 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
         variant: "destructive"
       });
       return;
+    }
+    
+    // Validate API key before making the request
+    if (apiKeyStatus !== 'valid') {
+      try {
+        const isValid = await validateApiKey();
+        if (!isValid) {
+          toast({
+            title: "API Key Invalid",
+            description: "Your ElevenLabs API key could not be validated. Please check and update it in your profile.",
+            variant: "destructive"
+          });
+          return;
+        }
+      } catch (err) {
+        console.error("Error validating API key:", err);
+      }
     }
     
     setIsSaving(true);
@@ -130,7 +175,9 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
         description: "Agent configuration has been successfully updated.",
       });
 
-      onUpdate?.();
+      if (onUpdate) {
+        onUpdate();
+      }
     } catch (error) {
       console.error('Error updating agent settings:', error);
       toast({
@@ -278,7 +325,7 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
               )}
             />
 
-            <Button type="submit" className="w-full" disabled={isSaving}>
+            <Button type="submit" className="w-full" disabled={isSaving || apiKeyStatus !== 'valid'}>
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
