@@ -1,3 +1,5 @@
+
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
@@ -23,11 +25,13 @@ interface TwilioCallResponse {
 
 export function useTwilioCall() {
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   /**
    * Make a call to a prospect using Twilio
    */
   const makeCall = async (options: TwilioCallOptions): Promise<TwilioCallResponse> => {
+    setIsLoading(true);
     try {
       console.log('Making call with:', options);
       
@@ -93,6 +97,8 @@ export function useTwilioCall() {
         error: error,
         code: errorCode
       };
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -165,6 +171,7 @@ export function useTwilioCall() {
     makeCall,
     makeDevelopmentCall,
     verifyCallStatus,
-    handleTwiMLTimeout
+    handleTwiMLTimeout,
+    isLoading
   };
 }
