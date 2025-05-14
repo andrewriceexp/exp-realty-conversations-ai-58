@@ -4,7 +4,7 @@ import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX } from 'lucide-react';
+import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -43,6 +43,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const [conversationEnded, setConversationEnded] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, profile, session } = useAuth();
@@ -53,6 +54,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     return () => {
       clearError();
       setConnectionError(null);
+      setDebugInfo(null);
     };
   }, [clearError, agentId]);
   
@@ -94,6 +96,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     onConnect: () => {
       console.log('Conversation connected successfully');
       setConnectionError(null);
+      setDebugInfo(null);
       setConversationStarted(true);
       setIsStarting(false);
       toast({
@@ -149,6 +152,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     try {
       setIsStarting(true);
       setConnectionError(null);
+      setDebugInfo(null);
       
       // Request microphone permissions
       try {
@@ -184,12 +188,25 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       
       // Start the conversation with ElevenLabs using the signed URL
       try {
-        await conversation.startSession({
-          agentId: agentId, // Required parameter
-          origin: signedUrl // Use the signed URL as the origin
-        });
+        // Store debug info to help troubleshoot
+        setDebugInfo(`Using agent: ${agentId}, URL: ${signedUrl.substring(0, 30)}...`);
         
-        setIsMicEnabled(true);
+        // Use a timeout to allow React to update state before potentially demanding operation
+        setTimeout(async () => {
+          try {
+            await conversation.startSession({
+              agentId: agentId,
+              origin: signedUrl
+            });
+            
+            setIsMicEnabled(true);
+            setDebugInfo(null);
+          } catch (timeoutError) {
+            console.error("Session start timeout error:", timeoutError);
+            setConnectionError(`Timeout starting session: ${timeoutError instanceof Error ? timeoutError.message : 'Unknown error'}`);
+            setIsStarting(false);
+          }
+        }, 100);
       } catch (startError) {
         console.error("Failed to start session:", startError);
         throw new Error(`Failed to start session: ${startError instanceof Error ? startError.message : 'Unknown error'}`);
@@ -258,6 +275,27 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     }
   };
 
+  // Reinitialize conversation
+  const handleRetryConversation = () => {
+    // Clear all conversation state and errors
+    setConnectionError(null);
+    setDebugInfo(null);
+    setMessages([]);
+    setConversationStarted(false);
+    setConversationEnded(false);
+    setIsMicEnabled(false);
+    setIsStarting(false);
+    clearError();
+    
+    // Wait a moment before allowing to try again
+    setTimeout(() => {
+      toast({
+        title: "Ready to try again",
+        description: "Please click the microphone button to start a new conversation"
+      });
+    }, 500);
+  };
+
   // Toggle volume (mute/unmute)
   const handleToggleVolume = async (volume: number) => {
     try {
@@ -320,23 +358,31 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           <Alert variant="destructive" className="mb-4">
             <AlertDescription className="space-y-2">
               <p className="font-medium">{connectionError || authError}</p>
+              {debugInfo && (
+                <p className="text-xs opacity-80 mt-1 font-mono">{debugInfo}</p>
+              )}
               {!hasApiKey && (
                 <p className="text-sm">Please add your ElevenLabs API key in your profile settings.</p>
               )}
               {!user && (
                 <p className="text-sm">Please log in to use this feature.</p>
               )}
-              <div className="flex justify-end mt-2">
+              <div className="flex justify-end mt-2 gap-2">
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => {
-                    setConnectionError(null);
-                    clearError();
-                  }}
+                  onClick={handleRetryConversation}
                 >
                   <RefreshCcw className="h-3 w-3 mr-2" />
                   Try Again
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai', '_blank')}
+                >
+                  <Info className="h-3 w-3 mr-2" />
+                  Docs
                 </Button>
               </div>
             </AlertDescription>
@@ -420,7 +466,15 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           </Button>
         </div>
         
-        <div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai', '_blank')}
+          >
+            <Info className="h-4 w-4 mr-2" />
+            ElevenLabs Docs
+          </Button>
           <Button
             variant="destructive"
             size="sm"
@@ -436,3 +490,4 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
 };
 
 export default ConversationPanel;
+

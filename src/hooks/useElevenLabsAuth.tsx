@@ -10,6 +10,7 @@ interface UseElevenLabsAuthReturn {
   isAuthenticated: boolean;
   hasValidSession: boolean;
   apiKeyStatus: 'missing' | 'configured' | 'unknown';
+  validateApiKey: () => Promise<boolean>;
 }
 
 /**
@@ -47,6 +48,37 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     setIsLoading(false);
   }, [isAuthenticated, hasApiKey, hasValidSession]);
   
+  /**
+   * Validates the currently stored ElevenLabs API key
+   * Returns true if valid, false otherwise
+   */
+  const validateApiKey = async (): Promise<boolean> => {
+    if (!hasApiKey || !profile?.elevenlabs_api_key) {
+      return false;
+    }
+    
+    try {
+      const response = await fetch("https://api.elevenlabs.io/v1/user", {
+        method: "GET",
+        headers: {
+          "xi-api-key": profile.elevenlabs_api_key,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (!response.ok) {
+        setError("Your ElevenLabs API key appears to be invalid");
+        return false;
+      }
+      
+      return true;
+    } catch (err) {
+      console.error("Error validating ElevenLabs API key:", err);
+      setError("Failed to validate ElevenLabs API key");
+      return false;
+    }
+  };
+  
   return {
     isReady,
     isLoading,
@@ -54,6 +86,8 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     hasApiKey,
     isAuthenticated,
     hasValidSession,
-    apiKeyStatus
+    apiKeyStatus,
+    validateApiKey
   };
 }
+

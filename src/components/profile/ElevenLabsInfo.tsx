@@ -13,6 +13,7 @@ const ElevenLabsInfo = () => {
   const [apiKey, setApiKey] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   
@@ -52,6 +53,7 @@ const ElevenLabsInfo = () => {
       
       // Verify the API key before saving
       try {
+        setVerificationStatus('idle');
         const response = await fetch("https://api.elevenlabs.io/v1/voices", {
           method: "GET",
           headers: {
@@ -61,14 +63,19 @@ const ElevenLabsInfo = () => {
         });
         
         if (!response.ok) {
+          setVerificationStatus('error');
           throw new Error(`Invalid API key (${response.status}): ${response.statusText}`);
         }
+        
+        setVerificationStatus('success');
       } catch (error) {
+        setVerificationStatus('error');
         toast({
           title: "API Key Verification Failed",
           description: error instanceof Error ? error.message : "Failed to verify API key with ElevenLabs",
           variant: "destructive",
         });
+        setIsSubmitting(false);
         return;
       }
       
@@ -156,6 +163,7 @@ const ElevenLabsInfo = () => {
     }
 
     setIsVerifying(true);
+    setVerificationStatus('idle');
 
     try {
       // Simple validation by trying to fetch voices
@@ -168,15 +176,17 @@ const ElevenLabsInfo = () => {
       });
 
       if (!response.ok) {
+        setVerificationStatus('error');
         throw new Error(`Invalid API key or ElevenLabs API error (${response.status})`);
       }
 
+      setVerificationStatus('success');
       toast({
         title: "API Key Valid",
         description: "Your ElevenLabs API key has been verified successfully.",
-        variant: "default",
       });
     } catch (error: any) {
+      setVerificationStatus('error');
       toast({
         title: "API Key Verification Failed",
         description: error.message || "Failed to verify API key with ElevenLabs",
@@ -237,17 +247,26 @@ const ElevenLabsInfo = () => {
                   placeholder="Enter your ElevenLabs API key"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  className="flex-1"
+                  className={`flex-1 ${
+                    verificationStatus === 'success' ? 'border-green-500' : 
+                    verificationStatus === 'error' ? 'border-red-500' : ''
+                  }`}
                 />
                 <Button 
                   onClick={verifyApiKey} 
-                  variant="outline" 
+                  variant={verificationStatus === 'success' ? "outline" : "secondary"}
                   disabled={isVerifying || !apiKey}
+                  className={verificationStatus === 'success' ? 'border-green-500 text-green-500' : ''}
                 >
                   {isVerifying ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 
                       Verifying
+                    </>
+                  ) : verificationStatus === 'success' ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2 text-green-500" />
+                      Valid
                     </>
                   ) : "Verify"}
                 </Button>
@@ -349,3 +368,4 @@ const ElevenLabsInfo = () => {
 };
 
 export default ElevenLabsInfo;
+
