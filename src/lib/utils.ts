@@ -1,3 +1,16 @@
+
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+/**
+ * A utility function for merging Tailwind CSS classes with proper conflict resolution
+ * @param inputs CSS class values to be merged
+ * @returns Merged CSS class string
+ */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 /**
  * Wraps a Promise with a timeout
  * @param promise The promise to wrap with a timeout
