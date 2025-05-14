@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { useNavigate } from 'react-router-dom';
 
 export function ElevenLabsSetup() {
   const [apiKey, setApiKey] = useState('');
@@ -15,6 +16,7 @@ export function ElevenLabsSetup() {
   const [isVerifying, setIsVerifying] = useState(false);
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSaveApiKey = async () => {
     try {
@@ -168,7 +170,7 @@ export function ElevenLabsSetup() {
   const hasApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
 
   const handleTestConversation = () => {
-    window.location.href = '/conversation-testing';
+    navigate('/conversation-testing');
   };
 
   return (
