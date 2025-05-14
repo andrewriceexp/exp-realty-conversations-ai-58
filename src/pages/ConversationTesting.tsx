@@ -60,6 +60,7 @@ const ConversationTesting = () => {
     }
   }, [hasApiKey, validateApiKeyIfNeeded]);
 
+  // Handle navigation to conversation testing
   const handleStartTest = async () => {
     if (!selectedAgentId) {
       toast({

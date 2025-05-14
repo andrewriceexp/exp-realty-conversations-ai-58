@@ -53,6 +53,7 @@ const ProfileSetup = () => {
   };
 
   const handleNavigateToConversation = () => {
+    // Fix: Update this to use the correct route path defined in App.tsx
     navigate('/conversation-testing');
   };
 

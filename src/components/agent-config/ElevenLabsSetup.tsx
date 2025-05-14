@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,6 +167,10 @@ export function ElevenLabsSetup() {
 
   const hasApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
 
+  const handleTestConversation = () => {
+    window.location.href = '/conversation-testing';
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -275,7 +278,7 @@ export function ElevenLabsSetup() {
               </Button>
               <Button
                 variant="default"
-                onClick={() => window.location.href = '/conversation-testing'}
+                onClick={handleTestConversation}
                 className="flex-1"
               >
                 Test Conversation
