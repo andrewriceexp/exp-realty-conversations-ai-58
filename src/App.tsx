@@ -31,14 +31,46 @@ const App = () => {
             <Route path="/signup" element={<Signup />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
-            <Route path="/agent-config" element={<ProtectedRoute><AgentConfig /></ProtectedRoute>} />
-            <Route path="/campaigns" element={<ProtectedRoute><CampaignManagement /></ProtectedRoute>} />
-            <Route path="/prospects" element={<ProtectedRoute><ProspectManagement /></ProtectedRoute>} />
-            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-            <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
-            <Route path="/conversations" element={<ProtectedRoute><ConversationTesting /></ProtectedRoute>} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile-setup" element={
+              <ProtectedRoute>
+                <ProfileSetup />
+              </ProtectedRoute>
+            } />
+            <Route path="/agent-config" element={
+              <ProtectedRoute>
+                <AgentConfig />
+              </ProtectedRoute>
+            } />
+            <Route path="/campaigns" element={
+              <ProtectedRoute>
+                <CampaignManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/prospects" element={
+              <ProtectedRoute>
+                <ProspectManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/analytics" element={
+              <ProtectedRoute>
+                <Analytics />
+              </ProtectedRoute>
+            } />
+            <Route path="/help" element={
+              <ProtectedRoute>
+                <Help />
+              </ProtectedRoute>
+            } />
+            <Route path="/conversations" element={
+              <ProtectedRoute>
+                <ConversationTesting />
+              </ProtectedRoute>
+            } />
             <Route path="/404" element={<NotFound />} />
             <Route path="*" element={<Navigate to="/404" />} />
           </Routes>

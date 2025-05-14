@@ -1,5 +1,6 @@
 
 import { Sidebar } from '@/components/Sidebar';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 interface MainLayoutProps {
   children: React.ReactNode;
