@@ -1,30 +1,61 @@
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, Check, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import MainLayout from '@/components/MainLayout';
 import ProfileForm from '@/components/profile/ProfileForm';
+import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
 
 const ProfileSetup = () => {
   const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
+  const { isReady: isElevenLabsReady, hasApiKey } = useElevenLabsAuth();
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   
   useEffect(() => {
     if (profile) {
       console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
       console.log("Profile has ElevenLabs API key:", !!profile.elevenlabs_api_key);
+      
+      if (!!profile.elevenlabs_api_key && !showSuccessBanner) {
+        setShowSuccessBanner(true);
+      }
     }
-  }, [profile]);
+  }, [profile, showSuccessBanner]);
 
   const handleNavigateToDashboard = () => {
     navigate('/dashboard');
+  };
+
+  const handleNavigateToConversation = () => {
+    navigate('/conversation-testing');
   };
 
   return (
     <MainLayout>
       <div className="max-w-3xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Profile Setup</h1>
+        
+        {isElevenLabsReady && showSuccessBanner && (
+          <Alert variant="default" className="border-green-500 mb-6">
+            <Check className="h-5 w-5 text-green-500" />
+            <AlertDescription className="flex justify-between items-center">
+              <div>
+                <p className="font-medium">ElevenLabs is configured successfully!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your ElevenLabs API key has been validated and saved. You can now test voice conversations.
+                </p>
+              </div>
+              <Button onClick={handleNavigateToConversation} className="flex items-center">
+                Test Now <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         
         <Card>
           <CardHeader>

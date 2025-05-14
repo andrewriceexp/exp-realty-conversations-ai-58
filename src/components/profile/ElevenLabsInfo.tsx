@@ -50,6 +50,28 @@ const ElevenLabsInfo = () => {
         return;
       }
       
+      // Verify the API key before saving
+      try {
+        const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+          method: "GET",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Invalid API key (${response.status}): ${response.statusText}`);
+        }
+      } catch (error) {
+        toast({
+          title: "API Key Verification Failed",
+          description: error instanceof Error ? error.message : "Failed to verify API key with ElevenLabs",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       // Update the profile with the new API key
       const { error } = await supabase
         .from('profiles')

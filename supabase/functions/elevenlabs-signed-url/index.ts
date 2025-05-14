@@ -2,7 +2,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.1';
 
-const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -41,6 +40,8 @@ serve(async (req) => {
     if (!token) {
       throw new Error('Empty token provided');
     }
+    
+    logDetailed(`Token extracted, length: ${token.length}`);
 
     // Create a Supabase client with the user's JWT to verify their identity
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -64,7 +65,7 @@ serve(async (req) => {
       throw new Error('Unauthorized: No user found');
     }
     
-    logDetailed("User authenticated:", user.id);
+    logDetailed("User authenticated:", { userId: user.id, email: user.email });
 
     // Create a service role client to bypass RLS
     const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -82,6 +83,7 @@ serve(async (req) => {
     }
 
     if (!profile?.elevenlabs_api_key) {
+      logDetailed("No ElevenLabs API key found for user:", { userId: user.id });
       throw new Error('ElevenLabs API key not configured for this user');
     }
 

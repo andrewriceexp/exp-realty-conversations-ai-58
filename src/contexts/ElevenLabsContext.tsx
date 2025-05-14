@@ -83,6 +83,8 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     try {
       console.log("Calling elevenlabs-signed-url function with agentId:", agentIdToUse);
       console.log("Session access token available:", !!session.access_token);
+      console.log("User authenticated:", !!user);
+      console.log("ElevenLabs API key configured:", !!profile?.elevenlabs_api_key);
       
       // Call the Supabase Edge Function that will generate a signed URL
       const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
