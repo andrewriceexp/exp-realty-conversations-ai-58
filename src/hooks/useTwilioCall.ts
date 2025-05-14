@@ -131,7 +131,7 @@ export function useTwilioCall() {
    * Verify the status of a call using its SID
    * This function checks the current status of a Twilio call
    */
-  const verifyCallStatus = async (callSid: string): Promise<TwilioCallResponse> => {
+  const verifyCallStatus = async (callSid: string, userId?: string): Promise<TwilioCallResponse> => {
     try {
       console.log('Checking status for call:', callSid);
       
@@ -143,10 +143,14 @@ export function useTwilioCall() {
       // Make the actual API call
       const fetchPromise = supabase.functions.invoke('twilio-call-status', {
         body: {
-          callSid
+          callSid,
+          userId
         }
       }).then(({data, error}) => {
-        if (error) throw error;
+        if (error) {
+          console.log("Error from status check edge function:", error);
+          throw error;
+        }
         return data;
       });
       

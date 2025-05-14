@@ -4,12 +4,16 @@
 /**
  * Create a TwiML response with a WebSocket stream
  * @param host - The host server URL
- * @param agentId - Optional ElevenLabs agent ID
+ * @param params - Optional parameters to include in the WebSocket URL
  * @returns XML string for TwiML response
  */
 export function createWebSocketStreamTwiML(host: string, params?: Record<string, string>): string {
+  // Remove any trailing slashes from host
+  const cleanHost = host.replace(/\/+$/, '');
+  
   // Build the WebSocket URL for media streaming
-  let mediaStreamUrl = `wss://${host}/twilio-media-stream`;
+  const wsProtocol = cleanHost.startsWith('https') ? 'wss' : 'ws';
+  let mediaStreamUrl = `${wsProtocol}://${cleanHost.replace(/^https?:\/\//, '')}/twilio-media-stream`;
   
   // Add URL parameters if present
   if (params) {
