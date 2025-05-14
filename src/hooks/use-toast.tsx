@@ -1,4 +1,3 @@
-
 import * as React from "react"
 import {
   Toast,
@@ -16,6 +15,7 @@ type ToasterToast = {
   action?: ToastActionElement
   variant?: "default" | "destructive" | "success" | "warning"
   duration?: number
+  open?: boolean // Added the missing open property
 }
 
 type ToastActionType = 
@@ -140,7 +140,7 @@ export const useToast = () => {
           toast: {
             ...props,
             id,
-            open: true,
+            open: true, // Always set open to true when creating a toast
           },
         })
         
@@ -173,7 +173,7 @@ export const toast = (props: Omit<ToasterToast, "id">) => {
   const toastData = {
     ...props,
     id,
-    open: true,
+    open: true, // Always set open to true when creating a toast
     onOpenChange: (open: boolean) => {
       if (!open) {
         toastDispatch({
