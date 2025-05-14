@@ -151,11 +151,12 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error("Failed to get conversation URL from ElevenLabs");
       }
       
-      console.log('Got signed URL, starting session...');
+      console.log('Got signed URL, starting session...', signedUrl);
       
       // Start the conversation with ElevenLabs using the signed URL
+      // Fix: Use origin instead of url property based on the error message
       await conversation.startSession({
-        url: signedUrl,
+        origin: signedUrl,
       });
       
       setIsMicEnabled(true);
