@@ -3,13 +3,12 @@
 
 import * as React from "react";
 import {
-  ToastActionElement,
+  Toast as ToastPrimitive,
   ToastClose,
   ToastDescription,
+  ToastProvider as ToastProviderPrimitive,
   ToastTitle,
   ToastViewport,
-  Toast as ToastPrimitive,
-  ToastProvider as ToastProviderPrimitive,
 } from "@/components/ui/toast";
 
 const TOAST_LIMIT = 5;
@@ -22,6 +21,7 @@ export type ToasterToast = {
   action?: React.ReactNode;
   variant?: "default" | "destructive" | "success" | "warning" | null;
   duration?: number;
+  open?: boolean;
 };
 
 export type ToastProps = {
@@ -33,6 +33,8 @@ export type ToastProps = {
 };
 
 export type Toast = ToasterToast;
+
+export type ToastActionElement = React.ReactElement<typeof ToastAction>;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -249,4 +251,5 @@ export const Toaster = () => {
   );
 };
 
-export { toast } from "./toast-utils";
+// Export the toast function from toast-utils
+export { toast, setToast } from "./toast-utils";

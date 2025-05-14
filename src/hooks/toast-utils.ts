@@ -1,17 +1,14 @@
 
-import { useToast } from "./use-toast";
-import type { ToastProps } from "./use-toast";
-
 // Global toast function that will work outside React components
-let toastFn: ReturnType<typeof useToast>["toast"] | null = null;
+let toastFn: Function | null = null;
 
 // Function to set the toast function once the Toaster component has mounted
-export function setToast(toast: ReturnType<typeof useToast>["toast"]) {
+export function setToast(toast: Function) {
   toastFn = toast;
 }
 
 // Exported toast function that can be used anywhere
-export function toast(props: ToastProps) {
+export function toast(props: any) {
   if (toastFn) {
     return toastFn(props);
   }
@@ -23,10 +20,4 @@ export function toast(props: ToastProps) {
     dismiss: () => {},
     update: () => {},
   };
-}
-
-// Initialize toast service in the ToastProvider component
-export function initializeToast() {
-  const { toast } = useToast();
-  setToast(toast);
 }
