@@ -1,6 +1,7 @@
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Phone, Loader2, Bug, Headphones, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Phone, Loader2, Bug, Headphones, AlertCircle, AlertTriangle, Radio } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
@@ -17,6 +18,10 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group"
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface CampaignCallerProps {
@@ -28,6 +33,12 @@ interface CampaignCallerProps {
 interface VoiceOption {
   id: string;
   name: string;
+}
+
+interface ElevenLabsAgentOption {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignCallerProps) => {
@@ -45,6 +56,11 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
   const [callStatus, setCallStatus] = useState<string | null>(null);
   const [isVerifyingCall, setIsVerifyingCall] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
+  const [useElevenLabsAgent, setUseElevenLabsAgent] = useState(false);
+  const [elevenLabsAgents, setElevenLabsAgents] = useState<ElevenLabsAgentOption[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [callMode, setCallMode] = useState<'twilio' | 'elevenlabs'>('twilio');
   
   const { makeCall, makeDevelopmentCall, verifyCallStatus } = useTwilioCall();
   const { getVoices } = useElevenLabs();
@@ -56,6 +72,11 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
     { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah" },
     { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" }, 
     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria" }
+  ];
+
+  // Default ElevenLabs agents
+  const defaultAgents: ElevenLabsAgentOption[] = [
+    { id: "6Optf6WRTzp3rEyj2aiL", name: "Default Agent", description: "General purpose assistant" },
   ];
 
   // Periodically check call status if we have a call SID
@@ -167,6 +188,65 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
     }
   }, [useElevenLabsVoice]);
 
+  useEffect(() => {
+    if (user && callMode === 'elevenlabs') {
+      fetchElevenLabsAgents();
+    } else {
+      setElevenLabsAgents(defaultAgents);
+      if (defaultAgents.length > 0) {
+        setSelectedAgentId(defaultAgents[0].id);
+      }
+    }
+  }, [user, callMode]);
+
+  const fetchElevenLabsAgents = async () => {
+    if (!user) return;
+    
+    setIsLoadingAgents(true);
+    try {
+      // Try to fetch from our database first
+      const { data: agents, error } = await supabase
+        .from('elevenlabs_agents')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error("Error fetching ElevenLabs agents:", error);
+        throw error;
+      }
+      
+      if (agents && agents.length > 0) {
+        setElevenLabsAgents(agents.map(agent => ({
+          id: agent.agent_id,
+          name: agent.name,
+          description: agent.description
+        })));
+        setSelectedAgentId(agents[0].agent_id);
+      } else {
+        // Fall back to default agents
+        setElevenLabsAgents(defaultAgents);
+        if (defaultAgents.length > 0) {
+          setSelectedAgentId(defaultAgents[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch ElevenLabs agents", error);
+      toast({
+        title: "Error fetching agents",
+        description: "Failed to load ElevenLabs agents. Using default agents instead.",
+        variant: "destructive"
+      });
+      
+      // Fall back to default agents
+      setElevenLabsAgents(defaultAgents);
+      if (defaultAgents.length > 0) {
+        setSelectedAgentId(defaultAgents[0].id);
+      }
+    } finally {
+      setIsLoadingAgents(false);
+    }
+  };
+
   const fetchElevenLabsVoices = async () => {
     setIsLoadingVoices(true);
     try {
@@ -270,7 +350,9 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
         userId: user.id,
         bypassValidation, // Explicitly pass the bypass flag
         debugMode, // Pass the debug mode flag
-        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
+        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
+        useElevenLabsAgent: callMode === 'elevenlabs',
+        elevenLabsAgentId: callMode === 'elevenlabs' ? selectedAgentId : undefined
       });
       
       if (response.success) {
@@ -415,6 +497,65 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
             )}
           </div>
           
+          {/* Call Mode Selection */}
+          <div className="border-t pt-4">
+            <Label className="text-sm mb-2 block">Call Method</Label>
+            <RadioGroup 
+              value={callMode} 
+              onValueChange={(value) => setCallMode(value as 'twilio' | 'elevenlabs')}
+              className="flex flex-col space-y-2"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="twilio" id="twilio-option" />
+                <Label htmlFor="twilio-option">Twilio (Traditional Call)</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="elevenlabs" id="elevenlabs-option" />
+                <Label htmlFor="elevenlabs-option">ElevenLabs (AI Agent Call)</Label>
+              </div>
+            </RadioGroup>
+            <p className="text-xs text-muted-foreground mt-1">
+              {callMode === 'twilio' 
+                ? 'Uses your Twilio account with automatic AI responses' 
+                : 'Uses ElevenLabs Conversational AI API for more natural conversations'}
+            </p>
+          </div>
+          
+          {/* ElevenLabs Agent Selection - only show when ElevenLabs is selected */}
+          {callMode === 'elevenlabs' && (
+            <div className="space-y-2">
+              <Label htmlFor="agent-campaign" className="text-sm">ElevenLabs Agent</Label>
+              {isLoadingAgents ? (
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading agents...</span>
+                </div>
+              ) : (
+                <Select
+                  value={selectedAgentId}
+                  onValueChange={setSelectedAgentId}
+                  disabled={isLoadingAgents || elevenLabsAgents.length === 0}
+                >
+                  <SelectTrigger id="agent-campaign" className="w-full">
+                    <SelectValue placeholder="Select an agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {elevenLabsAgents.map(agent => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {selectedAgentId && elevenLabsAgents.find(a => a.id === selectedAgentId)?.description && (
+                <p className="text-xs text-muted-foreground">
+                  {elevenLabsAgents.find(a => a.id === selectedAgentId)?.description}
+                </p>
+              )}
+            </div>
+          )}
+          
           {/* ElevenLabs Voice Section */}
           <div className="flex items-center space-x-2 pt-2 border-t">
             <Switch 
@@ -506,6 +647,8 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
               <li>Twilio trial accounts have limitations on outbound calls</li>
               <li>Check the Edge Function logs for detailed error messages</li>
               <li>Try enabling Development Mode if calls fail</li>
+              {callMode === 'elevenlabs' && <li>Make sure your ElevenLabs API key is configured in your profile</li>}
+              {callMode === 'elevenlabs' && <li>For ElevenLabs Agents, you need a paid ElevenLabs subscription</li>}
             </ul>
           </div>
           
@@ -523,7 +666,11 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
             ) : (
               <>
                 <Phone className="mr-2 h-4 w-4" />
-                {bypassValidation ? 'Call Next Prospect (Dev Mode)' : 'Call Next Prospect'}
+                {bypassValidation 
+                  ? 'Call Next Prospect (Dev Mode)' 
+                  : callMode === 'elevenlabs' 
+                    ? 'Call Next Prospect (ElevenLabs)' 
+                    : 'Call Next Prospect'}
               </>
             )}
           </Button>

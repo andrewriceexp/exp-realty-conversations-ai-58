@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface TwilioCallOptions {
@@ -11,6 +11,8 @@ interface TwilioCallOptions {
   bypassValidation?: boolean;
   debugMode?: boolean;
   voiceId?: string;
+  useElevenLabsAgent?: boolean;
+  elevenLabsAgentId?: string;
 }
 
 interface TwilioCallResponse {
@@ -45,39 +47,97 @@ export function useTwilioCall() {
         voiceId: options.voiceId ? `${options.voiceId.substring(0, 8)}...` : undefined
       });
       
-      // Add a more robust timeout to the Supabase function call
-      const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-        setTimeout(() => reject(new Error("Twilio call request timed out")), 15000)
-      );
-      
-      // Make the actual API call
-      const fetchPromise = supabase.functions.invoke('twilio-make-call', {
-        body: options
-      }).then(({data, error}) => {
-        if (error) throw error;
-        return data;
-      });
-      
-      // Race the timeout against the actual request
-      const data = await Promise.race([fetchPromise, timeoutPromise]);
-      
-      if (!data?.success) {
-        throw new Error(data?.message || 'Failed to initiate call');
+      // If using ElevenLabs agent, use the new edge function
+      if (options.useElevenLabsAgent && options.elevenLabsAgentId) {
+        console.log(`Using ElevenLabs agent: ${options.elevenLabsAgentId}`);
+        
+        // Add a more robust timeout to the Supabase function call
+        const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
+          setTimeout(() => reject(new Error("ElevenLabs call request timed out")), 15000)
+        );
+        
+        // Get prospect info to get the phone number
+        const { data: prospectData, error: prospectError } = await supabase
+          .from('prospects')
+          .select('phone_number, first_name, last_name')
+          .eq('id', options.prospectId)
+          .single();
+          
+        if (prospectError || !prospectData) {
+          throw new Error(`Could not find prospect with ID: ${options.prospectId}`);
+        }
+        
+        // Make the actual API call to our ElevenLabs edge function
+        const fetchPromise = supabase.functions.invoke('elevenlabs-outbound-call', {
+          body: {
+            agent_id: options.elevenLabsAgentId,
+            to_number: prospectData.phone_number,
+            user_id: options.userId,
+            dynamic_variables: {
+              user_name: `${prospectData.first_name} ${prospectData.last_name}`.trim()
+            },
+            conversation_config_override: options.voiceId ? {
+              tts: {
+                voice_id: options.voiceId
+              }
+            } : undefined
+          }
+        }).then(({data, error}) => {
+          if (error) throw error;
+          return data;
+        });
+        
+        // Race the timeout against the actual request
+        const data = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        if (!data?.success) {
+          throw new Error(data?.message || 'Failed to initiate call');
+        }
+        
+        console.log('ElevenLabs call response:', data);
+        
+        return {
+          success: true,
+          message: data.message || 'ElevenLabs call initiated successfully',
+          callSid: data.callSid,
+          callLogId: data.callLogId
+        };
+      } else {
+        // Use the regular Twilio edge function for non-ElevenLabs calls
+        // Add a more robust timeout to the Supabase function call
+        const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
+          setTimeout(() => reject(new Error("Twilio call request timed out")), 15000)
+        );
+        
+        // Make the actual API call
+        const fetchPromise = supabase.functions.invoke('twilio-make-call', {
+          body: options
+        }).then(({data, error}) => {
+          if (error) throw error;
+          return data;
+        });
+        
+        // Race the timeout against the actual request
+        const data = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        if (!data?.success) {
+          throw new Error(data?.message || 'Failed to initiate call');
+        }
+        
+        console.log('Edge function response:', data);
+        console.log('Call initiated successfully:', {
+          callSid: data.callSid,
+          callLogId: data.callLogId,
+          message: data.message
+        });
+        
+        return {
+          success: true,
+          message: data.message || 'Call initiated successfully',
+          callSid: data.callSid,
+          callLogId: data.callLogId
+        };
       }
-      
-      console.log('Edge function response:', data);
-      console.log('Call initiated successfully:', {
-        callSid: data.callSid,
-        callLogId: data.callLogId,
-        message: data.message
-      });
-      
-      return {
-        success: true,
-        message: data.message || 'Call initiated successfully',
-        callSid: data.callSid,
-        callLogId: data.callLogId
-      };
     } catch (error: any) {
       console.error('Call initiation error:', error);
       

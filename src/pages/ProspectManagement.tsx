@@ -5,6 +5,7 @@ import MainLayout from "@/components/MainLayout";
 import ProspectLists from "@/components/prospects/ProspectLists";
 import ProspectImport from "@/components/prospects/ProspectImport";
 import ProspectDetails from "@/components/prospects/ProspectDetails";
+import { ElevenLabsAgentManager } from "@/components/agent-config/ElevenLabsAgentManager";
 import { ProspectList } from "@/types";
 import { Switch } from "@/components/ui/switch";
 import { EyeIcon, EyeOffIcon, AlertTriangle } from "lucide-react";
@@ -98,9 +99,10 @@ const ProspectManagement = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="lists">Lists</TabsTrigger>
             <TabsTrigger value="import">Import</TabsTrigger>
+            <TabsTrigger value="elevenlabs">ElevenLabs Agents</TabsTrigger>
             <TabsTrigger value="details" disabled={!selectedList}>
               {selectedList ? (anonymizeData 
                 ? `List: ${selectedList.list_name.slice(0, 3)}...` 
@@ -113,6 +115,9 @@ const ProspectManagement = () => {
           </TabsContent>
           <TabsContent value="import" className="py-4">
             <ProspectImport onSuccess={() => setActiveTab("lists")} />
+          </TabsContent>
+          <TabsContent value="elevenlabs" className="py-4">
+            <ElevenLabsAgentManager />
           </TabsContent>
           <TabsContent value="details" className="py-4">
             {selectedList && <ProspectDetails list={selectedList} />}
