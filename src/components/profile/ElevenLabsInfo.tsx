@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { AlertCircle, Check, ExternalLink, Key, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Key, Loader2, BookOpen } from 'lucide-react';
 
 const ElevenLabsInfo = () => {
   const [apiKey, setApiKey] = useState('');
@@ -216,6 +216,13 @@ const ElevenLabsInfo = () => {
                       className="text-primary underline"
                     >ElevenLabs Dashboard</a> and copy your API key
                   </li>
+                  <li>Make sure you have created or have access to an <a
+                      href="https://elevenlabs.io/app/convai"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >ElevenLabs AI Agent</a>
+                  </li>
                   <li>Paste your API key below and click "Save"</li>
                 </ol>
               </AlertDescription>
@@ -259,7 +266,7 @@ const ElevenLabsInfo = () => {
                   ) : "Save API Key"}
                 </Button>
               </div>
-              <div className="mt-3">
+              <div className="mt-3 flex flex-col space-y-2">
                 <a 
                   href="https://elevenlabs.io/app/api-key" 
                   target="_blank" 
@@ -268,6 +275,15 @@ const ElevenLabsInfo = () => {
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
                   Get your API key from ElevenLabs Dashboard
+                </a>
+                <a 
+                  href="https://elevenlabs.io/docs/conversational-ai" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary flex items-center"
+                >
+                  <BookOpen className="h-3 w-3 mr-1" />
+                  ElevenLabs Conversational AI Documentation
                 </a>
               </div>
             </div>
@@ -296,6 +312,34 @@ const ElevenLabsInfo = () => {
               >
                 Test Conversation
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai', '_blank')}
+                size="icon"
+                className="px-2"
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="mt-3 text-xs text-muted-foreground">
+              <a 
+                href="https://elevenlabs.io/app/convai" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary flex items-center mb-1"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Manage your AI Agents in ElevenLabs Dashboard
+              </a>
+              <a 
+                href="https://elevenlabs.io/docs/conversational-ai" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary flex items-center"
+              >
+                <BookOpen className="h-3 w-3 mr-1" />
+                ElevenLabs Conversational AI Documentation
+              </a>
             </div>
           </>
         )}

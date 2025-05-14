@@ -1,18 +1,10 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.1';
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.36.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-const logDetailed = (message, data = {}) => {
-  console.log(`[elevenlabs-signed-url] ${message}`, typeof data === 'object' ? JSON.stringify(data) : data);
 };
 
 serve(async (req) => {
@@ -21,132 +13,172 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log("[elevenlabs-signed-url] Starting function");
+  
   try {
-    // Extract the auth token from the request
+    // Parse request body and extract agent ID
+    const { agentId } = await req.json();
+    
+    if (!agentId) {
+      console.log("[elevenlabs-signed-url] Missing agentId in request");
+      return new Response(
+        JSON.stringify({ error: "Agent ID is required" }),
+        { 
+          status: 400, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
+    }
+    
+    console.log(`[elevenlabs-signed-url] Processing request for agent ID: ${agentId}`);
+    
+    // Authenticate user from the request
     const authHeader = req.headers.get('Authorization');
-    logDetailed(`Auth header present: ${!!authHeader}`);
+    console.log("[elevenlabs-signed-url] Auth header present:", !!authHeader);
     
     if (!authHeader) {
-      throw new Error('No authorization header provided');
-    }
-
-    // Validate the token format
-    if (!authHeader.startsWith('Bearer ')) {
-      throw new Error('Authorization header must be in Bearer token format');
+      return new Response(
+        JSON.stringify({ error: "Authorization header is required" }),
+        { 
+          status: 401, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
     }
     
+    // Extract the token from the Bearer token
     const token = authHeader.replace('Bearer ', '');
+    console.log("[elevenlabs-signed-url] Token extracted, length:", token.length);
     
-    if (!token) {
-      throw new Error('Empty token provided');
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Verify the user's session
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.log("[elevenlabs-signed-url] User authentication error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired authentication token" }),
+        { 
+          status: 401, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
     }
     
-    logDetailed(`Token extracted, length: ${token.length}`);
-
-    // Create a Supabase client with the user's JWT to verify their identity
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    });
-
-    // Verify the user's JWT by getting the user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    console.log("[elevenlabs-signed-url] User authenticated:", user.id);
     
-    if (userError) {
-      logDetailed("User authentication error:", userError);
-      throw new Error(`Unauthorized: ${userError.message}`);
-    }
-    
-    if (!user) {
-      logDetailed("No user found in authentication");
-      throw new Error('Unauthorized: No user found');
-    }
-    
-    logDetailed("User authenticated:", { userId: user.id, email: user.email });
-
-    // Create a service role client to bypass RLS
-    const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Fetch the user's profile to get their ElevenLabs API key
-    const { data: profile, error: profileError } = await adminSupabase
+    // Get the user's ElevenLabs API key from their profile
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('elevenlabs_api_key')
       .eq('id', user.id)
       .single();
     
-    if (profileError) {
-      logDetailed("Profile fetch error:", profileError);
-      throw new Error(`Failed to retrieve user profile: ${profileError.message}`);
-    }
-
-    if (!profile?.elevenlabs_api_key) {
-      logDetailed("No ElevenLabs API key found for user:", { userId: user.id });
-      throw new Error('ElevenLabs API key not configured for this user');
-    }
-
-    // Extract the agent ID from the request body
-    let agentId;
-    try {
-      const requestData = await req.json();
-      agentId = requestData.agentId;
-      logDetailed("Received agentId:", agentId);
-    } catch (err) {
-      logDetailed("Error parsing request body:", err);
-      throw new Error('Invalid request body format or missing agentId');
+    if (profileError || !profile) {
+      console.log("[elevenlabs-signed-url] Error fetching user profile:", profileError);
+      return new Response(
+        JSON.stringify({ error: "Failed to retrieve user profile" }),
+        { 
+          status: 404, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
     }
     
-    if (!agentId) {
-      throw new Error('Agent ID is required');
+    if (!profile.elevenlabs_api_key) {
+      console.log("[elevenlabs-signed-url] User does not have an ElevenLabs API key");
+      return new Response(
+        JSON.stringify({ error: "ElevenLabs API key not found in user profile. Please add your API key in your profile settings." }),
+        { 
+          status: 400, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
     }
-
-    // Use the user's ElevenLabs API key
-    const apiKey = profile.elevenlabs_api_key;
     
-    logDetailed(`Making request to ElevenLabs API for agent ${agentId}`);
+    console.log("[elevenlabs-signed-url] Retrieved user's ElevenLabs API key");
     
-    // Make request to ElevenLabs API to get signed URL for conversation
-    const response = await fetch(`https://api.elevenlabs.io/v1/conversations/${agentId}/start`, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { raw: errorText };
+    // Get a signed URL from ElevenLabs
+    const elevenlabsResponse = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
+      {
+        method: "GET",
+        headers: {
+          "xi-api-key": profile.elevenlabs_api_key,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    
+    if (!elevenlabsResponse.ok) {
+      const errorData = await elevenlabsResponse.json().catch(() => ({}));
+      console.log("[elevenlabs-signed-url] ElevenLabs API error:", 
+        elevenlabsResponse.status, 
+        elevenlabsResponse.statusText, 
+        JSON.stringify(errorData)
+      );
+      
+      let errorMessage = "Failed to get signed URL from ElevenLabs";
+      
+      // Handle specific error cases
+      if (elevenlabsResponse.status === 401) {
+        errorMessage = "Invalid ElevenLabs API key. Please update your API key in your profile settings.";
+      } else if (elevenlabsResponse.status === 404) {
+        errorMessage = `Agent with ID ${agentId} not found. Please verify the agent ID.`;
+      } else if (errorData.detail) {
+        errorMessage = `ElevenLabs API error: ${errorData.detail}`;
       }
       
-      logDetailed('ElevenLabs API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorData
-      });
-      
-      throw new Error(`ElevenLabs API error (${response.status}): ${response.statusText} - ${errorText}`);
+      return new Response(
+        JSON.stringify({ error: errorMessage }),
+        { 
+          status: elevenlabsResponse.status, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
     }
-
-    const data = await response.json();
-    logDetailed('Successfully obtained conversation URL from ElevenLabs:', { urlReceived: !!data.url });
     
-    return new Response(JSON.stringify({ signed_url: data.url }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (error) {
-    logDetailed('Error in elevenlabs-signed-url function:', error);
+    // Process the response
+    const data = await elevenlabsResponse.json();
+    console.log("[elevenlabs-signed-url] Successfully obtained signed URL");
+    
+    // Return the signed URL
     return new Response(
-      JSON.stringify({ 
-        error: error.message || 'Unknown error occurred',
-        details: error.stack || 'No stack trace available'
-      }),
+      JSON.stringify({ signed_url: data.signed_url }),
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        } 
+      }
+    );
+    
+  } catch (error) {
+    console.log("[elevenlabs-signed-url] Error in elevenlabs-signed-url function:", error);
+    return new Response(
+      JSON.stringify({ error: error.message || "An unexpected error occurred" }),
       { 
         status: 500, 
         headers: { 

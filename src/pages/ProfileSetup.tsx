@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Check, ArrowRight } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Check, ArrowRight, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MainLayout from '@/components/MainLayout';
 import ProfileForm from '@/components/profile/ProfileForm';
@@ -50,9 +50,23 @@ const ProfileSetup = () => {
                   Your ElevenLabs API key has been validated and saved. You can now test voice conversations.
                 </p>
               </div>
-              <Button onClick={handleNavigateToConversation} className="flex items-center">
-                Test Now <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai', '_blank')}
+                  size="sm" 
+                  className="flex items-center"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Documentation
+                </Button>
+                <Button 
+                  onClick={handleNavigateToConversation} 
+                  className="flex items-center"
+                >
+                  Test Now <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
