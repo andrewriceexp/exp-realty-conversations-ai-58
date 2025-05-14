@@ -195,5 +195,5 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { useToast, toast, type Toast, type ToastProps, type ToastActionElement }
 export type { ToasterToast }
