@@ -109,7 +109,9 @@ export function useTwilioCall() {
   const makeDevelopmentCall = async (options: TwilioCallOptions): Promise<TwilioCallResponse> => {
     return makeCall({
       ...options,
-      bypassValidation: true
+      bypassValidation: true,
+      // Always enable debug mode for development calls to help troubleshoot
+      debugMode: true
     });
   };
   
@@ -163,7 +165,7 @@ export function useTwilioCall() {
     toast({
       variant: "destructive",
       title: "Call Processing Error",
-      description: "The call timed out while waiting for a response. Please try again."
+      description: "The call timed out while waiting for a response. Please try again with Development Mode enabled."
     });
   };
   

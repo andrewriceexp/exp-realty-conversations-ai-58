@@ -1,9 +1,8 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest, isTrialAccount, createTrialAccountTwiML, createDebugTwiML } from "../_shared/twilio-helper.ts";
-import { encodeXmlUrl, createGatherWithSay, createErrorResponse } from "../_shared/twiml-helpers.ts";
+import { encodeXmlUrl, createGatherWithSay, createErrorResponse, createTimeoutSafetyTwiML } from "../_shared/twiml-helpers.ts";
 
 serve(async (req) => {
   // Very early logging
@@ -31,8 +30,9 @@ serve(async (req) => {
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
     const callType = url.searchParams.get('call_type') || 'prospect'; // 'prospect' or 'recruit'
+    const isRetry = url.searchParams.get('retry') === 'true';
     
-    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}, call_type=${callType}`);
+    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}, call_type=${callType}, isRetry=${isRetry}`);
     
     // Check path to see if this is a status callback
     const isStatusCallback = url.pathname.endsWith('/status');
@@ -153,6 +153,48 @@ serve(async (req) => {
       });
     }
     
+    // If this is a retry request, return a simple response to keep the call alive
+    if (isRetry) {
+      console.log('Retry request detected - providing simplified TwiML to keep the call alive');
+      
+      const processResponseBaseUrl = `${url.origin}/twilio-process-response`;
+      const processResponseParams = {
+        prospect_id: prospectId,
+        agent_config_id: agentConfigId,
+        user_id: userId,
+        voice_id: voiceId,
+        conversation_count: '0',
+        bypass_validation: bypassValidation ? 'true' : undefined, 
+        debug_mode: debugMode ? 'true' : undefined,
+        call_type: callType
+      };
+      
+      if (callLogId) {
+        processResponseParams.call_log_id = callLogId;
+      }
+      
+      const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
+      
+      const response = twiml.VoiceResponse();
+      
+      // Just say we're still processing and redirect
+      response.say({
+        voice: 'Polly.Amy-Neural'
+      }, "I'm still processing your request. Please hold for a moment.");
+      
+      // Add a pause to make it more natural
+      response.pause({ length: 1 });
+      
+      // Redirect to the process-response handler
+      response.redirect({
+        method: 'POST'
+      }, processResponseUrl);
+      
+      return new Response(response.toString(), { 
+        headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
+      });
+    }
+    
     // For trial accounts, provide a simplified TwiML response that works better but still continues the call
     if (isTrial) {
       console.log('Trial account detected - providing modified TwiML response for trial account');
@@ -181,7 +223,9 @@ serve(async (req) => {
       const response = twiml.VoiceResponse();
       
       // First say the trial message
-      response.say("Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
+      response.say({
+        voice: 'Polly.Amy-Neural'  // Use a high-quality voice
+      }, "Hello, this is the eXp Realty AI assistant. This is a trial account which has limitations. I'm here to help with your real estate needs.");
       
       // Add a pause to make it more natural
       response.pause({ length: 1 });
@@ -190,7 +234,8 @@ serve(async (req) => {
       createGatherWithSay(response, processResponseUrl, "How can I assist you with your real estate needs today?", {
         timeout: 10,
         speechTimeout: "auto",
-        language: "en-US"
+        language: "en-US",
+        voice: 'Polly.Amy-Neural'
       });
       
       // Add a redirect outside the Gather (as a sibling, not a child)
@@ -348,7 +393,8 @@ serve(async (req) => {
     createGatherWithSay(response, processResponseUrl, firstQuestion, {
       timeout: 10,
       speechTimeout: "auto",
-      language: "en-US"
+      language: "en-US",
+      voice: 'Polly.Amy-Neural'
     });
     
     // Add a redirect outside the Gather (as a sibling, not a child)
@@ -375,8 +421,13 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in twilio-call-webhook function:', error);
     
-    // Return a simple TwiML response in case of error
-    return new Response(createErrorResponse("I'm sorry, there was an error processing this call. Please try again later."), { 
+    // Create a retry URL for more robust handling
+    const url = new URL(req.url);
+    url.searchParams.set('retry', 'true');
+    const retryUrl = url.toString();
+    
+    // Return a timeout safety response with a redirect
+    return new Response(createTimeoutSafetyTwiML(retryUrl), { 
       headers: { 'Content-Type': 'text/xml', ...corsHeaders } 
     });
   }

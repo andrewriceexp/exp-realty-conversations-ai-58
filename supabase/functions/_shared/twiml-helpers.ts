@@ -51,6 +51,8 @@ export function createGatherWithSay(
   const gather = response.gather({
     input: 'speech dtmf',
     action: xmlEncodedAction,
+    timeout: options.timeout || 5,  // Default to 5 seconds if not specified
+    speechTimeout: options.speechTimeout || "auto",
     ...options
   });
   
@@ -70,7 +72,34 @@ export function createGatherWithSay(
  */
 export function createErrorResponse(message: string): string {
   const response = twiml.VoiceResponse();
-  response.say(message);
+  response.say({
+    voice: 'Polly.Amy-Neural'  // Use a high-quality voice for error messages
+  }, message || "I'm sorry, there was an error with the call. Please try again later.");
+  response.pause({ length: 1 });
   response.hangup();
   return response.toString();
 }
+
+/**
+ * Create a timeout safety net TwiML
+ * This prevents the dreaded "application error has occurred" message
+ */
+export function createTimeoutSafetyTwiML(redirectUrl: string): string {
+  const response = twiml.VoiceResponse();
+  
+  // Add a short timeout to prevent Twilio's default error message
+  response.say({
+    voice: 'Polly.Amy-Neural'
+  }, "Please wait while I process your request.");
+  
+  // Add a short pause
+  response.pause({ length: 2 });
+  
+  // Redirect to the same URL to retry
+  response.redirect({
+    method: 'POST'
+  }, redirectUrl);
+  
+  return response.toString();
+}
+
