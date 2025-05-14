@@ -65,7 +65,8 @@ export const ElevenLabsProvider = ({ children }: { children: ReactNode }) => {
       toast({
         title: "Failed to start conversation",
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
+        duration: 5000
       });
       
       return null;

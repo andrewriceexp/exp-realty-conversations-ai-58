@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { AlertCircle, Check, ExternalLink, Key, Loader2, BookOpen } from 'lucide-react';
 import { withTimeout } from '@/lib/utils';
 
@@ -16,7 +16,6 @@ const ElevenLabsInfo = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const { user, profile, refreshProfile } = useAuth();
-  const { toast } = useToast();
   
   const hasApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
 
@@ -29,6 +28,7 @@ const ElevenLabsInfo = () => {
           title: "Authentication Error",
           description: "You must be logged in to update your API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
@@ -38,6 +38,7 @@ const ElevenLabsInfo = () => {
           title: "Missing API Key",
           description: "Please enter an ElevenLabs API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
@@ -48,6 +49,7 @@ const ElevenLabsInfo = () => {
           title: "Invalid API Key Format",
           description: "The API key you entered appears to be invalid. Please check and try again.",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
@@ -84,10 +86,13 @@ const ElevenLabsInfo = () => {
           title: "API Key Verification Failed",
           description: error instanceof Error ? error.message : "Failed to verify API key with ElevenLabs",
           variant: "destructive",
+          duration: 5000,
         });
         setIsSubmitting(false);
         return;
       }
+      
+      console.log("Updating API key for user:", user.id);
       
       // Update the profile with the new API key
       const { error } = await supabase
@@ -96,12 +101,16 @@ const ElevenLabsInfo = () => {
         .eq('id', user.id);
         
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
+      
+      console.log("API key updated successfully");
       
       toast({
         title: "API Key Saved",
         description: "Your ElevenLabs API key has been successfully saved.",
+        duration: 3000,
       });
       
       // Refresh the user profile to get the updated data
@@ -111,10 +120,12 @@ const ElevenLabsInfo = () => {
       setApiKey('');
       
     } catch (error: any) {
+      console.error("Error saving API key:", error);
       toast({
         title: "Error Saving API Key",
         description: error.message || "An unknown error occurred",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsSubmitting(false);
@@ -130,9 +141,12 @@ const ElevenLabsInfo = () => {
           title: "Authentication Error",
           description: "You must be logged in to update your API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
+      
+      console.log("Removing API key for user:", user.id);
       
       // Remove the API key from the profile
       const { error } = await supabase
@@ -141,8 +155,11 @@ const ElevenLabsInfo = () => {
         .eq('id', user.id);
         
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
+      
+      console.log("API key removed successfully");
       
       // Refresh the user profile to get the updated data
       await refreshProfile();
@@ -150,12 +167,15 @@ const ElevenLabsInfo = () => {
       toast({
         title: "API Key Removed",
         description: "Your ElevenLabs API key has been removed.",
+        duration: 3000,
       });
     } catch (error: any) {
+      console.error("Error removing API key:", error);
       toast({
         title: "Error Removing API Key",
         description: error.message || "An unknown error occurred",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsSubmitting(false);
@@ -168,6 +188,7 @@ const ElevenLabsInfo = () => {
         title: "Missing API Key",
         description: "Please enter an ElevenLabs API key to verify",
         variant: "destructive",
+        duration: 5000,
       });
       return;
     }
@@ -202,6 +223,7 @@ const ElevenLabsInfo = () => {
       toast({
         title: "API Key Valid",
         description: "Your ElevenLabs API key has been verified successfully.",
+        duration: 3000,
       });
     } catch (error: any) {
       setVerificationStatus('error');
@@ -209,6 +231,7 @@ const ElevenLabsInfo = () => {
         title: "API Key Verification Failed",
         description: error.message || "Failed to verify API key with ElevenLabs",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsVerifying(false);

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,7 @@ import { AlertCircle, Check, ExternalLink, Key, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 
 export function ElevenLabsSetup() {
@@ -15,7 +16,6 @@ export function ElevenLabsSetup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const { user, profile, refreshProfile } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleSaveApiKey = async () => {
@@ -27,6 +27,7 @@ export function ElevenLabsSetup() {
           title: "Authentication Error",
           description: "You must be logged in to update your API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
@@ -36,6 +37,7 @@ export function ElevenLabsSetup() {
           title: "Missing API Key",
           description: "Please enter an ElevenLabs API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
@@ -46,9 +48,12 @@ export function ElevenLabsSetup() {
           title: "Invalid API Key Format",
           description: "The API key you entered appears to be invalid. Please check and try again.",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
+      
+      console.log("Updating API key for user:", user.id);
       
       // Update the profile with the new API key
       const { error } = await supabase
@@ -57,13 +62,16 @@ export function ElevenLabsSetup() {
         .eq('id', user.id);
         
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
+      
+      console.log("API key updated successfully");
       
       toast({
         title: "API Key Saved",
         description: "Your ElevenLabs API key has been successfully saved.",
-        variant: "default",
+        duration: 3000,
       });
       
       // Refresh the user profile to get the updated data
@@ -73,10 +81,12 @@ export function ElevenLabsSetup() {
       setApiKey('');
       
     } catch (error: any) {
+      console.error("Error saving API key:", error);
       toast({
         title: "Error Saving API Key",
         description: error.message || "An unknown error occurred",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsSubmitting(false);
@@ -92,9 +102,12 @@ export function ElevenLabsSetup() {
           title: "Authentication Error",
           description: "You must be logged in to update your API key",
           variant: "destructive",
+          duration: 5000,
         });
         return;
       }
+      
+      console.log("Removing API key for user:", user.id);
       
       // Remove the API key from the profile
       const { error } = await supabase
@@ -103,8 +116,11 @@ export function ElevenLabsSetup() {
         .eq('id', user?.id);
         
       if (error) {
+        console.error("Supabase error:", error);
         throw error;
       }
+      
+      console.log("API key removed successfully");
       
       // Refresh the user profile to get the updated data
       await refreshProfile();
@@ -112,13 +128,15 @@ export function ElevenLabsSetup() {
       toast({
         title: "API Key Removed",
         description: "Your ElevenLabs API key has been removed.",
-        variant: "default",
+        duration: 3000,
       });
     } catch (error: any) {
+      console.error("Error removing API key:", error);
       toast({
         title: "Error Removing API Key",
         description: error.message || "An unknown error occurred",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsSubmitting(false);
@@ -131,6 +149,7 @@ export function ElevenLabsSetup() {
         title: "Missing API Key",
         description: "Please enter an ElevenLabs API key to verify",
         variant: "destructive",
+        duration: 5000,
       });
       return;
     }
@@ -154,13 +173,14 @@ export function ElevenLabsSetup() {
       toast({
         title: "API Key Valid",
         description: "Your ElevenLabs API key has been verified successfully.",
-        variant: "default",
+        duration: 3000,
       });
     } catch (error: any) {
       toast({
         title: "API Key Verification Failed",
         description: error.message || "Failed to verify API key with ElevenLabs",
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsVerifying(false);

@@ -6,18 +6,6 @@ import { useEffect } from "react";
 export function Toaster() {
   const { toasts, dismiss } = useToast();
 
-  useEffect(() => {
-    toasts.forEach(toast => {
-      if (toast.duration && toast.open) {
-        const timer = setTimeout(() => {
-          dismiss(toast.id);
-        }, toast.duration);
-        
-        return () => clearTimeout(timer);
-      }
-    });
-  }, [toasts, dismiss]);
-
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, ...props }) {
