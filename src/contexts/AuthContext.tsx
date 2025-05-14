@@ -22,10 +22,14 @@ interface AuthContextType {
   session: Session | null;
   profile: ProfileData | null;
   isLoading: boolean;
+  loading: boolean; // Alias for isLoading for backward compatibility
+  error: string | null;
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string, fullName: string) => Promise<any>;
   signOut: () => Promise<any>;
   refreshProfile: () => Promise<ProfileData | null>;
+  resetPassword: (email: string) => Promise<any>;
+  updateProfile: (data: Partial<ProfileData>) => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -35,6 +39,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -103,6 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
   
   const signIn = async (email: string, password: string) => {
+    setError(null);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -112,12 +118,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
       
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      setError(error.message || 'Error signing in');
       throw error;
     }
   };
   
   const signUp = async (email: string, password: string, fullName: string) => {
+    setError(null);
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -133,7 +141,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
       
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      setError(error.message || 'Error signing up');
       throw error;
     }
   };
@@ -141,6 +150,46 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+  };
+
+  const resetPassword = async (email: string) => {
+    setError(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) throw error;
+      
+      return { success: true };
+    } catch (error: any) {
+      setError(error.message || 'Error resetting password');
+      throw error;
+    }
+  };
+
+  const updateProfile = async (data: Partial<ProfileData>) => {
+    setError(null);
+    try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(data)
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
+      // Refresh profile data after update
+      await refreshProfile();
+      
+      return { success: true };
+    } catch (error: any) {
+      setError(error.message || 'Error updating profile');
+      throw error;
+    }
   };
   
   return (
@@ -150,10 +199,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         session,
         profile,
         isLoading,
+        loading: isLoading, // Alias for backward compatibility
+        error,
         signIn,
         signUp,
         signOut,
         refreshProfile,
+        resetPassword,
+        updateProfile,
       }}
     >
       {children}

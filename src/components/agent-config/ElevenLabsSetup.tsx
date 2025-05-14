@@ -8,7 +8,7 @@ import { AlertCircle, Check, Key } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/use-toast';
 
 export function ElevenLabsSetup() {
   const [apiKey, setApiKey] = useState('');
@@ -133,8 +133,8 @@ export function ElevenLabsSetup() {
                     .from('profiles')
                     .update({ elevenlabs_api_key: null })
                     .eq('id', user?.id)
-                    .then(() => {
-                      refreshProfile();
+                    .then(async () => {
+                      await refreshProfile();
                       toast({
                         title: "API Key Removed",
                         description: "Your ElevenLabs API key has been removed.",
