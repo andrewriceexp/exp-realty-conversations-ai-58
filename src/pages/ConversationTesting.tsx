@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +19,6 @@ interface AgentOption {
   name: string;
 }
 
-// Update the component to include agent settings
 export default function ConversationTesting() {
   // Default to the provided agent ID
   const [selectedAgentId, setSelectedAgentId] = useState<string>("6Optf6WRTzp3rEyj2aiL");
@@ -138,7 +138,6 @@ export default function ConversationTesting() {
     window.location.href = '/profile-setup';
   };
 
-  // Add new sections to the existing return JSX
   return (
     <MainLayout>
       <div className="space-y-6">

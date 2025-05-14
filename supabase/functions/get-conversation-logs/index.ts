@@ -9,7 +9,7 @@ serve(async (req) => {
   }
 
   try {
-    const { conversationId } = await req.json();
+    const { conversationId, userId } = await req.json();
     
     if (!conversationId) {
       throw new Error("Conversation ID is required");
@@ -24,21 +24,32 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseAdminKey);
 
-    // Fetch conversation logs
-    const { data: logs, error } = await supabase
+    // Construct the query based on available parameters
+    let query = supabase
       .from('call_logs')
       .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+      .eq('conversation_id', conversationId);
+      
+    // If userId provided, add it to the query for security
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    
+    // Execute the query with proper ordering
+    const { data: logs, error } = await query.order('created_at', { ascending: true });
 
     if (error) {
       throw error;
     }
 
+    // Fetch transcript data from ElevenLabs API if available
+    // This would require additional implementation and API key access
+    
     return new Response(
       JSON.stringify({
         success: true,
-        logs
+        logs,
+        message: logs?.length ? `Found ${logs.length} log entries` : "No logs found"
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" }

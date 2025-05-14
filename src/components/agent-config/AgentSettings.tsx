@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,8 +7,10 @@ import { Switch } from "@/components/ui/switch";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { AlertCircle, Loader2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AgentSettingsProps {
   agentId: string;
@@ -23,7 +25,10 @@ interface AgentSettingsFormValues {
 }
 
 export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
-  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [agentDetails, setAgentDetails] = useState<any>(null);
+  
   const form = useForm<AgentSettingsFormValues>({
     defaultValues: {
       inputFormat: "mulaw_8000",
@@ -33,13 +38,69 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
     }
   });
 
+  // Fetch current agent settings
+  useEffect(() => {
+    const fetchAgentSettings = async () => {
+      if (!agentId) return;
+      
+      setIsLoading(true);
+      try {
+        // In a real implementation, you would fetch the current settings from the API
+        // This is just a placeholder - in practice, this would come from the ElevenLabs API
+        const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}/settings`, {
+          headers: {
+            'Content-Type': 'application/json'
+            // Include authorization if needed
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setAgentDetails(data);
+          
+          // Update form with fetched values
+          form.reset({
+            inputFormat: data.input_format || "mulaw_8000",
+            outputFormat: data.output_format || "mulaw_8000",
+            enableAuth: data.require_auth !== false, // Default to true if not specified
+            enablePromptOverrides: data.enable_prompt_overrides !== false // Default to true if not specified
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching agent settings:', error);
+        // Still provide default values even if fetch fails
+        form.reset({
+          inputFormat: "mulaw_8000",
+          outputFormat: "mulaw_8000",
+          enableAuth: true,
+          enablePromptOverrides: true
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchAgentSettings();
+  }, [agentId, form]);
+
   const onSubmit = async (data: AgentSettingsFormValues) => {
+    if (!agentId) {
+      toast({
+        title: "Error",
+        description: "Agent ID is required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsSaving(true);
     try {
       // Update agent settings through ElevenLabs API
       const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${agentId}/settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
+          // Include authorization if needed
         },
         body: JSON.stringify({
           input_format: data.inputFormat,
@@ -56,7 +117,6 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
       toast({
         title: "Settings Updated",
         description: "Agent configuration has been successfully updated.",
-        variant: "success"
       });
 
       onUpdate?.();
@@ -67,8 +127,29 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
         description: "Failed to update agent settings. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-8 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -186,8 +267,15 @@ export function AgentSettings({ agentId, onUpdate }: AgentSettingsProps) {
               )}
             />
 
-            <Button type="submit" className="w-full">
-              Save Settings
+            <Button type="submit" className="w-full" disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Settings"
+              )}
             </Button>
           </form>
         </Form>

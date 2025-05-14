@@ -15,6 +15,8 @@ interface OutboundCallRequest {
       prompt?: { prompt: string };
       first_message?: string;
       language?: string;
+      input_format?: string;
+      output_format?: string;
     };
     tts?: {
       voice_id?: string;
@@ -61,31 +63,72 @@ serve(async (req) => {
       throw new Error("ElevenLabs API key not configured in your profile");
     }
     
-    // Make the outbound call request to ElevenLabs
-    console.log("Making request to ElevenLabs Conversational AI API");
-    const response = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": profile.elevenlabs_api_key
-      },
-      body: JSON.stringify({
-        agent_id,
-        to_number,
-        conversation_initiation_client_data: {
-          dynamic_variables: dynamic_variables || {},
-          conversation_config_override: {
-            ...conversation_config_override,
-            agent: {
-              ...conversation_config_override?.agent,
-              // Ensure audio format is set for telephony
-              input_format: "mulaw_8000",
-              output_format: "mulaw_8000"
-            }
+    // Prepare the payload for ElevenLabs API
+    // Ensure proper audio format configuration for telephony
+    const payload = {
+      agent_id,
+      to_number,
+      conversation_initiation_client_data: {
+        dynamic_variables: dynamic_variables || {},
+        conversation_config_override: {
+          agent: {
+            ...conversation_config_override?.agent,
+            // Always ensure telephony audio formats are set for optimal call quality
+            input_format: "mulaw_8000",
+            output_format: "mulaw_8000"
+          },
+          tts: conversation_config_override?.tts || {}
+        }
+      }
+    };
+    
+    // Log configuration (without sensitive data)
+    console.log("Call configuration:", {
+      agent_id,
+      dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
+      voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
+      audio_format: "mulaw_8000 (optimized for telephony)"
+    });
+    
+    // Make the outbound call request to ElevenLabs with retries
+    let response;
+    let retries = 0;
+    const MAX_RETRIES = 2;
+    
+    while (retries <= MAX_RETRIES) {
+      try {
+        console.log(`Making request to ElevenLabs API (attempt ${retries + 1})`);
+        response = await fetch("https://api.elevenlabs.io/v1/convai/twilio/outbound-call", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": profile.elevenlabs_api_key
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        // If successful, break out of retry loop
+        if (response.ok) break;
+        
+        // If rate limited, wait and retry
+        if (response.status === 429) {
+          retries++;
+          if (retries <= MAX_RETRIES) {
+            console.log(`Rate limited, waiting before retry ${retries}`);
+            await new Promise(resolve => setTimeout(resolve, 2000 * retries));
+            continue;
           }
         }
-      })
-    });
+        
+        // For other errors, throw and capture below
+        throw new Error(`ElevenLabs API error: ${response.status}`);
+      } catch (error) {
+        if (retries >= MAX_RETRIES) throw error;
+        retries++;
+        console.log(`Error making request, retry ${retries}: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
     
     // Enhanced error handling
     if (!response.ok) {
@@ -102,7 +145,7 @@ serve(async (req) => {
     
     const data = await response.json();
     
-    // Create call log with more details
+    // Create comprehensive call log with more details
     const { data: callLog, error: callLogError } = await supabase
       .from('call_logs')
       .insert([{
@@ -113,12 +156,15 @@ serve(async (req) => {
         to_number,
         started_at: new Date().toISOString(),
         metadata: {
+          agent_id,
           dynamic_variables,
           conversation_config_override,
           audio_format: {
             input: "mulaw_8000",
             output: "mulaw_8000"
-          }
+          },
+          api_version: "v1",
+          call_type: "outbound_elevenlabs"
         }
       }])
       .select()
@@ -133,7 +179,8 @@ serve(async (req) => {
         success: true,
         message: "Outbound call initiated successfully",
         callSid: data.callSid,
-        callLogId: callLog?.id
+        callLogId: callLog?.id,
+        conversationId: data.conversationId || null
       }),
       {
         status: 200,
