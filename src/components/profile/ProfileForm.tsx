@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { ProfileCredentialTester } from '@/components/ProfileCredentialTester';
 import TwilioConfiguration from './TwilioConfiguration';
 import ElevenLabsInfo from './ElevenLabsInfo';
@@ -55,7 +55,7 @@ const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) =
   });
 
   // Reset form with profile values when profile loads or changes
-  useState(() => {
+  useEffect(() => {
     if (profile) {
       form.reset({
         full_name: profile.full_name || '',
@@ -67,7 +67,7 @@ const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) =
       });
       setHasAuthToken(!!profile.twilio_auth_token);
     }
-  });
+  }, [profile, form]);
 
   const onSubmit = async (values: ProfileFormValues) => {
     try {

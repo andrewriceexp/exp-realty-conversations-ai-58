@@ -7,4 +7,4 @@ export {
   type Toast,
   type ToastProps,
   type ToastActionElement,
-} from "./use-toast.tsx";
+} from "@/components/ui/use-toast";

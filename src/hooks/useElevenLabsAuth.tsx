@@ -19,7 +19,7 @@ interface UseElevenLabsAuthReturn {
 // Constants for validation
 const VALIDATION_TIMEOUT_MS = 12000; // 12 seconds
 const MIN_VALIDATION_INTERVAL_MS = 30000; // 30 seconds between validations
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2; // Reduced from 3 to minimize retry loops
 
 /**
  * Custom hook to check if the user has all requirements to use ElevenLabs features
@@ -28,13 +28,14 @@ const MAX_RETRIES = 3;
  * - Has ElevenLabs API key configured and validated
  */
 export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // Start with false to avoid immediate validation
   const [error, setError] = useState<string | null>(null);
   const [apiKeyStatus, setApiKeyStatus] = useState<'missing' | 'configured' | 'unknown' | 'invalid' | 'valid'>('unknown');
   const [lastValidated, setLastValidated] = useState<number | null>(null);
   const validationInProgress = useRef(false);
   const retryCount = useRef(0);
   const toastShownRef = useRef<Map<string, number>>(new Map());
+  const initialValidationDone = useRef(false);
   
   const { user, profile, session } = useAuth();
   
@@ -59,6 +60,8 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
   
   // Check basic auth requirements on mount and when auth state changes
   useEffect(() => {
+    if (!profile) return; // Don't do anything if profile hasn't loaded yet
+    
     // Reset API key status when profile changes
     if (profile) {
       setApiKeyStatus(hasApiKey ? 'configured' : 'missing');
@@ -68,28 +71,29 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     if (!isAuthenticated) {
       setError("Authentication required to use ElevenLabs features");
       setApiKeyStatus('unknown');
+      return;
     } else if (!hasValidSession) {
       setError("Your session has expired. Please log in again to refresh your authentication");
       setApiKeyStatus('unknown');
+      return;
     } else if (!hasApiKey) {
       setError("ElevenLabs API key required. Please add it in your profile settings");
       setApiKeyStatus('missing');
-    } else {
-      // Only auto-validate if we haven't validated recently or never validated
-      const shouldValidate = 
-        !lastValidated || 
-        Date.now() - lastValidated > MIN_VALIDATION_INTERVAL_MS;
-      
-      if (shouldValidate && !validationInProgress.current) {
-        // Don't await, just trigger the validation
-        validateApiKey().catch(() => {
-          // This is handled inside validateApiKey
-        });
-      }
+      return;
     }
     
-    setIsLoading(false);
-  }, [isAuthenticated, hasApiKey, hasValidSession, profile, lastValidated]);
+    // Only validate once on initial mount and then don't auto-validate
+    // This prevents the validation loop and lets manual validation work as expected
+    if (!initialValidationDone.current && hasApiKey && !validationInProgress.current) {
+      initialValidationDone.current = true;
+      // Slight delay on first validation to avoid race conditions with mount
+      const timer = setTimeout(() => {
+        validateApiKey().catch(() => {/* Errors handled inside validateApiKey */});
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, hasApiKey, hasValidSession, profile]);
   
   /**
    * Validates the currently stored ElevenLabs API key
@@ -191,21 +195,25 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         setError("Failed to validate ElevenLabs API key");
       }
       
-      // Implement retry with exponential backoff
-      retryCount.current += 1;
-      
-      if (retryCount.current <= MAX_RETRIES) {
-        // Exponential backoff: 2^retry * 1000ms (2s, 4s, 8s)
-        const backoffMs = Math.min(Math.pow(2, retryCount.current) * 1000, 8000);
-        console.log(`Retry ${retryCount.current}/${MAX_RETRIES} in ${backoffMs}ms`);
+      // Implement retry with exponential backoff - only if it's not a direct user-initiated validation
+      if (retryCount.current === 0) {
+        retryCount.current += 1;
         
-        // Schedule retry with backoff
-        setTimeout(() => {
-          validationInProgress.current = false;
-          validateApiKey().catch(() => {/* Errors handled inside validateApiKey */});
-        }, backoffMs);
+        if (retryCount.current <= MAX_RETRIES) {
+          // Exponential backoff: 2^retry * 1000ms (2s, 4s, 8s)
+          const backoffMs = Math.min(Math.pow(2, retryCount.current) * 1000, 8000);
+          console.log(`Retry ${retryCount.current}/${MAX_RETRIES} in ${backoffMs}ms`);
+          
+          // Schedule retry with backoff
+          setTimeout(() => {
+            validationInProgress.current = false;
+            validateApiKey().catch(() => {/* Errors handled inside validateApiKey */});
+          }, backoffMs);
+        } else {
+          retryCount.current = 0;
+          setApiKeyStatus('invalid');
+        }
       } else {
-        retryCount.current = 0;
         setApiKeyStatus('invalid');
       }
       
