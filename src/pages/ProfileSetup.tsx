@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -28,7 +29,6 @@ const profileSchema = z.object({
   twilio_phone_number: z.string()
     .regex(/^\+[1-9]\d{1,14}$/, 'Phone number must be in E.164 format (e.g., +12125551234)'),
   a2p_10dlc_registered: z.boolean().default(false),
-  elevenlabs_api_key: z.string().optional(),
 });
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
@@ -61,7 +61,6 @@ const ProfileSetup = () => {
       twilio_auth_token: '',  // Always start with an empty auth token field
       twilio_phone_number: profile?.twilio_phone_number || '',
       a2p_10dlc_registered: profile?.a2p_10dlc_registered || false,
-      elevenlabs_api_key: profile?.elevenlabs_api_key || '',
     },
   });
 
@@ -75,7 +74,6 @@ const ProfileSetup = () => {
         twilio_auth_token: '', // Keep this empty
         twilio_phone_number: profile.twilio_phone_number || '',
         a2p_10dlc_registered: profile.a2p_10dlc_registered || false,
-        elevenlabs_api_key: profile.elevenlabs_api_key || '',
       });
     }
   }, [profile, form]);
@@ -100,7 +98,6 @@ const ProfileSetup = () => {
       console.log('Submitting profile update with data:', { 
         ...updateData, 
         twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined,
-        elevenlabs_api_key: updateData.elevenlabs_api_key ? '****' : undefined
       });
       
       await updateProfile(updateData);
@@ -315,31 +312,16 @@ const ProfileSetup = () => {
                   </div>
                   
                   <div className="border-t pt-6 mt-6">
-                    <h2 className="text-lg font-semibold mb-4">ElevenLabs Integration</h2>
-                    <div className="grid gap-4">
-                      <div className="grid gap-2">
-                        <FormField
-                          control={form.control}
-                          name="elevenlabs_api_key"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>ElevenLabs API Key</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="password"
-                                  placeholder="Enter your ElevenLabs API key"
-                                  {...field}
-                                  disabled={isLoading}
-                                />
-                              </FormControl>
-                              <FormDescription className="text-xs">
-                                Required for ElevenLabs conversational AI features. Get your key from <a href="https://elevenlabs.io/app/api-key" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ElevenLabs</a>
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                    <div className="mb-4">
+                      <h2 className="text-lg font-semibold mb-2">ElevenLabs Integration</h2>
+                      <p className="text-sm text-gray-600">
+                        This application uses the organization's ElevenLabs integration. No personal API key needed.
+                      </p>
+                      <Alert className="mt-4 bg-green-50 border-green-200 text-green-800">
+                        <AlertDescription>
+                          ElevenLabs voice capabilities are provided through our organizational account. Users don't need to provide their own API keys.
+                        </AlertDescription>
+                      </Alert>
                     </div>
                   </div>
                 </div>

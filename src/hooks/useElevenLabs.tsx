@@ -66,7 +66,7 @@ export function useElevenLabs() {
     }
   };
 
-  // Function to generate speech
+  // Function to generate speech using the organization's ElevenLabs API key
   const generateSpeech = async ({
     text,
     voiceId = "EXAVITQu4vr4xnSDxMaL", // Default to "Sarah" voice
@@ -114,20 +114,11 @@ export function useElevenLabs() {
       setError(errorMessage);
       console.error('ElevenLabs generateSpeech error:', err);
       
-      // Special case for missing API key
-      if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
-        toast({
-          title: "ElevenLabs API Key Missing",
-          description: "Please add your ElevenLabs API key in your profile settings to use custom voices.",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Speech generation failed",
-          description: errorMessage,
-          variant: "destructive"
-        });
-      }
+      toast({
+        title: "Speech generation failed",
+        description: errorMessage,
+        variant: "destructive"
+      });
       
       throw new Error(errorMessage);
     } finally {

@@ -13,11 +13,12 @@ serve(async (req) => {
   }
 
   try {
+    // Get API key from environment variable - centralized org key
     const apiKey = Deno.env.get('ELEVENLABS_API_KEY');
     
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'ElevenLabs API key not found' }),
+        JSON.stringify({ error: 'ElevenLabs API key not configured on the server' }),
         { 
           status: 500, 
           headers: { 

@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ElevenLabsContextType {
   getSignedUrl: (agentId: string) => Promise<string | null>;
@@ -33,6 +33,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
 
     try {
       // Call the Supabase Edge Function that will generate a signed URL
+      // Using the organization's ElevenLabs API key stored in environment variables
       const { data, error } = await supabase.functions.invoke('elevenlabs-signed-url', {
         body: { 
           agentId 
