@@ -1,5 +1,5 @@
 
-// Re-export from the implementation file
+// Re-export everything from the implementation file
 export {
   useToast,
   ToastAction,

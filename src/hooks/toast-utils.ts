@@ -1,5 +1,6 @@
 
 import { useToast } from "./use-toast";
+import type { ToastProps } from "./use-toast";
 
 // Global toast function that will work outside React components
 let toastFn: ReturnType<typeof useToast>["toast"] | null = null;
@@ -10,7 +11,7 @@ export function setToast(toast: ReturnType<typeof useToast>["toast"]) {
 }
 
 // Exported toast function that can be used anywhere
-export function toast(props: Parameters<ReturnType<typeof useToast>["toast"]>[0]) {
+export function toast(props: ToastProps) {
   if (toastFn) {
     return toastFn(props);
   }

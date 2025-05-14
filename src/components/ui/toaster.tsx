@@ -1,9 +1,7 @@
 
 "use client";
 
-import {
-  Toaster as RadixToaster,
-} from "@/components/ui/toast";
+import { Toaster as ToastComponent } from "@/hooks/use-toast";
 import { useEffect } from "react";
 import { initializeToast } from "@/hooks/toast-utils";
 
@@ -13,5 +11,5 @@ export function Toaster() {
     initializeToast();
   }, []);
 
-  return <RadixToaster />;
+  return <ToastComponent />;
 }

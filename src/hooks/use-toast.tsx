@@ -3,12 +3,13 @@
 
 import * as React from "react";
 import {
-  Toast,
+  ToastActionElement,
   ToastClose,
   ToastDescription,
-  ToastProvider,
   ToastTitle,
   ToastViewport,
+  Toast as ToastPrimitive,
+  ToastProvider as ToastProviderPrimitive,
 } from "@/components/ui/toast";
 import { useToast as useToastPrimitive } from "@radix-ui/react-toast";
 
@@ -20,17 +21,19 @@ export type ToasterToast = {
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
-  variant?: "default" | "destructive" | null;
+  variant?: "default" | "destructive" | "success" | "warning" | null;
+  duration?: number;
 };
-
-type ToasterActionElement = React.ReactElement<typeof ToastAction>;
 
 export type ToastProps = {
   title?: React.ReactNode;
   description?: React.ReactNode;
-  variant?: "default" | "destructive";
-  action?: ToasterActionElement;
+  variant?: "default" | "destructive" | "success" | "warning";
+  action?: ToastActionElement;
+  duration?: number;
 };
+
+export type Toast = ToasterToast;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -119,7 +122,7 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-const Toast = ({
+const ToastComponent = ({
   id,
   title,
   description,
@@ -130,14 +133,14 @@ const Toast = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   return (
-    <Toast variant={variant} onOpenChange={onOpenChange}>
+    <ToastPrimitive variant={variant} onOpenChange={onOpenChange}>
       <div className="grid gap-1">
         {title && <ToastTitle>{title}</ToastTitle>}
         {description && <ToastDescription>{description}</ToastDescription>}
       </div>
       {action}
       <ToastClose />
-    </Toast>
+    </ToastPrimitive>
   );
 };
 
@@ -149,7 +152,7 @@ export const useToast = () => {
   const { toasts } = state;
 
   const toast = React.useCallback(
-    ({ title, description, variant, action }: ToastProps) => {
+    ({ title, description, variant, action, duration = 5000 }: ToastProps) => {
       const id = crypto.randomUUID();
       const newToast = {
         id,
@@ -157,6 +160,7 @@ export const useToast = () => {
         description,
         variant,
         action,
+        duration,
         open: true,
       };
 
@@ -225,10 +229,10 @@ export const Toaster = () => {
   const { toasts, removeToast } = useToast();
 
   return (
-    <ToastProvider swipeDirection="right">
+    <ToastProviderPrimitive swipeDirection="right">
       {toasts.map(({ id, title, description, action, ...props }) => {
         return (
-          <Toast
+          <ToastComponent
             key={id}
             id={id}
             title={title}
@@ -244,9 +248,8 @@ export const Toaster = () => {
         );
       })}
       <ToastViewport />
-    </ToastProvider>
+    </ToastProviderPrimitive>
   );
 };
 
 export { toast } from "./toast-utils";
-export { type Toast, type ToastActionElement };

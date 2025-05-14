@@ -2,7 +2,6 @@
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { Toaster } from './components/ui/toaster';
-import { ToastProvider } from './hooks/use-toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -23,35 +22,33 @@ import { ElevenLabsProvider } from './contexts/ElevenLabsContext';
 function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <ElevenLabsProvider>
-          <Router>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+      <ElevenLabsProvider>
+        <Router>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-              {/* Protected routes */}
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
-              <Route path="/prospects" element={<ProtectedRoute><ProspectManagement /></ProtectedRoute>} />
-              <Route path="/campaigns" element={<ProtectedRoute><CampaignManagement /></ProtectedRoute>} />
-              <Route path="/conversation-testing" element={<ProtectedRoute><ConversationTesting /></ProtectedRoute>} />
-              <Route path="/agent-config" element={<ProtectedRoute><AgentConfig /></ProtectedRoute>} />
-              <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-              <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
-              
-              {/* Fallback routes */}
-              <Route path="/404" element={<NotFound />} />
-              <Route path="*" element={<Navigate to="/404" replace />} />
-            </Routes>
-            <Toaster />
-          </Router>
-        </ElevenLabsProvider>
-      </ToastProvider>
+            {/* Protected routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
+            <Route path="/prospects" element={<ProtectedRoute><ProspectManagement /></ProtectedRoute>} />
+            <Route path="/campaigns" element={<ProtectedRoute><CampaignManagement /></ProtectedRoute>} />
+            <Route path="/conversation-testing" element={<ProtectedRoute><ConversationTesting /></ProtectedRoute>} />
+            <Route path="/agent-config" element={<ProtectedRoute><AgentConfig /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+            <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+            
+            {/* Fallback routes */}
+            <Route path="/404" element={<NotFound />} />
+            <Route path="*" element={<Navigate to="/404" replace />} />
+          </Routes>
+          <Toaster />
+        </Router>
+      </ElevenLabsProvider>
     </AuthProvider>
   );
 }
