@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,39 +14,39 @@ import { toast } from '@/hooks/use-toast';
 const ProfileSetup = () => {
   const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
-  const { isReady: isElevenLabsReady, hasApiKey, validateApiKey } = useElevenLabsAuth();
+  const { 
+    isReady: isElevenLabsReady, 
+    hasApiKey, 
+    validateApiKey, 
+    isLoading,
+    apiKeyStatus,
+    lastValidated
+  } = useElevenLabsAuth();
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
-  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false);
+  
+  // Use a callback to avoid unnecessary effect reruns
+  const validateApiKeyIfNeeded = useCallback(async () => {
+    if (!hasApiKey) return;
+    
+    // Only validate if we haven't validated in this session
+    if (hasApiKey && apiKeyStatus !== 'valid' && !isLoading) {
+      const isValid = await validateApiKey();
+      if (isValid) {
+        setShowSuccessBanner(true);
+      }
+    } else if (apiKeyStatus === 'valid') {
+      setShowSuccessBanner(true);
+    }
+  }, [hasApiKey, apiKeyStatus, isLoading, validateApiKey]);
   
   useEffect(() => {
     if (profile) {
       console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
       console.log("Profile has ElevenLabs API key:", !!profile.elevenlabs_api_key);
       
-      if (!!profile.elevenlabs_api_key && !showSuccessBanner) {
-        // Validate API key when profile loads
-        validateElevenLabsApiKey();
-      }
+      validateApiKeyIfNeeded();
     }
-  }, [profile]);
-
-  const validateElevenLabsApiKey = async () => {
-    if (!profile?.elevenlabs_api_key) return;
-    
-    setIsValidatingApiKey(true);
-    const isValid = await validateApiKey();
-    setIsValidatingApiKey(false);
-    
-    if (isValid) {
-      setShowSuccessBanner(true);
-    } else {
-      toast({
-        title: "API Key Validation Failed",
-        description: "Your ElevenLabs API key could not be validated. Please update it in your profile.",
-        variant: "destructive"
-      });
-    }
-  };
+  }, [profile, validateApiKeyIfNeeded]);
 
   const handleNavigateToDashboard = () => {
     navigate('/dashboard');
@@ -92,7 +92,7 @@ const ProfileSetup = () => {
           </Alert>
         )}
         
-        {hasApiKey && isValidatingApiKey && (
+        {hasApiKey && isLoading && (
           <Alert className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Validating API Key</AlertTitle>

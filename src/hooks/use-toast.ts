@@ -9,6 +9,7 @@ import {
 
 const TOAST_LIMIT = 5
 const TOAST_REMOVE_DELAY = 5000
+const TOAST_THROTTLE_MS = 5000 // Throttle identical toasts for 5 seconds
 
 type ToasterToast = ToastProps & {
   id: string
@@ -56,6 +57,9 @@ type Action =
 interface State {
   toasts: ToasterToast[]
 }
+
+// Store recent toast messages to prevent duplicates
+const recentToasts = new Map<string, number>()
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -142,9 +146,47 @@ function dispatch(action: Action) {
   })
 }
 
+// Create a key for the toast based on title, description, and variant
+const createToastKey = (toast: Toast): string => {
+  return `${String(toast.title)}-${String(toast.description)}-${toast.variant || 'default'}`;
+}
+
+// Check if a similar toast was recently shown
+const isToastThrottled = (toast: Toast): boolean => {
+  const now = Date.now();
+  const key = createToastKey(toast);
+  const lastShown = recentToasts.get(key);
+  
+  // If the toast was shown recently, throttle it
+  if (lastShown && (now - lastShown) < TOAST_THROTTLE_MS) {
+    return true;
+  }
+  
+  // Update the timestamp for this toast
+  recentToasts.set(key, now);
+  
+  // Clean up old entries from the map to prevent memory leaks
+  recentToasts.forEach((timestamp, toastKey) => {
+    if (now - timestamp > TOAST_THROTTLE_MS * 2) {
+      recentToasts.delete(toastKey);
+    }
+  });
+  
+  return false;
+}
+
 type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
+  // Throttle identical toasts
+  if (isToastThrottled(props)) {
+    return {
+      id: "",
+      dismiss: () => {},
+      update: () => {},
+    }
+  }
+
   const id = generateId()
 
   const update = (props: ToasterToast) =>

@@ -1,12 +1,12 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import MainLayout from "@/components/MainLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { useAuth } from "@/contexts/AuthContext";
 import ConversationPanel from "@/components/conversations/ConversationPanel";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
@@ -28,7 +28,14 @@ const ConversationTesting = () => {
   const [isTestingActive, setIsTestingActive] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-  const { isReady, error: authError, hasApiKey, validateApiKey } = useElevenLabsAuth();
+  const { 
+    isReady, 
+    error: authError, 
+    hasApiKey, 
+    validateApiKey, 
+    apiKeyStatus,
+    isLoading: isAuthLoading
+  } = useElevenLabsAuth();
 
   // Initialize with known agents
   useEffect(() => {
@@ -41,14 +48,18 @@ const ConversationTesting = () => {
     ]);
   }, []);
 
-  // Validate API key when component mounts
+  // Validate API key when component mounts, but only once
+  const validateApiKeyIfNeeded = useCallback(async () => {
+    if (hasApiKey && apiKeyStatus !== 'valid' && !isAuthLoading) {
+      await validateApiKey();
+    }
+  }, [hasApiKey, validateApiKey, apiKeyStatus, isAuthLoading]);
+  
   useEffect(() => {
     if (hasApiKey) {
-      validateApiKey().catch(err => {
-        console.error("API key validation failed:", err);
-      });
+      validateApiKeyIfNeeded();
     }
-  }, [hasApiKey, validateApiKey]);
+  }, [hasApiKey, validateApiKeyIfNeeded]);
 
   const handleStartTest = async () => {
     if (!selectedAgentId) {
@@ -70,24 +81,21 @@ const ConversationTesting = () => {
         return;
       }
       
-      toast({
-        title: "Cannot start conversation",
-        description: authError || "Please check your authentication and API key",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Try to validate the API key before starting
-    if (hasApiKey) {
-      const isValid = await validateApiKey().catch(() => false);
-      if (!isValid) {
+      if (authError) {
         toast({
-          title: "API Key Validation Failed",
-          description: "Your ElevenLabs API key appears to be invalid or has expired. Please update it in your profile settings.",
+          title: "Cannot start conversation",
+          description: authError || "Please check your authentication and API key",
           variant: "destructive",
         });
         return;
+      }
+      
+      // If API key status isn't valid, try to validate it now
+      if (apiKeyStatus !== 'valid') {
+        const isValid = await validateApiKey();
+        if (!isValid) {
+          return; // The hook will show appropriate error toasts
+        }
       }
     }
     
@@ -126,6 +134,18 @@ const ConversationTesting = () => {
               <p>To use the conversation feature, you need to add an ElevenLabs API key in your profile.</p>
               <Button variant="outline" size="sm" onClick={navigateToProfile}>
                 Go to Profile Settings
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {hasApiKey && apiKeyStatus === 'invalid' && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription className="space-y-2">
+              <p>Your ElevenLabs API key appears to be invalid. Please check and update it in your profile settings.</p>
+              <Button variant="outline" size="sm" onClick={navigateToProfile}>
+                Update API Key
               </Button>
             </AlertDescription>
           </Alert>
@@ -215,9 +235,14 @@ const ConversationTesting = () => {
                 <div className="space-y-4">
                   <Button 
                     onClick={handleStartTest}
-                    disabled={!isReady}
+                    disabled={!hasApiKey || isAuthLoading || apiKeyStatus === 'invalid'}
                   >
-                    Start Test Conversation
+                    {isAuthLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Validating API Key...
+                      </>
+                    ) : "Start Test Conversation"}
                   </Button>
 
                   {authError && !hasApiKey && (

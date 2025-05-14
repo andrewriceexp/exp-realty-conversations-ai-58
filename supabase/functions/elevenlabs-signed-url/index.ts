@@ -7,6 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Cache signed URLs to reduce API calls
+const signedUrlCache = new Map<string, { url: string, expiresAt: number }>();
+const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -80,6 +84,23 @@ serve(async (req) => {
     
     console.log("[elevenlabs-signed-url] User authenticated:", user.id);
     
+    // Check if we have a cached valid URL for this agent and user
+    const cacheKey = `${user.id}-${agentId}`;
+    const cachedSignedUrl = signedUrlCache.get(cacheKey);
+    
+    if (cachedSignedUrl && cachedSignedUrl.expiresAt > Date.now()) {
+      console.log("[elevenlabs-signed-url] Returning cached signed URL");
+      return new Response(
+        JSON.stringify({ signed_url: cachedSignedUrl.url }),
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
+    }
+    
     // Get the user's ElevenLabs API key from their profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -117,7 +138,61 @@ serve(async (req) => {
     
     console.log("[elevenlabs-signed-url] Retrieved user's ElevenLabs API key");
     
+    // Validate the API key first before trying to get a signed URL
+    try {
+      console.log("[elevenlabs-signed-url] Validating API key");
+      const validationResponse = await fetch(
+        "https://api.elevenlabs.io/v1/user",
+        {
+          method: "GET",
+          headers: {
+            "xi-api-key": profile.elevenlabs_api_key,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (!validationResponse.ok) {
+        const error = await validationResponse.json().catch(() => ({}));
+        console.log("[elevenlabs-signed-url] API key validation failed:", 
+          validationResponse.status, 
+          validationResponse.statusText,
+          error
+        );
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Invalid ElevenLabs API key. Please update your API key in your profile settings." 
+          }),
+          { 
+            status: 401, 
+            headers: { 
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            } 
+          }
+        );
+      }
+      
+      console.log("[elevenlabs-signed-url] API key is valid");
+    } catch (error) {
+      console.log("[elevenlabs-signed-url] Error validating API key:", error);
+      return new Response(
+        JSON.stringify({ 
+          error: "Failed to validate ElevenLabs API key. Please try again later." 
+        }),
+        { 
+          status: 500, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          } 
+        }
+      );
+    }
+    
     // Get a signed URL from ElevenLabs
+    console.log("[elevenlabs-signed-url] Requesting signed URL from ElevenLabs");
     const elevenlabsResponse = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
       {
@@ -165,6 +240,14 @@ serve(async (req) => {
     // Process the response
     const data = await elevenlabsResponse.json();
     console.log("[elevenlabs-signed-url] Successfully obtained signed URL");
+    
+    // Cache the signed URL
+    if (data.signed_url) {
+      signedUrlCache.set(cacheKey, {
+        url: data.signed_url,
+        expiresAt: Date.now() + CACHE_DURATION_MS
+      });
+    }
     
     // Return the signed URL
     return new Response(
