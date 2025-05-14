@@ -30,6 +30,9 @@ interface ElevenLabsMessage {
   source?: any;
 }
 
+const MAX_RETRY_ATTEMPTS = 2;
+const CONNECTION_TIMEOUT_MS = 20000; // 20 seconds timeout
+
 const ConversationPanel: React.FC<ConversationPanelProps> = ({
   agentId,
   prospectName = 'Prospect',
@@ -44,6 +47,8 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [connectionTimer, setConnectionTimer] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user, profile, session } = useAuth();
@@ -55,8 +60,11 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       clearError();
       setConnectionError(null);
       setDebugInfo(null);
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+      }
     };
-  }, [clearError, agentId]);
+  }, [clearError, agentId, connectionTimer]);
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
@@ -84,6 +92,12 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         ? error.message 
         : String(error);
       
+      // Clear any connection timeout
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+        setConnectionTimer(null);
+      }
+      
       setConnectionError(errorMessage);
       toast({
         title: "Conversation Error",
@@ -95,8 +109,16 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     },
     onConnect: () => {
       console.log('Conversation connected successfully');
+      
+      // Clear any connection timeout
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+        setConnectionTimer(null);
+      }
+      
       setConnectionError(null);
       setDebugInfo(null);
+      setRetryCount(0);
       setConversationStarted(true);
       setIsStarting(false);
       toast({
@@ -106,6 +128,13 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     },
     onDisconnect: () => {
       console.log('Conversation disconnected');
+      
+      // Clear any connection timeout
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+        setConnectionTimer(null);
+      }
+      
       setConversationEnded(true);
       setIsMicEnabled(false);
       setIsStarting(false);
@@ -147,12 +176,35 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Retry logic for connection attempts
+  const retryConnection = async () => {
+    if (retryCount >= MAX_RETRY_ATTEMPTS) {
+      setConnectionError("Maximum connection attempts reached. Please try again later.");
+      setIsStarting(false);
+      toast({
+        title: "Connection Failed",
+        description: "Could not connect after multiple attempts. Please try again later.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    console.log(`Retrying connection attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`);
+    setRetryCount(prev => prev + 1);
+    await handleStartConversation();
+  };
+
   // Start the conversation
   const handleStartConversation = async () => {
     try {
       setIsStarting(true);
       setConnectionError(null);
       setDebugInfo(null);
+      
+      // Clear any existing connection timeout
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+      }
       
       // Request microphone permissions
       try {
@@ -184,30 +236,48 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error(errorMsg);
       }
       
-      console.log('Got signed URL, starting session...', signedUrl);
+      console.log('Got signed URL, starting session...', signedUrl.substring(0, 30) + '...');
       
-      // Start the conversation with ElevenLabs using the signed URL
-      try {
-        // Store debug info to help troubleshoot
-        setDebugInfo(`Using agent: ${agentId}, URL: ${signedUrl.substring(0, 30)}...`);
+      // Store debug info to help troubleshoot
+      setDebugInfo(`Using agent: ${agentId}, URL: ${signedUrl.substring(0, 30)}...`);
+      
+      // Set connection timeout
+      const timeoutId = setTimeout(() => {
+        console.error("Connection attempt timed out after", CONNECTION_TIMEOUT_MS, "ms");
+        setConnectionError(`Connection timed out after ${CONNECTION_TIMEOUT_MS/1000} seconds. Please try again.`);
+        setIsStarting(false);
         
-        // Use a timeout to allow React to update state before potentially demanding operation
-        setTimeout(async () => {
-          try {
-            await conversation.startSession({
-              agentId: agentId,
-              origin: signedUrl
-            });
-            
-            setIsMicEnabled(true);
-            setDebugInfo(null);
-          } catch (timeoutError) {
-            console.error("Session start timeout error:", timeoutError);
-            setConnectionError(`Timeout starting session: ${timeoutError instanceof Error ? timeoutError.message : 'Unknown error'}`);
-            setIsStarting(false);
-          }
-        }, 100);
+        // Auto-retry if we haven't exceeded retry attempts
+        if (retryCount < MAX_RETRY_ATTEMPTS) {
+          toast({
+            title: "Connection timed out",
+            description: `Automatically retrying (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})...`
+          });
+          retryConnection();
+        } else {
+          toast({
+            title: "Connection Failed",
+            description: "Maximum retry attempts reached. Please try again later.",
+            variant: "destructive"
+          });
+        }
+      }, CONNECTION_TIMEOUT_MS);
+      
+      setConnectionTimer(timeoutId);
+      
+      // Start the connection
+      try {
+        await conversation.startSession({
+          signedUrl: signedUrl
+        });
+        
+        setIsMicEnabled(true);
+        setDebugInfo(null);
       } catch (startError) {
+        // Clear the timeout since we already got an error
+        clearTimeout(timeoutId);
+        setConnectionTimer(null);
+        
         console.error("Failed to start session:", startError);
         throw new Error(`Failed to start session: ${startError instanceof Error ? startError.message : 'Unknown error'}`);
       }
@@ -248,6 +318,12 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   // End the conversation
   const handleEndConversation = async () => {
     try {
+      // Clear any connection timeout
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+        setConnectionTimer(null);
+      }
+      
       await conversation.endSession();
       setConversationEnded(true);
       setIsMicEnabled(false);
@@ -285,6 +361,14 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     setConversationEnded(false);
     setIsMicEnabled(false);
     setIsStarting(false);
+    setRetryCount(0);
+    
+    // Clear any connection timeout
+    if (connectionTimer) {
+      clearTimeout(connectionTimer);
+      setConnectionTimer(null);
+    }
+    
     clearError();
     
     // Wait a moment before allowing to try again
@@ -348,7 +432,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           <div className="flex items-center justify-center h-full text-center">
             <div>
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-              <p>Starting conversation...</p>
+              <p>Starting conversation{retryCount > 0 ? ` (Attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS + 1})` : ''}...</p>
               <p className="text-sm mt-2 text-muted-foreground">This may take a few moments</p>
             </div>
           </div>
@@ -490,4 +574,3 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
 };
 
 export default ConversationPanel;
-

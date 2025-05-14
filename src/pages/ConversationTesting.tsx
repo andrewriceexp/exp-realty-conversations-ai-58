@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from "@/contexts/AuthContext";
 import ConversationPanel from "@/components/conversations/ConversationPanel";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -28,9 +28,9 @@ const ConversationTesting = () => {
   const [isTestingActive, setIsTestingActive] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
-  const { isReady, error: authError, hasApiKey } = useElevenLabsAuth();
+  const { isReady, error: authError, hasApiKey, validateApiKey } = useElevenLabsAuth();
 
-  // Initialize with the known agent
+  // Initialize with known agents
   useEffect(() => {
     // Set default agent in the list
     setAgents([
@@ -41,7 +41,16 @@ const ConversationTesting = () => {
     ]);
   }, []);
 
-  const handleStartTest = () => {
+  // Validate API key when component mounts
+  useEffect(() => {
+    if (hasApiKey) {
+      validateApiKey().catch(err => {
+        console.error("API key validation failed:", err);
+      });
+    }
+  }, [hasApiKey, validateApiKey]);
+
+  const handleStartTest = async () => {
     if (!selectedAgentId) {
       toast({
         title: "Agent required",
@@ -67,6 +76,19 @@ const ConversationTesting = () => {
         variant: "destructive",
       });
       return;
+    }
+
+    // Try to validate the API key before starting
+    if (hasApiKey) {
+      const isValid = await validateApiKey().catch(() => false);
+      if (!isValid) {
+        toast({
+          title: "API Key Validation Failed",
+          description: "Your ElevenLabs API key appears to be invalid or has expired. Please update it in your profile settings.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     
     setIsTestingActive(true);
@@ -190,18 +212,38 @@ const ConversationTesting = () => {
                   />
                 </div>
 
-                <Button 
-                  onClick={handleStartTest}
-                  disabled={!isReady}
-                >
-                  Start Test Conversation
-                </Button>
+                <div className="space-y-4">
+                  <Button 
+                    onClick={handleStartTest}
+                    disabled={!isReady}
+                  >
+                    Start Test Conversation
+                  </Button>
 
-                {authError && !hasApiKey && (
-                  <p className="text-sm text-destructive mt-2">
-                    You need to configure your ElevenLabs API key before starting a conversation.
-                  </p>
-                )}
+                  {authError && !hasApiKey && (
+                    <p className="text-sm text-destructive mt-2">
+                      You need to configure your ElevenLabs API key before starting a conversation.
+                    </p>
+                  )}
+                  
+                  <Alert variant="info" className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm flex justify-between items-center">
+                      <span>
+                        Having connection issues? Visit the ElevenLabs docs for troubleshooting tips.
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2"
+                        onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai/troubleshooting', '_blank')}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" /> 
+                        Docs
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </div>
               </div>
             )}
           </CardContent>

@@ -144,6 +144,8 @@ serve(async (req) => {
         errorMessage = "Invalid ElevenLabs API key. Please update your API key in your profile settings.";
       } else if (elevenlabsResponse.status === 404) {
         errorMessage = `Agent with ID ${agentId} not found. Please verify the agent ID.`;
+      } else if (elevenlabsResponse.status === 429) {
+        errorMessage = "Rate limit exceeded. Please try again later.";
       } else if (errorData.detail) {
         errorMessage = `ElevenLabs API error: ${errorData.detail}`;
       }

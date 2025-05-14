@@ -97,9 +97,10 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
         }
       });
       
+      // Increase timeout from 15000ms to 30000ms to give more time for connection
       const result = await withTimeout(
         functionPromise, 
-        15000, 
+        30000, 
         'Request to elevenlabs-signed-url timed out'
       );
       

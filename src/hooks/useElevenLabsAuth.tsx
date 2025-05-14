@@ -60,6 +60,9 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
     }
     
     try {
+      console.log("Validating ElevenLabs API key...");
+      setIsLoading(true);
+      
       // Use our withTimeout utility to prevent hanging
       const validatePromise = fetch("https://api.elevenlabs.io/v1/user", {
         method: "GET",
@@ -69,14 +72,15 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         },
       });
       
-      // Set 8 second timeout which is reasonable for API validation
+      // Set 12 second timeout which is reasonable for API validation
       const response = await withTimeout(
         validatePromise,
-        8000,
+        12000,
         "ElevenLabs API key validation timed out"
       );
       
       if (!response.ok) {
+        console.error("ElevenLabs API key validation failed:", response.status, response.statusText);
         setError("Your ElevenLabs API key appears to be invalid");
         toast({
           title: "API Key Validation Failed",
@@ -86,6 +90,8 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
         return false;
       }
       
+      console.log("ElevenLabs API key validation successful");
+      setError(null);
       return true;
     } catch (err) {
       console.error("Error validating ElevenLabs API key:", err);
@@ -106,6 +112,8 @@ export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
       }
       
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
   
