@@ -35,7 +35,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     if (!profile?.elevenlabs_api_key) {
       toast({
         title: "ElevenLabs API Key Required",
-        description: "Please configure your ElevenLabs API key in the agent configuration",
+        description: "Please configure your ElevenLabs API key in your profile",
         variant: "destructive"
       });
       return null;
@@ -73,7 +73,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
           agentId: agentIdToUse 
         },
         headers: {
-          Authorization: `Bearer ${session.access_token}`, // Use session access token directly
+          Authorization: `Bearer ${session.access_token}`,
         }
       });
 

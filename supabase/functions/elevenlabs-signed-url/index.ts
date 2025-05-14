@@ -1,157 +1,115 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.21.0'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.1';
+
+const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Extract the auth token from the request header
-    const authHeader = req.headers.get('Authorization')
+    // Extract the auth token from the request
+    const authHeader = req.headers.get('Authorization');
+    console.log("Auth header present:", !!authHeader);
     
     if (!authHeader) {
-      console.error('Unauthorized: No Authorization header provided')
-      return new Response(
-        JSON.stringify({ 
-          error: 'Unauthorized: No Authorization header provided' 
-        }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+      throw new Error('No authorization header');
     }
-    
-    console.log('Auth header present:', authHeader.startsWith('Bearer'))
-    
-    // Create authenticated Supabase client using the request headers
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
+
+    // Create a Supabase client with the user's JWT to verify their identity
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: authHeader,
         },
-      }
-    )
+      },
+    });
 
-    // Get the authenticated user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser()
-
+    // Verify the user's JWT by getting the user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
     if (userError || !user) {
-      console.error('Unauthorized: Invalid user token', userError)
-      return new Response(
-        JSON.stringify({ 
-          error: 'Unauthorized: Invalid user token', 
-          details: userError ?? 'No user found' 
-        }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+      console.error("User authentication error:", userError);
+      throw new Error('Unauthorized: Invalid user token');
     }
-
-    console.log('Authentication successful for user:', user.id)
-    console.log('elevenlabs-signed-url function called')
     
-    // Parse the request body
-    const requestData = await req.json()
-    const { agentId } = requestData || {}
-    
-    if (!agentId) {
-      return new Response(
-        JSON.stringify({ error: 'Agent ID is required' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
+    console.log("User authenticated:", user.id);
 
-    // Get user's ElevenLabs API key from profile
-    const { data: profile, error: profileError } = await supabaseClient
+    // Now verify if the user has an ElevenLabs API key configured
+    // Create a new client with service role to bypass RLS
+    const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: profile, error: profileError } = await adminSupabase
       .from('profiles')
       .select('elevenlabs_api_key')
       .eq('id', user.id)
-      .single()
-
-    if (profileError || !profile?.elevenlabs_api_key) {
-      console.error('ElevenLabs API key not found for user', profileError)
-      return new Response(
-        JSON.stringify({ 
-          error: 'ElevenLabs API key not configured', 
-          details: profileError ?? 'No API key found in user profile' 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
-    }
-
-    console.log('Found ElevenLabs API key for user')
+      .single();
     
-    // Make request to ElevenLabs API to get a signed URL
-    const elevenlabsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
-      {
-        method: 'GET',
-        headers: {
-          'xi-api-key': profile.elevenlabs_api_key,
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-
-    if (!elevenlabsResponse.ok) {
-      const errorText = await elevenlabsResponse.text()
-      console.error('ElevenLabs API error:', errorText)
-      return new Response(
-        JSON.stringify({ 
-          error: 'Error from ElevenLabs API', 
-          status: elevenlabsResponse.status, 
-          details: errorText 
-        }),
-        { 
-          status: elevenlabsResponse.status, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+    if (profileError || !profile) {
+      console.error("Profile fetch error:", profileError);
+      throw new Error('Failed to retrieve user profile');
     }
 
-    const elevenlabsData = await elevenlabsResponse.json()
-    console.log('Successfully obtained signed URL from ElevenLabs')
+    if (!profile.elevenlabs_api_key) {
+      throw new Error('ElevenLabs API key not configured for this user');
+    }
 
-    return new Response(
-      JSON.stringify({ signed_url: elevenlabsData.signed_url }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+    // Extract the agent ID from the request body
+    const { agentId } = await req.json();
+    
+    if (!agentId) {
+      throw new Error('Agent ID is required');
+    }
 
+    // Use either the user's ElevenLabs API key or the server's default key
+    const apiKey = profile.elevenlabs_api_key || ELEVENLABS_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('No ElevenLabs API key available');
+    }
+
+    // Make request to ElevenLabs API to get signed URL for conversation
+    const response = await fetch(`https://api.elevenlabs.io/v1/conversations/${agentId}/start`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('ElevenLabs API error:', errorData);
+      throw new Error(`ElevenLabs API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Successfully obtained conversation URL from ElevenLabs');
+    
+    return new Response(JSON.stringify({ signed_url: data.url }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (error) {
-    console.error('Error in elevenlabs-signed-url function:', error)
+    console.error('Error in elevenlabs-signed-url function:', error);
     return new Response(
-      JSON.stringify({ 
-        error: 'Internal Server Error', 
-        details: error.message || String(error) 
-      }),
+      JSON.stringify({ error: error.message || 'Unknown error occurred' }),
       { 
         status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        } 
       }
-    )
+    );
   }
-})
+});
