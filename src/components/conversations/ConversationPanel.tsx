@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
 import { Loader2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface ConversationPanelProps {
@@ -38,13 +39,16 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const [isMicEnabled, setIsMicEnabled] = useState(false);
   const [conversationStarted, setConversationStarted] = useState(false);
   const [conversationEnded, setConversationEnded] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
     // Force TypeScript to accept our callback by using type assertion
     onMessage: ((message: any) => {
+      console.log('Received message from conversation:', message);
       // Handle the message based on its type
       if (message.type === 'assistant_response') {
         setMessages(prev => [...prev, {
@@ -61,13 +65,21 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       }
     }) as any,
     onError: (error: any) => {
+      console.error('Conversation error:', error);
+      let errorMessage = typeof error === 'object' && error !== null && 'message' in error 
+        ? error.message 
+        : String(error);
+      
+      setConnectionError(errorMessage);
       toast({
         title: "Conversation Error",
-        description: typeof error === 'object' && error !== null && 'message' in error ? error.message : String(error),
+        description: errorMessage,
         variant: "destructive"
       });
     },
     onConnect: () => {
+      console.log('Conversation connected successfully');
+      setConnectionError(null);
       setConversationStarted(true);
       toast({
         title: "Conversation Connected",
@@ -75,6 +87,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       });
     },
     onDisconnect: () => {
+      console.log('Conversation disconnected');
       setConversationEnded(true);
       setIsMicEnabled(false);
     },
@@ -121,19 +134,34 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       // Request microphone permissions
       await navigator.mediaDevices.getUserMedia({ audio: true });
       
+      if (!user) {
+        throw new Error("You must be logged in to start a conversation");
+      }
+
+      console.log('Starting conversation with agent ID:', agentId);
+      
+      // Reset any previous errors
+      setConnectionError(null);
+      
       // Get the signed URL from our backend
+      console.log('Getting signed URL...');
       const signedUrl = await getSignedUrl(agentId);
+      
       if (!signedUrl) {
-        throw new Error("Failed to get conversation URL");
+        throw new Error("Failed to get conversation URL from ElevenLabs");
       }
       
-      // Start the conversation with ElevenLabs
+      console.log('Got signed URL, starting session...');
+      
+      // Start the conversation with ElevenLabs using the signed URL
       await conversation.startSession({
-        agentId: agentId,  // Use agentId directly, not url
+        url: signedUrl,
       });
+      
       setIsMicEnabled(true);
     } catch (error) {
       console.error("Error starting conversation:", error);
+      setConnectionError(error instanceof Error ? error.message : "An unknown error occurred");
       toast({
         title: "Failed to start conversation",
         description: error instanceof Error ? error.message : "Please check microphone permissions and try again",
@@ -212,6 +240,14 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
               <p>Click the button below to start a conversation with the AI assistant</p>
               <p className="text-sm mt-2">Make sure your microphone is connected and permissions are granted</p>
             </div>
+          </div>
+        )}
+        
+        {connectionError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+            <p className="font-medium">Connection Error</p>
+            <p className="text-sm">{connectionError}</p>
+            <p className="text-xs mt-1">Please ensure ElevenLabs API key is configured correctly in the Supabase environment.</p>
           </div>
         )}
         

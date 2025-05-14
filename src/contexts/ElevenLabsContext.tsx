@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 interface ElevenLabsContextType {
   getSignedUrl: (agentId: string) => Promise<string | null>;
@@ -32,23 +32,30 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
+      console.log("Calling elevenlabs-signed-url function with agentId:", agentId);
       // Call the Supabase Edge Function that will generate a signed URL
-      // Using the organization's ElevenLabs API key stored in environment variables
-      const { data, error } = await supabase.functions.invoke('elevenlabs-signed-url', {
+      const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
         body: { 
           agentId 
         }
       });
 
-      if (error) {
-        console.error('ElevenLabs API error:', error);
-        throw error;
+      if (funcError) {
+        console.error('ElevenLabs API error from function:', funcError);
+        throw new Error(`Function error: ${funcError.message || 'Unknown error'}`);
       }
 
-      if (!data?.signed_url) {
+      if (!data) {
+        throw new Error('No data returned from elevenlabs-signed-url function');
+      }
+
+      console.log('elevenlabs-signed-url function response:', data);
+
+      if (!data.signed_url) {
         throw new Error('Failed to get signed URL for ElevenLabs conversation');
       }
 
+      console.log('Successfully obtained ElevenLabs signed URL');
       return data.signed_url;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get signed URL';
