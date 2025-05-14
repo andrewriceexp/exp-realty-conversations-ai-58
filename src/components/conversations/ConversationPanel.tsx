@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +20,14 @@ interface Message {
   timestamp: Date;
 }
 
+// Type for ElevenLabs message object
+interface ElevenLabsMessage {
+  type: string;
+  content: string;
+  source?: any;
+  message?: string;
+}
+
 const ConversationPanel: React.FC<ConversationPanelProps> = ({
   agentId,
   prospectName = 'Prospect',
@@ -37,7 +44,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
-    onMessage: (message) => {
+    onMessage: (message: ElevenLabsMessage) => {
       if (message.type === 'assistant_response') {
         setMessages(prev => [...prev, {
           role: 'assistant',
@@ -120,7 +127,9 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       }
       
       // Start the conversation with ElevenLabs
-      await conversation.startSession({ url: signedUrl });
+      await conversation.startSession({ 
+        agentId,  // Use agentId instead of url
+      });
       setIsMicEnabled(true);
     } catch (error) {
       console.error("Error starting conversation:", error);

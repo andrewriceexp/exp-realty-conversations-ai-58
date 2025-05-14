@@ -1,3 +1,4 @@
+
 import {
   LayoutDashboard,
   ListChecks,
@@ -14,11 +15,7 @@ interface SidebarProps {
   isSuperAdmin?: boolean;
 }
 
-interface DocsConfig {
-  mainNav: MainNavItem[]
-}
-
-export function Sidebar({ isSuperAdmin }: SidebarProps): DocsConfig {
+export function Sidebar({ isSuperAdmin }: SidebarProps) {
   let mainNav: MainNavItem[] = [
     {
       title: "Dashboard",
@@ -68,7 +65,27 @@ export function Sidebar({ isSuperAdmin }: SidebarProps): DocsConfig {
     ]
   }
 
-  return {
-    mainNav,
-  }
+  return (
+    <aside className="fixed left-0 z-30 h-screen w-64 border-r bg-background">
+      <div className="flex h-full flex-col px-3 py-4">
+        <div className="mb-10 flex items-center px-2">
+          <img src="/logo.png" alt="eXp Realty" className="h-10" />
+          <span className="ml-2 text-lg font-semibold">Voice AI</span>
+        </div>
+        
+        <nav className="flex-1 space-y-1">
+          {mainNav.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex items-center rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              {item.icon && <span className="mr-2">{item.icon}</span>}
+              {item.title}
+            </a>
+          ))}
+        </nav>
+      </div>
+    </aside>
+  );
 }

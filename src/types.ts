@@ -1,4 +1,3 @@
-
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -9,8 +8,16 @@ export interface Profile {
   twilio_auth_token: string | null;
   twilio_phone_number: string | null;
   a2p_10dlc_registered: boolean;
+  elevenlabs_api_key: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// Add MainNavItem type that was missing
+export interface MainNavItem {
+  title: string;
+  href: string;
+  icon?: React.ReactNode;
 }
 
 // Agent Configuration type from Supabase agent_configs table

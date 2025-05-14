@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
 import MainLayout from '@/components/MainLayout';
 import { ProfileCredentialTester } from '@/components/ProfileCredentialTester';
 import { Spinner } from '@/components/ui/spinner';
@@ -39,6 +40,7 @@ const ProfileSetup = () => {
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string>('');
   
   useEffect(() => {
     if (profile) {
@@ -46,6 +48,11 @@ const ProfileSetup = () => {
       // from the API for security reasons. Instead check if it exists in the database.
       setHasAuthToken(!!profile.twilio_auth_token);
       console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
+      
+      // Set API key if it exists in profile
+      if (profile.elevenlabs_api_key) {
+        setApiKey(profile.elevenlabs_api_key);
+      }
     }
   }, [profile]);
 
@@ -129,6 +136,10 @@ const ProfileSetup = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleElevenLabsApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setApiKey(e.target.value);
   };
 
   return (
@@ -314,17 +325,27 @@ const ProfileSetup = () => {
                     <h2 className="text-lg font-semibold mb-4">ElevenLabs Integration</h2>
                     <div className="grid gap-4">
                       <div className="grid gap-2">
-                        <Label htmlFor="elevenlabs_api_key">ElevenLabs API Key</Label>
-                        <Input
-                          id="elevenlabs_api_key"
-                          type="password"
-                          value={profile?.elevenlabs_api_key || ''}
-                          onChange={(e) => setProfile({ ...profile, elevenlabs_api_key: e.target.value })}
-                          placeholder="Enter your ElevenLabs API key"
+                        <FormField
+                          control={form.control}
+                          name="elevenlabs_api_key"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>ElevenLabs API Key</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="password"
+                                  placeholder="Enter your ElevenLabs API key"
+                                  {...field}
+                                  disabled={isLoading}
+                                />
+                              </FormControl>
+                              <FormDescription className="text-xs">
+                                Required for ElevenLabs conversational AI features. Get your key from <a href="https://elevenlabs.io/app/api-key" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ElevenLabs</a>
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                        <p className="text-sm text-muted-foreground">
-                          Required for ElevenLabs conversational AI features. Get your key from <a href="https://elevenlabs.io/app/api-key" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">ElevenLabs</a>
-                        </p>
                       </div>
                     </div>
                   </div>
