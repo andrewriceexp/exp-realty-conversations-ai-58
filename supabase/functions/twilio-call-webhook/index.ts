@@ -102,8 +102,15 @@ serve(async (req) => {
       } catch (profileFetchError) {
         console.error(`Exception fetching profile for user ${userId}:`, profileFetchError);
       }
-    } else {
-      console.warn("No userId in webhook URL for validation");
+    } else if (!isStatusCallback) {
+      // Only warn about missing userId for non-status callbacks
+      console.warn("No userId in webhook URL for validation - this is required for initial calls");
+    }
+    
+    // Process status callback if that's what this is
+    if (isStatusCallback) {
+      console.log('Processing status callback request');
+      return handleStatusCallback(req, supabaseAdmin);
     }
     
     // Validate Twilio request (skip validation for OPTIONS and status updates if needed)
@@ -121,12 +128,6 @@ serve(async (req) => {
       } else {
         console.log('Twilio request validated successfully');
       }
-    }
-    
-    // Process status callback if that's what this is
-    if (isStatusCallback) {
-      console.log('Processing status callback request');
-      return handleStatusCallback(req, supabaseAdmin);
     }
     
     console.log('Processing standard webhook request for initial call TwiML');
@@ -182,18 +183,21 @@ serve(async (req) => {
       // Add a pause to make it more natural
       response.pause({ length: 1 });
       
-      // IMPORTANT: Use the createGatherWithSay helper to create a properly structured Gather with Say element
-      createGatherWithSay(
-        response,
-        processResponseUrl,
-        "How can I assist you with your real estate needs today?",
-        {
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          method: 'POST'
-        }
-      );
+      // Create a Gather with Say element
+      const gather = response.gather({
+        input: 'speech dtmf',
+        action: processResponseUrl,
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US',
+        method: 'POST'
+      });
+      
+      // Add the Say element inside Gather
+      gather.say("How can I assist you with your real estate needs today?");
+      
+      // End the Gather element
+      gather.endGather();
       
       // If gather times out, redirect to the process-response endpoint anyway
       // This must be outside the Gather element
@@ -306,19 +310,22 @@ serve(async (req) => {
     // Create XML-encoded URL for the next step
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
-    // IMPORTANT: Use the helper function to create a properly structured Gather with Say element
-    createGatherWithSay(
-      response,
-      processResponseUrl,
-      "How can I assist you with your real estate needs today?",
-      {
-        timeout: 10,
-        speechTimeout: 'auto',
-        language: 'en-US',
-        voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
-        method: 'POST'
-      }
-    );
+    // Create a Gather with Say element
+    const gather = response.gather({
+      input: 'speech dtmf',
+      action: processResponseUrl,
+      timeout: 10,
+      speechTimeout: 'auto',
+      language: 'en-US',
+      voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
+      method: 'POST'
+    });
+    
+    // Add the Say element inside Gather
+    gather.say("How can I assist you with your real estate needs today?");
+    
+    // End the Gather element
+    gather.endGather();
     
     // If gather times out, redirect to the process-response endpoint anyway
     // This must be outside the Gather element

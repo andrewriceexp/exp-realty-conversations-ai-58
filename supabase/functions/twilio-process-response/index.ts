@@ -375,18 +375,21 @@ serve(async (req) => {
       // Create XML-encoded URL
       const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
-      // IMPORTANT: Use the helper function to create a properly structured Gather with Say element
-      createGatherWithSay(
-        response,
-        nextActionUrl,
-        "Please go ahead with your response.",
-        {
-          timeout: 10,
-          speechTimeout: 'auto',
-          language: 'en-US',
-          method: 'POST'
-        }
-      );
+      // Create a Gather with Say element
+      const gather = response.gather({
+        input: 'speech dtmf',
+        action: nextActionUrl,
+        timeout: 10,
+        speechTimeout: 'auto',
+        language: 'en-US',
+        method: 'POST'
+      });
+      
+      // Add the Say element inside Gather
+      gather.say("Please go ahead with your response.");
+      
+      // End the Gather element
+      gather.endGather();
       
       console.log(`Set next action URL to continue conversation: ${nextActionUrl}`);
       

@@ -201,8 +201,11 @@ export const twiml = {
         content += '>';
         return {
           say: function(text, sayOptions = {}) {
-            const voice = sayOptions.voice || 'alice';
-            content += `<Say voice="${voice}">${text}</Say>`;
+            if (typeof sayOptions === 'object' && sayOptions.voice) {
+              content += `<Say voice="${sayOptions.voice}">${text}</Say>`;
+            } else {
+              content += `<Say>${text}</Say>`;
+            }
             return this;
           },
           play: function(url) {

@@ -44,8 +44,11 @@ export function createGatherWithSay(
     gather.say(textToSay);
   }
   
-  // Return the gather element in case it's needed
-  return gather;
+  // Explicitly end the Gather element
+  gather.endGather();
+  
+  // Return the response object for chaining
+  return response;
 }
 
 /**
