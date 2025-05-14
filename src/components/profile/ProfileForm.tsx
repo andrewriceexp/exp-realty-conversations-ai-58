@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -103,12 +104,19 @@ const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) =
       
       // Set success state
       setUpdateSuccess(true);
-      toast("Profile Updated: Your profile and credentials have been saved successfully.");
+      toast({
+        title: "Profile Updated",
+        description: "Your profile and credentials have been saved successfully."
+      });
     } catch (error: any) {
       console.error('Profile update error:', error);
       setErrorMessage(error.message || 'Failed to update profile');
       setUpdateSuccess(false);
-      toast("Update Failed: " + (error.message || 'Failed to update profile'));
+      toast({
+        title: "Update Failed",
+        description: error.message || 'Failed to update profile',
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
