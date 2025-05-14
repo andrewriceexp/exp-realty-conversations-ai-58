@@ -53,7 +53,7 @@ export function useTwilioCall() {
         
         // Add a more robust timeout to the Supabase function call
         const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-          setTimeout(() => reject(new Error("ElevenLabs call request timed out")), 15000)
+          setTimeout(() => reject(new Error("ElevenLabs call request timed out")), 25000) // Increased timeout
         );
         
         // Get prospect info to get the phone number
@@ -106,14 +106,17 @@ export function useTwilioCall() {
         // Use the regular Twilio edge function for non-ElevenLabs calls
         // Add a more robust timeout to the Supabase function call
         const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-          setTimeout(() => reject(new Error("Twilio call request timed out")), 15000)
+          setTimeout(() => reject(new Error("Twilio call request timed out")), 25000) // Increased timeout
         );
         
         // Make the actual API call
         const fetchPromise = supabase.functions.invoke('twilio-make-call', {
           body: options
         }).then(({data, error}) => {
-          if (error) throw error;
+          if (error) {
+            console.error("Edge function error:", error);
+            throw new Error(error.message || "Edge function returned an error");
+          }
           return data;
         });
         
@@ -197,10 +200,10 @@ export function useTwilioCall() {
       
       // Add a timeout to the status check
       const timeoutPromise = new Promise<TwilioCallResponse>((_, reject) => 
-        setTimeout(() => reject(new Error("Status check timed out")), 10000)
+        setTimeout(() => reject(new Error("Status check timed out")), 15000) // Keep reasonable timeout
       );
       
-      // Make the actual API call
+      // Make the actual API call - pass userId if available
       const fetchPromise = supabase.functions.invoke('twilio-call-status', {
         body: {
           callSid,
@@ -208,7 +211,7 @@ export function useTwilioCall() {
         }
       }).then(({data, error}) => {
         if (error) {
-          console.log("Error from status check edge function:", error);
+          console.error("Error from status check edge function:", error);
           throw error;
         }
         return data;
@@ -229,7 +232,7 @@ export function useTwilioCall() {
       console.log('Call status data:', data);
       
       return {
-        success: true,
+        success: data.success || false,
         message: `Call status: ${data?.call_status || 'unknown'}`,
         data: data
       };

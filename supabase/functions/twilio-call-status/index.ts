@@ -63,11 +63,12 @@ serve(async (req) => {
       }
     } else {
       console.warn("No userId provided - will try to find profile from call_logs");
-      // Try to find the profile from call_logs table using callSid
+      // Try to find the user ID from call_logs table using callSid
+      // Fixed the column name from call_sid to twilio_call_sid
       const { data: callLog, error: callLogError } = await supabase
         .from('call_logs')
         .select('user_id')
-        .eq('call_sid', callSid)
+        .eq('twilio_call_sid', callSid)
         .maybeSingle();
         
       if (callLogError || !callLog || !callLog.user_id) {
@@ -115,18 +116,19 @@ serve(async (req) => {
       
       // Update call log if needed
       try {
+        // Fixed column name from call_sid to twilio_call_sid
         const { data: callLog, error: callLogError } = await supabase
           .from('call_logs')
-          .select('id, status')
-          .eq('call_sid', callSid)
+          .select('id, call_status')
+          .eq('twilio_call_sid', callSid)
           .maybeSingle();
           
-        if (!callLogError && callLog && callLog.status !== call.status) {
-          console.log(`Updating call log ${callLog.id} status from ${callLog.status} to ${call.status}`);
+        if (!callLogError && callLog && callLog.call_status !== call.status) {
+          console.log(`Updating call log ${callLog.id} status from ${callLog.call_status} to ${call.status}`);
           await supabase
             .from('call_logs')
-            .update({ status: call.status })
-            .eq('call_sid', callSid);
+            .update({ call_status: call.status })
+            .eq('twilio_call_sid', callSid);
         }
       } catch (updateError) {
         console.error("Error updating call log status:", updateError);

@@ -92,22 +92,30 @@ serve(async (req) => {
     const data = await response.json();
     console.log("ElevenLabs API response:", data);
     
-    // Store the call in our call logs
-    const { data: callLog, error: callLogError } = await supabase
-      .from('call_logs')
-      .insert({
-        user_id: user_id,
-        prospect_id: null, // This could be added if we have a prospect ID
-        agent_config_id: null, // This is different from the ElevenLabs agent ID
-        twilio_call_sid: data.callSid || "unknown",
-        call_status: "initiated",
-        started_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
-      
-    if (callLogError) {
-      console.error("Error creating call log:", callLogError);
+    // Store the call in our call logs - check if fields exist first
+    let callLogId = null;
+    try {
+      const { data: callLog, error: callLogError } = await supabase
+        .from('call_logs')
+        .insert({
+          user_id: user_id,
+          prospect_id: null, // This could be added if we have a prospect ID
+          agent_config_id: null, // This is different from the ElevenLabs agent ID
+          twilio_call_sid: data.callSid || "unknown",
+          call_status: "initiated",
+          started_at: new Date().toISOString()
+        })
+        .select('id')
+        .maybeSingle();
+        
+      if (callLogError) {
+        console.error("Error creating call log:", callLogError);
+      } else if (callLog) {
+        callLogId = callLog.id;
+      }
+    } catch (error) {
+      console.error("Error creating call log:", error);
+      // Non-critical error, continue execution
     }
     
     return new Response(
@@ -115,7 +123,7 @@ serve(async (req) => {
         success: true,
         message: "Outbound call initiated",
         callSid: data.callSid,
-        callLogId: callLog?.id
+        callLogId: callLogId
       }),
       {
         status: 200,
