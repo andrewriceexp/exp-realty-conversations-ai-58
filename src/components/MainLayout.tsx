@@ -1,6 +1,5 @@
 
 import { Sidebar } from '@/components/Sidebar';
-import { Outlet } from 'react-router-dom';
 
 interface MainLayoutProps {
   children: React.ReactNode;

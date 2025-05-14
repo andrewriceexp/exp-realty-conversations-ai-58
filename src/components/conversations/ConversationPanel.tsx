@@ -20,12 +20,11 @@ interface Message {
   timestamp: Date;
 }
 
-// Type for ElevenLabs message object
+// Updated type definition for ElevenLabs message object to match their API
 interface ElevenLabsMessage {
   type: string;
   content: string;
   source?: any;
-  message?: string;
 }
 
 const ConversationPanel: React.FC<ConversationPanelProps> = ({
@@ -62,7 +61,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     onError: (error) => {
       toast({
         title: "Conversation Error",
-        description: error.message,
+        description: error.message || "An error occurred during the conversation",
         variant: "destructive"
       });
     },
@@ -127,8 +126,8 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       }
       
       // Start the conversation with ElevenLabs
-      await conversation.startSession({ 
-        agentId,  // Use agentId instead of url
+      await conversation.startSession({
+        agentId: agentId,  // Use agentId directly, not url
       });
       setIsMicEnabled(true);
     } catch (error) {

@@ -40,7 +40,6 @@ const ProfileSetup = () => {
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState<string>('');
   
   useEffect(() => {
     if (profile) {
@@ -49,10 +48,7 @@ const ProfileSetup = () => {
       setHasAuthToken(!!profile.twilio_auth_token);
       console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
       
-      // Set API key if it exists in profile
-      if (profile.elevenlabs_api_key) {
-        setApiKey(profile.elevenlabs_api_key);
-      }
+      // Form will be reset with all profile data in the useEffect below
     }
   }, [profile]);
 
@@ -103,7 +99,8 @@ const ProfileSetup = () => {
       
       console.log('Submitting profile update with data:', { 
         ...updateData, 
-        twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined 
+        twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined,
+        elevenlabs_api_key: updateData.elevenlabs_api_key ? '****' : undefined
       });
       
       await updateProfile(updateData);
@@ -121,7 +118,7 @@ const ProfileSetup = () => {
       setUpdateSuccess(true);
       toast({
         title: "Profile Updated",
-        description: "Your profile and Twilio credentials have been saved successfully.",
+        description: "Your profile and credentials have been saved successfully.",
         variant: "default",
       });
     } catch (error: any) {
@@ -138,10 +135,6 @@ const ProfileSetup = () => {
     }
   };
 
-  const handleElevenLabsApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setApiKey(e.target.value);
-  };
-
   return (
     <MainLayout>
       <div className="max-w-3xl mx-auto">
@@ -150,7 +143,7 @@ const ProfileSetup = () => {
         {updateSuccess && (
           <Alert className="mb-6 bg-green-50 border-green-200 text-green-800">
             <AlertDescription>
-              Profile successfully updated! Your Twilio credentials have been saved.
+              Profile successfully updated! Your credentials have been saved.
             </AlertDescription>
           </Alert>
         )}

@@ -209,10 +209,41 @@ export type Database = {
           },
         ]
       }
+      elevenlabs_agents: {
+        Row: {
+          agent_id: string
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           a2p_10dlc_registered: boolean
           created_at: string
+          elevenlabs_api_key: string | null
           email: string
           exp_realty_id: string | null
           full_name: string | null
@@ -225,6 +256,7 @@ export type Database = {
         Insert: {
           a2p_10dlc_registered?: boolean
           created_at?: string
+          elevenlabs_api_key?: string | null
           email: string
           exp_realty_id?: string | null
           full_name?: string | null
@@ -237,6 +269,7 @@ export type Database = {
         Update: {
           a2p_10dlc_registered?: boolean
           created_at?: string
+          elevenlabs_api_key?: string | null
           email?: string
           exp_realty_id?: string | null
           full_name?: string | null

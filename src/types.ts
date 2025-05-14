@@ -1,3 +1,4 @@
+
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
