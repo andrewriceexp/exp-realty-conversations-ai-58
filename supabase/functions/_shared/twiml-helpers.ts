@@ -45,16 +45,13 @@ export function createGatherWithSay(
   
   // Extract voice from options before creating Gather
   const voice = options.voice;
-  
-  // Create a clean options object without the voice attribute for Gather
-  const gatherOptions = { ...options };
-  delete gatherOptions.voice; // Remove voice from Gather options
+  delete options.voice; // Remove voice from Gather options
   
   // Create Gather with the clean options (no voice attribute)
   const gather = response.gather({
     input: 'speech dtmf',
     action: xmlEncodedAction,
-    ...gatherOptions
+    ...options
   });
   
   // Add the Say element inside Gather with voice if provided
@@ -63,9 +60,6 @@ export function createGatherWithSay(
   } else {
     gather.say(textToSay);
   }
-  
-  // Explicitly end the Gather element
-  gather.endGather();
   
   // Return the response object for chaining
   return response;

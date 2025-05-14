@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voiceId, model } = await req.json();
+    const { text, voiceId, model, settings } = await req.json();
 
     if (!text) {
       throw new Error('Text is required');
@@ -28,13 +28,21 @@ serve(async (req) => {
 
     const defaultVoiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah voice
     const defaultModel = 'eleven_multilingual_v2';
+    const finalVoiceId = voiceId || defaultVoiceId;
+    const finalModel = model || defaultModel;
 
     console.log(`Generating speech for text (truncated): "${text.substring(0, 50)}..."`);
-    console.log(`Using voice ID: ${voiceId || defaultVoiceId}`);
-    console.log(`Using model: ${model || defaultModel}`);
+    console.log(`Using voice ID: ${finalVoiceId}`);
+    console.log(`Using model: ${finalModel}`);
+
+    // Default voice settings if not provided
+    const voiceSettings = settings || {
+      stability: 0.5,
+      similarity_boost: 0.75,
+    };
 
     const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId || defaultVoiceId}`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}`,
       {
         method: 'POST',
         headers: {
@@ -44,11 +52,8 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           text,
-          model_id: model || defaultModel,
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          },
+          model_id: finalModel,
+          voice_settings: voiceSettings
         }),
       }
     );

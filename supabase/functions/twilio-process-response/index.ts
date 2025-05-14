@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, twiml, validateTwilioRequest } from "../_shared/twilio-helper.ts";
@@ -316,14 +317,14 @@ serve(async (req) => {
         
         console.log('ElevenLabs speech generated successfully');
         
-        // Use Twilio's Say with the text as we can't directly play ElevenLabs audio
-        // but use a high-quality voice to simulate
+        // Instead of trying to play the audio directly (which Twilio doesn't support), 
+        // we'll use Twilio's <Say> with the generated text
         if (debugMode) {
           response.say("Using ElevenLabs voice synthesis.");
           response.pause({ length: 1 });
         }
         
-        // Use Polly neural voice for higher quality speech
+        // Use Polly neural voice for better quality
         response.say({
           voice: 'Polly.Amy-Neural'
         }, aiResponse);
@@ -374,7 +375,7 @@ serve(async (req) => {
       // Create XML-encoded URL
       const nextActionUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
       
-      // Create a Gather with Say element
+      // Create a Gather with Say element - ensuring voice attribute is on the Say not the Gather
       createGatherWithSay(response, nextActionUrl, "Please go ahead with your response.", {
         timeout: 10,
         speechTimeout: "auto",
