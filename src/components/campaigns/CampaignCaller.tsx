@@ -1,7 +1,6 @@
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Phone, Loader2, Bug, Headphones } from 'lucide-react';
+import { Phone, Loader2, Bug, Headphones, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
@@ -18,6 +17,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface CampaignCallerProps {
   campaignId: string;
@@ -330,7 +330,7 @@ const CampaignCaller = ({ campaignId, prospectListId, agentConfigId }: CampaignC
       
       {/* Display current call status if available */}
       {callStatus && (
-        <Alert variant={callStatus.toLowerCase() === 'completed' ? 'success' : 'default'} className="mb-4">
+        <Alert variant={callStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">
           <AlertCircle className="h-4 w-4 mr-2" />
           <div>
             <AlertTitle>Call Status: {callStatus}</AlertTitle>

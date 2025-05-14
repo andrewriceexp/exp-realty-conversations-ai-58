@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Link } from 'react-router-dom';
 import { Switch } from '@/components/ui/switch';
+import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface VoiceOption {
   id: string;
@@ -363,7 +364,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
             )}
             
             {callStatus && (
-              <Alert variant={callStatus.toLowerCase() === 'completed' ? 'success' : 'default'} className="mb-4">
+              <Alert variant={callStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   Call status: {callStatus}
