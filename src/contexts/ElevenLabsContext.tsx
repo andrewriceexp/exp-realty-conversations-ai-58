@@ -41,6 +41,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
+        console.error('ElevenLabs API error:', error);
         throw error;
       }
 
@@ -52,6 +53,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get signed URL';
       setError(errorMessage);
+      console.error('ElevenLabs getSignedUrl error:', err);
       toast({
         title: "Error connecting to ElevenLabs",
         description: errorMessage,

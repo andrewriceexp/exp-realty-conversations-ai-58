@@ -51,30 +51,24 @@ serve(async (req) => {
       );
     }
 
-    // Fetch the ElevenLabs API key from the user's profile
-    const { data: profile, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('elevenlabs_api_key')
-      .eq('id', user.id)
-      .single();
-      
-    if (profileError || !profile?.elevenlabs_api_key) {
+    // Get the organization's ElevenLabs API key from environment variables
+    const elevenlabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    if (!elevenlabsApiKey) {
       return new Response(
         JSON.stringify({ 
-          error: 'ElevenLabs API key not found. Please add your API key in the profile settings.' 
+          error: 'ElevenLabs API key not configured on the server.' 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Use the ElevenLabs API to get a signed URL
-    const apiKey = profile.elevenlabs_api_key;
     const response = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
       {
         method: 'GET',
         headers: {
-          'xi-api-key': apiKey,
+          'xi-api-key': elevenlabsApiKey,
           'Content-Type': 'application/json',
         },
       }

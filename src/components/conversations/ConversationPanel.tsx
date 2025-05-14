@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
 import { Loader2, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 
 interface ConversationPanelProps {
