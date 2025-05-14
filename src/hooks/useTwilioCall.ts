@@ -227,6 +227,7 @@ export function useTwilioCall() {
   
   /**
    * Sets up an interval to check call status periodically
+   * Enhanced to be more robust and handle call statuses better
    */
   const setupStatusChecking = useCallback((callSid: string, userId?: string) => {
     // Clear any existing interval
@@ -234,13 +235,25 @@ export function useTwilioCall() {
       clearInterval(statusCheckInterval);
     }
     
+    // Initial check right away
+    setTimeout(() => {
+      verifyCallStatus(callSid, userId).catch(err => 
+        console.error("Initial status check failed:", err)
+      );
+    }, 1000);
+    
     // Set up a new interval to check status every 5 seconds
     const intervalId = window.setInterval(async () => {
       try {
+        console.log(`Checking status for call ${callSid}`);
         const statusResult = await verifyCallStatus(callSid, userId);
+        
+        // Check for terminal states or errors
         if (!statusResult.success || 
             !statusResult.data?.call_status || 
             ['completed', 'failed', 'canceled', 'busy', 'no-answer'].includes(statusResult.data.call_status.toLowerCase())) {
+          console.log(`Call reached terminal state: ${statusResult.data?.call_status || 'unknown'}`);
+          
           // Call has ended or failed, clear the interval
           clearInterval(intervalId);
           setStatusCheckInterval(null);
@@ -268,6 +281,8 @@ export function useTwilioCall() {
               });
             }
           }
+        } else {
+          console.log(`Call status: ${statusResult.data.call_status}`);
         }
       } catch (error) {
         console.error("Error checking call status:", error);
@@ -277,8 +292,10 @@ export function useTwilioCall() {
     // Save the interval ID for cleanup later
     setStatusCheckInterval(intervalId);
     
+    console.log(`Status checking set up for call ${callSid} with interval ID ${intervalId}`);
+    
     return intervalId;
-  }, [statusCheckInterval]);
+  }, [statusCheckInterval, toast]);
   
   /**
    * Make a development call (bypassing validation) to a prospect using Twilio
@@ -296,6 +313,7 @@ export function useTwilioCall() {
   /**
    * Verify the status of a call using its SID
    * This function checks the current status of a Twilio call
+   * Enhanced to be more robust
    */
   const verifyCallStatus = async (callSid?: string, userId?: string): Promise<TwilioCallResponse> => {
     const sidToCheck = callSid || currentCallSid;
@@ -347,8 +365,15 @@ export function useTwilioCall() {
       // If call is completed or failed, update our state
       const finalStatuses = ['completed', 'failed', 'canceled', 'busy', 'no-answer'];
       if (data.call_status && finalStatuses.includes(data.call_status.toLowerCase())) {
+        console.log(`Call ${sidToCheck} has reached final status: ${data.call_status}`);
         setCallInProgress(false);
         setCurrentCallSid(null);
+        
+        // Clear any status checking interval
+        if (statusCheckInterval) {
+          clearInterval(statusCheckInterval);
+          setStatusCheckInterval(null);
+        }
       }
       
       return {
@@ -369,9 +394,13 @@ export function useTwilioCall() {
   
   /**
    * End the current call if it's in progress
+   * Enhanced with better error handling and state management
    */
-  const endCurrentCall = async (): Promise<TwilioCallResponse> => {
-    if (!callInProgress || !currentCallSid) {
+  const endCurrentCall = async (callSidToEnd?: string): Promise<TwilioCallResponse> => {
+    const sidToEnd = callSidToEnd || currentCallSid;
+    
+    if (!sidToEnd) {
+      console.log("No active call to end");
       return {
         success: false,
         message: 'No active call to end',
@@ -379,9 +408,11 @@ export function useTwilioCall() {
     }
     
     try {
+      console.log(`Attempting to end call with SID: ${sidToEnd}`);
       const result = await supabase.functions.invoke('twilio-end-call', {
         body: {
-          callSid: currentCallSid
+          callSid: sidToEnd,
+          userId: null // Edge function will try to find the user ID from the call log
         }
       });
       
@@ -389,13 +420,16 @@ export function useTwilioCall() {
         throw result.error;
       }
       
-      setCallInProgress(false);
-      setCurrentCallSid(null);
-      
-      // Clear any status checking interval
-      if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-        setStatusCheckInterval(null);
+      if (sidToEnd === currentCallSid) {
+        // Only update state if this is the current call
+        setCallInProgress(false);
+        setCurrentCallSid(null);
+        
+        // Clear any status checking interval
+        if (statusCheckInterval) {
+          clearInterval(statusCheckInterval);
+          setStatusCheckInterval(null);
+        }
       }
       
       toast({

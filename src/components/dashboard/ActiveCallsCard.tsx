@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
-import { PhoneCall, Phone } from 'lucide-react';
+import { PhoneCall, Phone, X, RefreshCcw } from 'lucide-react';
 
 export function ActiveCallsCard() {
   const { user } = useAuth();
@@ -14,36 +14,40 @@ export function ActiveCallsCard() {
   const [activeCalls, setActiveCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [endingCall, setEndingCall] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchActiveCalls = async () => {
-      if (!user) return;
-      
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('call_logs')
-          .select(`
-            id,
-            twilio_call_sid,
-            call_status,
-            started_at,
-            prospects!inner(id, first_name, last_name, phone_number)
-          `)
-          .eq('user_id', user.id)
-          .in('call_status', ['initiated', 'in-progress', 'ringing', 'queued', 'answered'])
-          .order('started_at', { ascending: false });
-          
-        if (error) throw error;
-        
-        setActiveCalls(data || []);
-      } catch (error) {
-        console.error('Error fetching active calls:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Function to fetch active calls
+  const fetchActiveCalls = async () => {
+    if (!user) return;
     
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('call_logs')
+        .select(`
+          id,
+          twilio_call_sid,
+          call_status,
+          started_at,
+          prospects!inner(id, first_name, last_name, phone_number)
+        `)
+        .eq('user_id', user.id)
+        .in('call_status', ['initiated', 'in-progress', 'ringing', 'queued', 'answered'])
+        .order('started_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      console.log('Active calls data:', data);
+      setActiveCalls(data || []);
+    } catch (error) {
+      console.error('Error fetching active calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh data when component mounts or user changes
+  useEffect(() => {
     fetchActiveCalls();
     
     // Set up a polling interval to refresh active calls
@@ -52,19 +56,35 @@ export function ActiveCallsCard() {
     return () => clearInterval(intervalId);
   }, [user]);
   
+  // Manual refresh function
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchActiveCalls();
+    setRefreshing(false);
+  };
+  
+  // Handle ending a call
   const handleEndCall = async (callSid: string, callId: string) => {
     try {
       setEndingCall(callId);
-      await endCurrentCall();
-      // Remove the call from the active calls list
-      setActiveCalls(prev => prev.filter(call => call.id !== callId));
+      
+      const result = await endCurrentCall(callSid);
+      if (result.success) {
+        // Remove the call from the active calls list immediately
+        setActiveCalls(prev => prev.filter(call => call.id !== callId));
+      } else {
+        // If the call ending failed, refresh the list to get current status
+        await fetchActiveCalls();
+      }
     } catch (error) {
       console.error('Error ending call:', error);
+      await fetchActiveCalls(); // Refresh anyway to get current state
     } finally {
       setEndingCall(null);
     }
   };
   
+  // Format time helper
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString(undefined, { 
@@ -75,12 +95,28 @@ export function ActiveCallsCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <PhoneCall className="h-5 w-5" />
-          Active Calls
-        </CardTitle>
-        <CardDescription>Calls currently in progress</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <PhoneCall className="h-5 w-5" />
+            Active Calls
+            {activeCalls.length > 0 && (
+              <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                {activeCalls.length}
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription>Calls currently in progress</CardDescription>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={handleRefresh}
+          disabled={refreshing || loading}
+        >
+          <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span className="sr-only">Refresh</span>
+        </Button>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -97,7 +133,9 @@ export function ActiveCallsCard() {
                     {call.prospects.first_name} {call.prospects.last_name}
                   </p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
+                      call.call_status === 'in-progress' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
                       {call.call_status}
                     </span>
                     <span>{formatTime(call.started_at)}</span>
@@ -109,7 +147,17 @@ export function ActiveCallsCard() {
                   onClick={() => handleEndCall(call.twilio_call_sid, call.id)}
                   disabled={endingCall === call.id}
                 >
-                  {endingCall === call.id ? 'Ending...' : 'End Call'}
+                  {endingCall === call.id ? (
+                    <>
+                      <span className="mr-1">Ending...</span>
+                      <Skeleton className="h-3 w-3 rounded-full" />
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-4 w-4 mr-1" />
+                      End Call
+                    </>
+                  )}
                 </Button>
               </div>
             ))}
