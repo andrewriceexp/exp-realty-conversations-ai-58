@@ -7,15 +7,20 @@ import ProspectImport from "@/components/prospects/ProspectImport";
 import ProspectDetails from "@/components/prospects/ProspectDetails";
 import { ProspectList } from "@/types";
 import { Switch } from "@/components/ui/switch";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, AlertTriangle } from "lucide-react";
 import { isAnonymizationEnabled, setAnonymizationEnabled } from "@/utils/anonymizationUtils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useNavigate } from "react-router-dom";
 
 const ProspectManagement = () => {
   const [selectedList, setSelectedList] = useState<ProspectList | null>(null);
   const [activeTab, setActiveTab] = useState("lists");
   const [anonymizeData, setAnonymizeData] = useState(isAnonymizationEnabled());
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
 
   // Update localStorage when anonymization preference changes
   useEffect(() => {
@@ -37,9 +42,30 @@ const ProspectManagement = () => {
     });
   };
 
+  const handleNavigateToProfile = () => {
+    navigate('/profile-setup');
+  };
+
+  const needsElevenLabsSetup = !profile?.elevenlabs_api_key;
+
   return (
     <MainLayout>
       <div className="space-y-4">
+        {needsElevenLabsSetup && (
+          <Alert variant="warning" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              ElevenLabs API key not configured. Voice AI features will not work until you 
+              <button 
+                onClick={handleNavigateToProfile}
+                className="text-primary font-medium underline ml-1"
+              >
+                configure your ElevenLabs API key
+              </button>.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-2">Prospect Management</h1>

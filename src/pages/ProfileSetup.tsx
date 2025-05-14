@@ -13,6 +13,7 @@ const ProfileSetup = () => {
   useEffect(() => {
     if (profile) {
       console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
+      console.log("Profile has ElevenLabs API key:", !!profile.elevenlabs_api_key);
     }
   }, [profile]);
 
