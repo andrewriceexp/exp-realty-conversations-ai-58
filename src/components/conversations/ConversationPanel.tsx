@@ -61,10 +61,10 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         }]);
       }
     }) as any,
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Conversation Error",
-        description: error instanceof Error ? error.message : String(error),
+        description: typeof error === 'object' && error !== null && 'message' in error ? error.message : String(error),
         variant: "destructive"
       });
     },
