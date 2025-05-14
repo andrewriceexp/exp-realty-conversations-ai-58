@@ -10,7 +10,21 @@ export function Toaster() {
   const { toast } = useToast();
   
   useEffect(() => {
+    console.log("[Toaster] Initializing global toast function");
     setToast(toast);
+    
+    // Test toast to verify initialization
+    // Uncomment for debugging:
+    // toast({
+    //   title: "Toast Initialized",
+    //   description: "Toast notification system is ready",
+    //   variant: "default"
+    // });
+    
+    return () => {
+      // This is optional, but good practice for cleanup
+      console.log("[Toaster] Cleaning up toast initialization");
+    };
   }, [toast]);
 
   return <ToastComponent />;

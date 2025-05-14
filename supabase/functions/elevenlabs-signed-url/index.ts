@@ -14,6 +14,7 @@ serve(async (req) => {
     // Get the authenticated user
     const auth = req.headers.get('Authorization');
     if (!auth) {
+      console.error("[elevenlabs-signed-url] Missing Authorization header");
       return new Response(
         JSON.stringify({ error: "Missing Authorization header" }),
         {
@@ -28,7 +29,7 @@ serve(async (req) => {
     try {
       body = await req.json();
     } catch (error) {
-      console.log("[elevenlabs-signed-url] Error parsing request body", error);
+      console.error("[elevenlabs-signed-url] Error parsing request body", error);
       return new Response(
         JSON.stringify({ error: "Invalid request body" }),
         {
@@ -41,7 +42,7 @@ serve(async (req) => {
     const { agent_id } = body;
     
     if (!agent_id) {
-      console.log("[elevenlabs-signed-url] Missing agentId in request");
+      console.error("[elevenlabs-signed-url] Missing agentId in request");
       return new Response(
         JSON.stringify({ error: "Missing agent_id parameter" }),
         {
@@ -100,6 +101,7 @@ serve(async (req) => {
       apiKey = profileData.elevenlabs_api_key;
       
       if (!apiKey) {
+        console.error("[elevenlabs-signed-url] ElevenLabs API key not found in user profile");
         return new Response(
           JSON.stringify({ error: "ElevenLabs API key not found in user profile" }),
           {
@@ -113,6 +115,7 @@ serve(async (req) => {
       apiKey = Deno.env.get("ELEVENLABS_API_KEY");
       
       if (!apiKey) {
+        console.error("[elevenlabs-signed-url] ElevenLabs API key not configured in environment");
         return new Response(
           JSON.stringify({ error: "ElevenLabs API key not configured" }),
           {
@@ -124,6 +127,7 @@ serve(async (req) => {
     }
     
     // Call the ElevenLabs API to get a signed URL
+    console.log("[elevenlabs-signed-url] Requesting signed URL for agent:", agent_id);
     const elevenlabsResponse = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agent_id}`,
       {
@@ -136,7 +140,17 @@ serve(async (req) => {
     );
     
     if (!elevenlabsResponse.ok) {
-      console.error("[elevenlabs-signed-url] ElevenLabs API error:", await elevenlabsResponse.text());
+      console.error("[elevenlabs-signed-url] ElevenLabs API error:", 
+        elevenlabsResponse.status, 
+        elevenlabsResponse.statusText);
+      
+      try {
+        const errorText = await elevenlabsResponse.text();
+        console.error("[elevenlabs-signed-url] Error response body:", errorText);
+      } catch (e) {
+        console.error("[elevenlabs-signed-url] Could not read error response body");
+      }
+      
       return new Response(
         JSON.stringify({ 
           error: `ElevenLabs API error: ${elevenlabsResponse.status} ${elevenlabsResponse.statusText}` 
@@ -149,6 +163,7 @@ serve(async (req) => {
     }
     
     const data = await elevenlabsResponse.json();
+    console.log("[elevenlabs-signed-url] Successfully obtained signed URL");
     
     return new Response(
       JSON.stringify(data),

@@ -1,8 +1,8 @@
-
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ElevenLabsContextValue {
   isLoading: boolean;
@@ -13,68 +13,66 @@ interface ElevenLabsContextValue {
 
 const ElevenLabsContext = createContext<ElevenLabsContextValue | undefined>(undefined);
 
-export const ElevenLabsProvider = ({ children }: { children: ReactNode }) => {
+export function ElevenLabsProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Clear any error messages
-  const clearError = () => setError(null);
-  
-  // Function to get a signed URL for authenticated conversations
-  const getSignedUrl = async (agentId: string): Promise<string | null> => {
-    try {
+  const { session, user } = useAuth();
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // Function to get a signed URL for conversation
+  const getSignedUrl = useCallback(
+    async (agentId: string): Promise<string | null> => {
       setIsLoading(true);
-      clearError();
-      
-      if (!agentId) {
-        throw new Error('Agent ID is required to get a signed URL');
+      setError(null);
+      try {
+        console.log("[ElevenLabsContext] Getting signed URL for agent:", agentId);
+        
+        if (!session?.access_token) {
+          console.error("[ElevenLabsContext] No access token available");
+          throw new Error("Authentication required");
+        }
+
+        const { data, error: signedUrlError } = await supabase.functions.invoke(
+          "elevenlabs-signed-url",
+          {
+            body: { agent_id: agentId },
+          }
+        );
+
+        if (signedUrlError) {
+          console.error("[ElevenLabsContext] Error getting signed URL:", signedUrlError);
+          throw new Error(
+            `Failed to get conversation URL: ${signedUrlError.message}`
+          );
+        }
+
+        if (!data?.signed_url) {
+          console.error("[ElevenLabsContext] No signed URL returned");
+          throw new Error("No conversation URL returned from server");
+        }
+
+        console.log("[ElevenLabsContext] Successfully obtained signed URL");
+        return data.signed_url;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error("[ElevenLabsContext] Error in getSignedUrl:", errorMessage);
+        setError(errorMessage);
+        toast({
+          title: "Conversation Error",
+          description: errorMessage,
+          variant: "destructive"
+        });
+        return null;
+      } finally {
+        setIsLoading(false);
       }
-      
-      console.log('Getting signed URL for agent:', agentId);
-      
-      const functionPromise = supabase.functions.invoke('elevenlabs-signed-url', {
-        body: { agent_id: agentId },
-      });
-      
-      // Add timeout to prevent hanging
-      const result = await withTimeout(
-        functionPromise,
-        15000,
-        'Request to get signed URL timed out'
-      );
-      
-      const { data, error } = result;
-      
-      if (error) {
-        console.error('Error getting signed URL:', error);
-        throw new Error(error.message || 'Failed to get signed URL');
-      }
-      
-      if (!data?.signed_url) {
-        throw new Error('No signed URL returned from the server');
-      }
-      
-      console.log('Successfully retrieved signed URL');
-      return data.signed_url;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to get signed URL';
-      setError(errorMessage);
-      console.error('getSignedUrl error:', err);
-      
-      // Only show one toast for this error
-      toast({
-        title: "Failed to start conversation",
-        description: errorMessage,
-        variant: "destructive",
-        duration: 5000
-      });
-      
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
+    },
+    [session?.access_token]
+  );
+
   return (
     <ElevenLabsContext.Provider
       value={{

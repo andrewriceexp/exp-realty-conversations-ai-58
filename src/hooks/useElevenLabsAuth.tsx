@@ -1,238 +1,105 @@
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { withTimeout } from '@/lib/utils';
 
-interface UseElevenLabsAuthReturn {
-  isReady: boolean;
-  isLoading: boolean;
-  error: string | null;
-  hasApiKey: boolean;
-  isAuthenticated: boolean;
-  hasValidSession: boolean;
-  apiKeyStatus: 'missing' | 'configured' | 'unknown' | 'invalid' | 'valid';
-  validateApiKey: () => Promise<boolean>;
-  lastValidated: number | null;
-}
+export type ApiKeyStatus = 'valid' | 'invalid' | 'checking' | 'missing' | null;
 
-// Constants for validation
-const VALIDATION_TIMEOUT_MS = 12000; // 12 seconds
-const MIN_VALIDATION_INTERVAL_MS = 30000; // 30 seconds between validations
-const MAX_RETRIES = 2; // Reduced from 3 to minimize retry loops
-
-/**
- * Custom hook to check if the user has all requirements to use ElevenLabs features
- * - Is authenticated
- * - Has valid session
- * - Has ElevenLabs API key configured and validated
- */
-export function useElevenLabsAuth(): UseElevenLabsAuthReturn {
-  const [isLoading, setIsLoading] = useState(false); // Start with false to avoid immediate validation
+export function useElevenLabsAuth() {
+  const { user, profile } = useAuth();
+  const [isReady, setIsReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'missing' | 'configured' | 'unknown' | 'invalid' | 'valid'>('unknown');
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus>(null);
   const [lastValidated, setLastValidated] = useState<number | null>(null);
-  const validationInProgress = useRef(false);
-  const retryCount = useRef(0);
-  const toastShownRef = useRef<Map<string, number>>(new Map());
-  const initialValidationDone = useRef(false);
-  
-  const { user, profile, session } = useAuth();
-  
-  const isAuthenticated = !!user;
-  const hasApiKey = !!profile?.elevenlabs_api_key;
-  const hasValidSession = !!session?.access_token;
-  
-  const isReady = isAuthenticated && hasApiKey && hasValidSession && apiKeyStatus === 'valid';
-  
-  // Toast throttling helper function
-  const throttledToast = useCallback((props: { title: string, description: string, variant?: "default" | "destructive" | null }) => {
-    const key = `${props.title}-${props.description}`;
-    const now = Date.now();
-    const lastShown = toastShownRef.current.get(key) || 0;
-    
-    // Only show the toast if it hasn't been shown in the last 5 seconds
-    if (now - lastShown > 5000) {
-      toast(props);
-      toastShownRef.current.set(key, now);
-    }
-  }, []);
-  
-  // Check basic auth requirements on mount and when auth state changes
-  useEffect(() => {
-    if (!profile) return; // Don't do anything if profile hasn't loaded yet
-    
-    // Reset API key status when profile changes
-    if (profile) {
-      setApiKeyStatus(hasApiKey ? 'configured' : 'missing');
-    }
-    
-    // Check authentication and API key requirements
-    if (!isAuthenticated) {
-      setError("Authentication required to use ElevenLabs features");
-      setApiKeyStatus('unknown');
-      return;
-    } else if (!hasValidSession) {
-      setError("Your session has expired. Please log in again to refresh your authentication");
-      setApiKeyStatus('unknown');
-      return;
-    } else if (!hasApiKey) {
-      setError("ElevenLabs API key required. Please add it in your profile settings");
-      setApiKeyStatus('missing');
-      return;
-    }
-    
-    // Only validate once on initial mount and then don't auto-validate
-    // This prevents the validation loop and lets manual validation work as expected
-    if (!initialValidationDone.current && hasApiKey && !validationInProgress.current) {
-      initialValidationDone.current = true;
-      // Slight delay on first validation to avoid race conditions with mount
-      const timer = setTimeout(() => {
-        validateApiKey().catch(err => {
-          console.error("API key validation error:", err);
-        });
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [isAuthenticated, hasApiKey, hasValidSession, profile]);
-  
-  /**
-   * Validates the currently stored ElevenLabs API key
-   * Returns true if valid, false otherwise
-   * Implements throttling and retries with exponential backoff
-   */
+
+  // Check if user has an API key
+  const hasApiKey = Boolean(profile?.elevenlabs_api_key);
+
+  // Function to validate the API key
   const validateApiKey = useCallback(async (): Promise<boolean> => {
-    // Don't validate if no API key or if a validation is already in progress
-    if (!hasApiKey || !profile?.elevenlabs_api_key || validationInProgress.current) {
+    if (!profile?.elevenlabs_api_key) {
+      console.log("[ElevenLabsAuth] No API key found in profile");
+      setApiKeyStatus('missing');
+      setError('ElevenLabs API key is missing');
       return false;
     }
-    
-    // Skip if we've validated recently unless it's an explicit revalidation call
-    const now = Date.now();
-    const timeSinceLastValidation = lastValidated ? now - lastValidated : Infinity;
-    if (lastValidated && timeSinceLastValidation < MIN_VALIDATION_INTERVAL_MS && apiKeyStatus === 'valid') {
-      console.log(`Skipping validation, last validated ${Math.round(timeSinceLastValidation / 1000)}s ago`);
-      // Return the last known status
-      return apiKeyStatus === 'valid';
-    }
-    
+
     try {
-      console.log("Validating ElevenLabs API key...");
       setIsLoading(true);
-      validationInProgress.current = true;
-      
-      // Use the user endpoint to validate the API key
-      const validatePromise = fetch("https://api.elevenlabs.io/v1/user", {
-        method: "GET",
-        headers: {
-          "xi-api-key": profile.elevenlabs_api_key,
-          "Content-Type": "application/json",
-        },
-      });
-      
-      // Set timeout which is reasonable for API validation
-      const response = await withTimeout(
-        validatePromise,
-        VALIDATION_TIMEOUT_MS,
-        "ElevenLabs API key validation timed out"
-      );
-      
-      if (!response.ok) {
-        console.error("ElevenLabs API key validation failed:", response.status, response.statusText);
-        setError("Your ElevenLabs API key appears to be invalid");
-        setApiKeyStatus('invalid');
-        
-        // Only show a toast if this is the first validation attempt
-        if (retryCount.current === 0) {
-          throttledToast({
-            title: "API Key Validation Failed",
-            description: `ElevenLabs API returned ${response.status}: ${response.statusText}`,
-            variant: "destructive"
-          });
-        }
-        
-        return false;
-      }
-      
-      // Check if the response contains the expected user data
-      const userData = await response.json();
-      if (!userData || !userData.subscription) {
-        console.error("ElevenLabs API key validation failed: Unexpected response format");
-        setError("Received invalid response from ElevenLabs API");
-        setApiKeyStatus('invalid');
-        return false;
-      }
-      
-      console.log("ElevenLabs API key validation successful");
       setError(null);
-      setApiKeyStatus('valid');
-      retryCount.current = 0;
-      setLastValidated(now);
-      return true;
-    } catch (err) {
-      console.error("Error validating ElevenLabs API key:", err);
+      console.log("[ElevenLabsAuth] Validating API key");
       
-      if (err instanceof Error) {
-        setError(err.message);
-        
-        // Only show a toast if this isn't a retry or it's a timeout
-        if (retryCount.current === 0 || err.message.includes("timed out")) {
-          // Determine appropriate error message based on error type
-          if (err.message.includes("timed out")) {
-            throttledToast({
-              title: "API Key Validation Timed Out",
-              description: "Connection to ElevenLabs timed out. Please check your internet connection and try again.",
-              variant: "default"
-            });
-          } else {
-            throttledToast({
-              title: "API Key Validation Failed",
-              description: err.message,
-              variant: "destructive"
-            });
-          }
-        }
-      } else {
-        setError("Failed to validate ElevenLabs API key");
-      }
-      
-      // Implement retry with exponential backoff - only if it's not a direct user-initiated validation
-      if (retryCount.current < MAX_RETRIES) {
-        retryCount.current += 1;
-        
-        // Exponential backoff: 2^retry * 1000ms (2s, 4s)
-        const backoffMs = Math.min(Math.pow(2, retryCount.current) * 1000, 8000);
-        console.log(`Retry ${retryCount.current}/${MAX_RETRIES} in ${backoffMs}ms`);
-        
-        // Schedule retry with backoff
-        setTimeout(() => {
-          validationInProgress.current = false;
-          validateApiKey().catch(error => {
-            console.error("API key retry validation error:", error);
-          });
-        }, backoffMs);
-      } else {
-        retryCount.current = 0;
+      // Call the elevenlabs-voices function to validate the API key
+      const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
+        body: { validate_only: true }
+      });
+
+      if (error) {
+        console.error("[ElevenLabsAuth] API key validation error:", error);
         setApiKeyStatus('invalid');
+        setError(`API key validation failed: ${error.message}`);
+        toast({
+          title: "ElevenLabs API Key Error",
+          description: `Your API key could not be validated: ${error.message}`,
+          variant: "destructive"
+        });
+        return false;
       }
-      
+
+      if (data?.success === true) {
+        console.log("[ElevenLabsAuth] API key validated successfully");
+        setApiKeyStatus('valid');
+        setLastValidated(Date.now());
+        return true;
+      } else {
+        console.error("[ElevenLabsAuth] API key validation failed:", data?.message || "Unknown error");
+        setApiKeyStatus('invalid');
+        setError(`API key validation failed: ${data?.message || "Unknown error"}`);
+        toast({
+          title: "ElevenLabs API Key Error",
+          description: data?.message || "Your API key could not be validated",
+          variant: "destructive"
+        });
+        return false;
+      }
+    } catch (err) {
+      console.error("[ElevenLabsAuth] Unexpected error during validation:", err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setApiKeyStatus('invalid');
+      setError(`API key validation error: ${errorMessage}`);
+      toast({
+        title: "ElevenLabs API Key Error",
+        description: `Unexpected error: ${errorMessage}`,
+        variant: "destructive"
+      });
       return false;
     } finally {
       setIsLoading(false);
-      validationInProgress.current = false;
+      setIsReady(true);
     }
-  }, [apiKeyStatus, hasApiKey, lastValidated, profile, throttledToast]);
-  
+  }, [profile?.elevenlabs_api_key]);
+
+  // Validate API key when profile changes
+  useEffect(() => {
+    if (profile && hasApiKey && !isReady && !isLoading && apiKeyStatus !== 'valid') {
+      validateApiKey().catch(err => {
+        console.error("[ElevenLabsAuth] Error in validation effect:", err);
+      });
+    } else if (!hasApiKey) {
+      setApiKeyStatus('missing');
+      setIsReady(true);
+    }
+  }, [profile, hasApiKey, isReady, validateApiKey, isLoading, apiKeyStatus]);
+
   return {
     isReady,
-    isLoading,
-    error,
     hasApiKey,
-    isAuthenticated,
-    hasValidSession,
     apiKeyStatus,
-    validateApiKey,
-    lastValidated
+    lastValidated,
+    error,
+    isLoading,
+    validateApiKey
   };
 }

@@ -1,81 +1,203 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Get API key from environment variable - centralized org key
-    const apiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    console.log("[elevenlabs-voices] Starting function");
     
-    if (!apiKey) {
+    // Get the authenticated user
+    const auth = req.headers.get('Authorization');
+    if (!auth) {
+      console.error("[elevenlabs-voices] Missing Authorization header");
       return new Response(
-        JSON.stringify({ error: 'ElevenLabs API key not configured on the server' }),
-        { 
-          status: 500, 
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          } 
+        JSON.stringify({ error: "Missing Authorization header" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
-
-    // Fetch voices from ElevenLabs API
-    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-      method: 'GET',
+    
+    // Get request body
+    let body;
+    try {
+      body = await req.json();
+    } catch (error) {
+      console.info("[elevenlabs-voices] No request body or invalid JSON");
+      body = {}; // Set to empty object if parsing fails
+    }
+    
+    const validateOnly = body?.validate_only === true;
+    
+    // Get the user's ElevenLabs API key
+    const supabaseClient = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") 
+      ? Deno.createClient(
+          Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        )
+      : null;
+    
+    let apiKey;
+    
+    if (supabaseClient) {
+      // Extract JWT token without the "Bearer " prefix
+      const token = auth.replace("Bearer ", "");
+      
+      // Verify the token and get the user
+      const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+      
+      if (userError || !userData.user) {
+        console.error("[elevenlabs-voices] Authentication error:", userError);
+        return new Response(
+          JSON.stringify({ error: "Authentication failed" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
+      // Get the user's profile with the API key
+      const { data: profileData, error: profileError } = await supabaseClient
+        .from("profiles")
+        .select("elevenlabs_api_key")
+        .eq("id", userData.user.id)
+        .single();
+      
+      if (profileError || !profileData) {
+        console.error("[elevenlabs-voices] Profile fetch error:", profileError);
+        return new Response(
+          JSON.stringify({ error: "Failed to retrieve user profile" }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
+      apiKey = profileData.elevenlabs_api_key;
+      
+      if (!apiKey) {
+        console.error("[elevenlabs-voices] No API key found in profile");
+        return new Response(
+          JSON.stringify({ error: "ElevenLabs API key not found in user profile" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    } else {
+      // Use the fallback API key from environment variables if Supabase client couldn't be created
+      apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+      
+      if (!apiKey) {
+        console.error("[elevenlabs-voices] No environment API key found");
+        return new Response(
+          JSON.stringify({ error: "ElevenLabs API key not configured" }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+    
+    // For validation-only requests, we'll make a simple API call to test the key
+    if (validateOnly) {
+      console.log("[elevenlabs-voices] Validation-only request");
+      const testUrl = "https://api.elevenlabs.io/v1/user/subscription";
+      const validationResponse = await fetch(testUrl, {
+        method: "GET",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+        }
+      });
+      
+      if (!validationResponse.ok) {
+        console.error("[elevenlabs-voices] API key validation failed:", validationResponse.status, validationResponse.statusText);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: `API key validation failed: ${validationResponse.status} ${validationResponse.statusText}` 
+          }),
+          {
+            status: validationResponse.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
+      console.log("[elevenlabs-voices] API key validated successfully");
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: "API key validated successfully" 
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
+    // For regular requests, fetch the voices list
+    console.log("[elevenlabs-voices] Fetching voices from ElevenLabs API");
+    const elevenlabsResponse = await fetch("https://api.elevenlabs.io/v1/voices", {
+      method: "GET",
       headers: {
-        'xi-api-key': apiKey,
-        'Content-Type': 'application/json',
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
       },
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('ElevenLabs API error:', error);
+    
+    if (!elevenlabsResponse.ok) {
+      console.error("[elevenlabs-voices] ElevenLabs API error:", elevenlabsResponse.status, elevenlabsResponse.statusText);
       return new Response(
-        JSON.stringify({ error: `ElevenLabs API error: ${response.statusText}` }),
-        { 
-          status: response.status, 
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          } 
+        JSON.stringify({ 
+          error: `ElevenLabs API error: ${elevenlabsResponse.status} ${elevenlabsResponse.statusText}` 
+        }),
+        {
+          status: elevenlabsResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
-
-    const data = await response.json();
-    console.log(`Successfully fetched ${data.voices.length} voices from ElevenLabs`);
+    
+    const data = await elevenlabsResponse.json();
+    console.log("[elevenlabs-voices] Successfully fetched", data.voices?.length || 0, "voices");
     
     return new Response(
-      JSON.stringify({ voices: data.voices }),
-      { 
-        headers: { 
-          'Content-Type': 'application/json',
-          ...corsHeaders
-        } 
+      JSON.stringify(data),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    console.error('Error in elevenlabs-voices function:', error);
+    console.error("[elevenlabs-voices] Unhandled error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Unknown error occurred' }),
-      { 
-        status: 500, 
-        headers: { 
-          'Content-Type': 'application/json',
-          ...corsHeaders
-        } 
+      JSON.stringify({ error: error.message || "Internal server error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }
 });
+
+// Helper to create Supabase client (this is a mock implementation as Deno.createClient doesn't exist)
+// In the actual implementation, you'd use the Supabase JS client
+declare global {
+  interface Deno {
+    createClient(url: string, key: string): any;
+    env: {
+      get(key: string): string | undefined;
+    };
+  }
+}
