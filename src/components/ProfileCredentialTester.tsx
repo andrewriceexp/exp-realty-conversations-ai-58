@@ -26,11 +26,7 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
         success: false,
         message: "Please enter both Account SID and Auth Token to verify"
       });
-      toast({
-        title: "Verification Failed",
-        description: "Please enter both Account SID and Auth Token",
-        variant: "destructive",
-      });
+      toast("Please enter both Account SID and Auth Token");
       return;
     }
 
@@ -57,11 +53,7 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
           success: false,
           message: `Verification failed: ${error.message}`
         });
-        toast({
-          title: "Verification Error",
-          description: error.message,
-          variant: "destructive",
-        });
+        toast("Verification Error: " + error.message);
         return;
       }
 
@@ -72,21 +64,13 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
           success: true,
           message: `Credentials verified successfully! Account: ${data.account_info?.friendly_name || 'Unknown'}`
         });
-        toast({
-          title: "Verification Successful",
-          description: `Twilio account verified: ${data.account_info?.friendly_name || 'Unknown'}`,
-          variant: "default",
-        });
+        toast(`Twilio account verified: ${data.account_info?.friendly_name || 'Unknown'}`);
       } else {
         setVerificationResult({
           success: false,
           message: data.error || "Verification failed due to an unknown error"
         });
-        toast({
-          title: "Verification Failed",
-          description: data.error || "Unknown error occurred",
-          variant: "destructive",
-        });
+        toast("Verification Failed: " + (data.error || "Unknown error occurred"));
       }
     } catch (err) {
       console.error('Error in verification process:', err);
@@ -94,11 +78,7 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
         success: false,
         message: err instanceof Error ? err.message : "An unknown error occurred"
       });
-      toast({
-        title: "Verification Error",
-        description: err instanceof Error ? err.message : "An unknown error occurred",
-        variant: "destructive",
-      });
+      toast("Verification Error: " + (err instanceof Error ? err.message : "An unknown error occurred"));
     } finally {
       setTimeout(() => {
         setIsVerifying(false);

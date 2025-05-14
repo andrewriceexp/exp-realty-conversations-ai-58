@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -113,20 +112,12 @@ const ProfileSetup = () => {
       
       // Set success state
       setUpdateSuccess(true);
-      toast({
-        title: "Profile Updated",
-        description: "Your profile and credentials have been saved successfully.",
-        variant: "default",
-      });
+      toast("Profile Updated: Your profile and credentials have been saved successfully.");
     } catch (error: any) {
       console.error('Profile update error:', error);
       setErrorMessage(error.message || 'Failed to update profile');
       setUpdateSuccess(false);
-      toast({
-        title: "Update Failed",
-        description: error.message || 'Failed to update profile',
-        variant: "destructive",
-      });
+      toast("Update Failed: " + (error.message || 'Failed to update profile'));
     } finally {
       setIsLoading(false);
     }
