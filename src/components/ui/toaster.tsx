@@ -1,9 +1,22 @@
 
 import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
 
 export function Toaster() {
-  const { toasts } = useToast();
+  const { toasts, dismiss } = useToast();
+
+  useEffect(() => {
+    toasts.forEach(toast => {
+      if (toast.duration && toast.open) {
+        const timer = setTimeout(() => {
+          dismiss(toast.id);
+        }, toast.duration);
+        
+        return () => clearTimeout(timer);
+      }
+    });
+  }, [toasts, dismiss]);
 
   return (
     <ToastProvider>

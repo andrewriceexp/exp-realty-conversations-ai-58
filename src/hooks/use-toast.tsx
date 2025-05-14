@@ -16,6 +16,7 @@ type ToasterToast = {
   description?: React.ReactNode;
   action?: ToastActionElement;
   variant?: "default" | "destructive" | "success" | "warning";
+  duration?: number;
 };
 
 export type ToastProps = Omit<ToasterToast, "id"> & {
@@ -136,6 +137,7 @@ interface Toast {
   description?: React.ReactNode;
   action?: ToastActionElement;
   variant?: "default" | "destructive" | "success" | "warning";
+  duration?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -203,6 +205,13 @@ export const toast = (props: ToastProps) => {
       }
     },
   };
+  
+  // Handle auto-dismiss based on duration
+  if (props.duration) {
+    setTimeout(() => {
+      dispatch({ type: actionTypes.DISMISS_TOAST, id });
+    }, props.duration);
+  }
   
   dispatch({
     type: actionTypes.ADD_TOAST,
