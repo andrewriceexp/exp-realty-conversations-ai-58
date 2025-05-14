@@ -9,10 +9,13 @@ import { ConfigList } from '@/components/agent-config/ConfigList';
 import { ConfigEditor } from '@/components/agent-config/ConfigEditor';
 import { EmptyConfigState } from '@/components/agent-config/EmptyConfigState';
 import { useAgentConfigs } from '@/hooks/useAgentConfigs';
+import { ElevenLabsSetup } from '@/components/agent-config/ElevenLabsSetup';
+import { useAuth } from '@/contexts/AuthContext';
 
 const AgentConfigPage = () => {
   const { getVoices, isLoading: voicesLoading } = useElevenLabs();
   const [voices, setVoices] = useState<any[]>([]);
+  const { profile } = useAuth();
 
   const {
     configs,
@@ -26,18 +29,22 @@ const AgentConfigPage = () => {
     selectConfig,
   } = useAgentConfigs();
 
+  const hasElevenLabsApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
+
   useEffect(() => {
     const fetchVoices = async () => {
       try {
-        const voiceData = await getVoices();
-        setVoices(voiceData);
+        if (hasElevenLabsApiKey) {
+          const voiceData = await getVoices();
+          setVoices(voiceData);
+        }
       } catch (error) {
         console.error('Error fetching voices:', error);
       }
     };
     
     fetchVoices();
-  }, []);
+  }, [hasElevenLabsApiKey]);
 
   return (
     <MainLayout>
@@ -47,6 +54,10 @@ const AgentConfigPage = () => {
           <Button onClick={createNewConfig}>
             <PlusCircle className="mr-2 h-4 w-4" /> New Configuration
           </Button>
+        </div>
+
+        <div className="mb-6">
+          <ElevenLabsSetup />
         </div>
 
         {isLoading ? (
