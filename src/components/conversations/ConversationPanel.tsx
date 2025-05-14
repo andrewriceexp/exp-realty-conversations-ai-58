@@ -138,6 +138,10 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error("You must be logged in to start a conversation");
       }
 
+      if (!agentId || agentId.trim() === '') {
+        throw new Error("Invalid agent ID. Please select a valid agent.");
+      }
+
       console.log('Starting conversation with agent ID:', agentId);
       
       // Reset any previous errors
@@ -154,8 +158,6 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       console.log('Got signed URL, starting session...', signedUrl);
       
       // Start the conversation with ElevenLabs using the signed URL
-      // Fix: Use agentId directly and the signed URL for the origin parameter
-      // The SDK requires either agentId for public agents or agentId + signedUrl for private agents
       await conversation.startSession({
         agentId, // Required parameter
         origin: signedUrl // Use the signed URL as the origin

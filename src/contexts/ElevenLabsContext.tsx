@@ -28,6 +28,15 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
+    if (!agentId || agentId.trim() === '') {
+      toast({
+        title: "Invalid agent ID",
+        description: "A valid ElevenLabs agent ID is required",
+        variant: "destructive"
+      });
+      return null;
+    }
+
     setIsLoading(true);
     setError(null);
 

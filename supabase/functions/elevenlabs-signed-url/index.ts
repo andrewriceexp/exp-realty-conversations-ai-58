@@ -69,8 +69,10 @@ serve(async (req) => {
       );
     }
 
-    // Get the organization's ElevenLabs API key from environment variables
+    // Get the ElevenLabs API key from environment variables
     const elevenlabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    console.log(`Checking for ELEVENLABS_API_KEY: ${elevenlabsApiKey ? 'Found key' : 'No key found'}`);
+    
     if (!elevenlabsApiKey) {
       console.error('ElevenLabs API key not configured on the server');
       return new Response(
@@ -82,49 +84,68 @@ serve(async (req) => {
     }
 
     console.log(`Making request to ElevenLabs API for agent ID: ${agentId}`);
-    console.log(`Using ElevenLabs API key: ${elevenlabsApiKey ? 'Key exists (hidden for security)' : 'Missing'}`);
     
     // Use the ElevenLabs API to get a signed URL
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
-      {
-        method: 'GET',
-        headers: {
-          'xi-api-key': elevenlabsApiKey,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`ElevenLabs API error: Status ${response.status}, Body: ${errorText}`);
-      return new Response(
-        JSON.stringify({ error: `ElevenLabs API error: ${response.status} ${errorText}` }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    try {
+      console.log('Sending request to ElevenLabs API...');
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': elevenlabsApiKey,
+            'Content-Type': 'application/json',
+          },
+        }
       );
-    }
 
-    const elevenlabsData = await response.json();
-    
-    if (!elevenlabsData.signed_url) {
-      console.error('ElevenLabs API returned response without signed_url', elevenlabsData);
+      console.log(`ElevenLabs API response status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`ElevenLabs API error: Status ${response.status}, Body: ${errorText}`);
+        return new Response(
+          JSON.stringify({ 
+            error: `ElevenLabs API error: ${response.status} ${errorText}`, 
+            details: 'Check the agent ID and API key configuration'
+          }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const elevenlabsData = await response.json();
+      
+      if (!elevenlabsData.signed_url) {
+        console.error('ElevenLabs API returned response without signed_url', elevenlabsData);
+        return new Response(
+          JSON.stringify({ error: 'ElevenLabs API returned invalid response' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log('Successfully got signed URL from ElevenLabs');
+      
       return new Response(
-        JSON.stringify({ error: 'ElevenLabs API returned invalid response' }),
+        JSON.stringify({ signed_url: elevenlabsData.signed_url }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (fetchError) {
+      console.error('Error fetching from ElevenLabs API:', fetchError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Error connecting to ElevenLabs API',
+          details: fetchError instanceof Error ? fetchError.message : String(fetchError)
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
-    console.log('Successfully got signed URL from ElevenLabs');
-    
-    return new Response(
-      JSON.stringify({ signed_url: elevenlabsData.signed_url }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   } catch (error) {
     console.error('Error in elevenlabs-signed-url function:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'An unexpected error occurred' }),
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'An unexpected error occurred',
+        stack: error instanceof Error ? error.stack : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
