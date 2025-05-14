@@ -62,7 +62,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       // Check if we have a valid session and access token
       if (!session || !session.access_token) {
         console.error("No valid session or access token available");
-        throw new Error("Authentication session is missing");
+        throw new Error("Authentication session is missing or expired. Please log in again.");
       }
       
       console.log("Session access token is available for Auth");
@@ -87,6 +87,10 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('elevenlabs-signed-url function response:', data);
+
+      if (data.error) {
+        throw new Error(`ElevenLabs error: ${data.error}`);
+      }
 
       if (!data.signed_url) {
         throw new Error('Failed to get signed URL for ElevenLabs conversation');

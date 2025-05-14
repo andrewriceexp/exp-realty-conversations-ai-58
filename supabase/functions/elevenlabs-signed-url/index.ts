@@ -24,7 +24,7 @@ serve(async (req) => {
     console.log("Auth header present:", !!authHeader);
     
     if (!authHeader) {
-      throw new Error('No authorization header');
+      throw new Error('No authorization header provided');
     }
 
     // Create a Supabase client with the user's JWT to verify their identity
@@ -39,45 +39,50 @@ serve(async (req) => {
     // Verify the user's JWT by getting the user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    if (userError || !user) {
+    if (userError) {
       console.error("User authentication error:", userError);
-      throw new Error('Unauthorized: Invalid user token');
+      throw new Error(`Unauthorized: ${userError.message}`);
+    }
+    
+    if (!user) {
+      console.error("No user found in authentication");
+      throw new Error('Unauthorized: No user found');
     }
     
     console.log("User authenticated:", user.id);
 
-    // Now verify if the user has an ElevenLabs API key configured
-    // Create a new client with service role to bypass RLS
+    // Create a service role client to bypass RLS
     const adminSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    
+    // Fetch the user's profile to get their ElevenLabs API key
     const { data: profile, error: profileError } = await adminSupabase
       .from('profiles')
       .select('elevenlabs_api_key')
       .eq('id', user.id)
       .single();
     
-    if (profileError || !profile) {
+    if (profileError) {
       console.error("Profile fetch error:", profileError);
-      throw new Error('Failed to retrieve user profile');
+      throw new Error(`Failed to retrieve user profile: ${profileError.message}`);
     }
 
-    if (!profile.elevenlabs_api_key) {
+    if (!profile?.elevenlabs_api_key) {
       throw new Error('ElevenLabs API key not configured for this user');
     }
 
     // Extract the agent ID from the request body
-    const { agentId } = await req.json();
+    const requestData = await req.json();
+    const { agentId } = requestData;
     
     if (!agentId) {
       throw new Error('Agent ID is required');
     }
 
-    // Use either the user's ElevenLabs API key or the server's default key
-    const apiKey = profile.elevenlabs_api_key || ELEVENLABS_API_KEY;
+    // Use the user's ElevenLabs API key
+    const apiKey = profile.elevenlabs_api_key;
     
-    if (!apiKey) {
-      throw new Error('No ElevenLabs API key available');
-    }
-
+    console.log(`Making request to ElevenLabs API for agent ${agentId}`);
+    
     // Make request to ElevenLabs API to get signed URL for conversation
     const response = await fetch(`https://api.elevenlabs.io/v1/conversations/${agentId}/start`, {
       method: 'POST',
@@ -90,7 +95,7 @@ serve(async (req) => {
     if (!response.ok) {
       const errorData = await response.json();
       console.error('ElevenLabs API error:', errorData);
-      throw new Error(`ElevenLabs API error: ${response.statusText}`);
+      throw new Error(`ElevenLabs API error: ${response.statusText} - ${JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
@@ -102,7 +107,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in elevenlabs-signed-url function:', error);
     return new Response(
-      JSON.stringify({ error: error.message || 'Unknown error occurred' }),
+      JSON.stringify({ 
+        error: error.message || 'Unknown error occurred',
+        details: error.stack || 'No stack trace available'
+      }),
       { 
         status: 500, 
         headers: { 

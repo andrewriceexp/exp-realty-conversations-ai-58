@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase";
+import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from "@/contexts/AuthContext";
 import ConversationPanel from "@/components/conversations/ConversationPanel";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { useElevenLabsAuth } from "@/hooks/useElevenLabsAuth";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface AgentOption {
   id: string;
@@ -27,6 +28,7 @@ const ConversationTesting = () => {
   const [isTestingActive, setIsTestingActive] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { isReady, error: authError, hasApiKey } = useElevenLabsAuth();
 
   // Initialize with the known agent
   useEffect(() => {
@@ -39,17 +41,29 @@ const ConversationTesting = () => {
     ]);
   }, []);
 
-  // Fetch available ElevenLabs agents (this would be replaced with your actual agent IDs)
-  const fetchAgents = async () => {
-    // The agents list is already initialized with the default agent
-    // This function remains for future API integration
-  };
-
   const handleStartTest = () => {
     if (!selectedAgentId) {
       toast({
         title: "Agent required",
         description: "Please select an agent to start testing",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!isReady) {
+      if (!hasApiKey) {
+        toast({
+          title: "ElevenLabs API Key Required",
+          description: "Please configure your ElevenLabs API key in your profile settings",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      toast({
+        title: "Cannot start conversation",
+        description: authError || "Please check your authentication and API key",
         variant: "destructive",
       });
       return;
@@ -69,6 +83,10 @@ const ConversationTesting = () => {
     }
   };
 
+  const navigateToProfile = () => {
+    window.location.href = '/profile-setup';
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -78,6 +96,18 @@ const ConversationTesting = () => {
             Test your ElevenLabs conversational agents before using them in campaigns
           </p>
         </div>
+
+        {!hasApiKey && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription className="space-y-2">
+              <p>To use the conversation feature, you need to add an ElevenLabs API key in your profile.</p>
+              <Button variant="outline" size="sm" onClick={navigateToProfile}>
+                Go to Profile Settings
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>
@@ -160,9 +190,18 @@ const ConversationTesting = () => {
                   />
                 </div>
 
-                <Button onClick={handleStartTest}>
+                <Button 
+                  onClick={handleStartTest}
+                  disabled={!isReady}
+                >
                   Start Test Conversation
                 </Button>
+
+                {authError && !hasApiKey && (
+                  <p className="text-sm text-destructive mt-2">
+                    You need to configure your ElevenLabs API key before starting a conversation.
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
