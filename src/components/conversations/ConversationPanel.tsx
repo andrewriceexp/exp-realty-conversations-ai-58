@@ -154,9 +154,11 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       console.log('Got signed URL, starting session...', signedUrl);
       
       // Start the conversation with ElevenLabs using the signed URL
-      // Fix: Use origin instead of url property based on the error message
+      // Fix: Use agentId directly and the signed URL for the origin parameter
+      // The SDK requires either agentId for public agents or agentId + signedUrl for private agents
       await conversation.startSession({
-        origin: signedUrl,
+        agentId, // Required parameter
+        origin: signedUrl // Use the signed URL as the origin
       });
       
       setIsMicEnabled(true);

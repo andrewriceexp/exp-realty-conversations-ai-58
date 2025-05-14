@@ -82,6 +82,7 @@ serve(async (req) => {
     }
 
     console.log(`Making request to ElevenLabs API for agent ID: ${agentId}`);
+    console.log(`Using ElevenLabs API key: ${elevenlabsApiKey ? 'Key exists (hidden for security)' : 'Missing'}`);
     
     // Use the ElevenLabs API to get a signed URL
     const response = await fetch(
