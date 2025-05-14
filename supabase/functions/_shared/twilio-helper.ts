@@ -99,6 +99,33 @@ export async function validateTwilioRequest(req: Request, url: string, twilioAut
     const isValid = twilioSignature === calculatedSignature;
     console.log(`Signature validation ${isValid ? 'PASSED ✓' : 'FAILED ✗'}`);
     
+    // FIX: If validation fails, we need to check if the URL includes query parameters
+    // Twilio sometimes sends the signature for the base URL without query parameters
+    if (!isValid && url !== baseUrl) {
+      console.log("Validation failed with full URL, trying base URL only...");
+      
+      // Try validating with just the base URL
+      const hmacBasePath = createHmac('sha1', twilioAuthToken);
+      const baseData = Object.keys(params)
+        .sort()
+        .reduce((acc, key) => {
+          return acc + key + params[key];
+        }, baseUrl);
+        
+      hmacBasePath.update(baseData);
+      const baseUrlSignature = hmacBasePath.digest('base64');
+      
+      console.log(`Using base URL data: "${baseData}"`);
+      console.log(`Base URL calculated signature: ${baseUrlSignature}`);
+      
+      const isBaseUrlValid = twilioSignature === baseUrlSignature;
+      console.log(`Base URL validation ${isBaseUrlValid ? 'PASSED ✓' : 'FAILED ✗'}`);
+      
+      if (isBaseUrlValid) {
+        return true;
+      }
+    }
+    
     // IMPORTANT CHANGE: Currently being lenient with validation failures
     if (!isValid) {
       console.log("⚠️ Signature validation failed but continuing for testing purposes");

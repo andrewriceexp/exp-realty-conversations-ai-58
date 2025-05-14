@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -116,7 +115,7 @@ serve(async (req) => {
     // Validate Twilio request (skip validation for OPTIONS and status updates if needed)
     if (!isStatusCallback) {
       console.log('Attempting to validate Twilio request signature with user-specific auth token');
-      const isValidRequest = await validateTwilioRequest(req, fullUrl, userTwilioAuthToken, bypassValidation);
+      const isValidRequest = await validateTwilioRequest(req, req.url, userTwilioAuthToken, bypassValidation);
       
       if (!isValidRequest) {
         console.error("Twilio request validation FAILED - Returning 403 Forbidden");
