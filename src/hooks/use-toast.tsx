@@ -10,7 +10,7 @@ const TOAST_LIMIT = 10
 const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = {
-  id: string
+  id?: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
@@ -188,6 +188,16 @@ export const toast = (props: Omit<ToasterToast, "id">) => {
     type: "ADD_TOAST",
     toast: toastData,
   })
+
+  // Auto-dismiss based on duration
+  if (props.duration) {
+    setTimeout(() => {
+      toastDispatch({
+        type: "DISMISS_TOAST",
+        id,
+      })
+    }, props.duration)
+  }
 
   return id
 }

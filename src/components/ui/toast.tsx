@@ -116,6 +116,7 @@ const ToastDescription = React.forwardRef<
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
 type ToastProps = React.ComponentPropsWithoutRef<typeof Toast> & {
+  id?: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
