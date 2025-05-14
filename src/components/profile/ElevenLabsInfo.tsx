@@ -51,7 +51,6 @@ const ElevenLabsInfo = () => {
       toast({
         title: "API Key Saved",
         description: "Your ElevenLabs API key has been successfully saved.",
-        variant: "default",
       });
       
       // Refresh the user profile to get the updated data
@@ -100,7 +99,6 @@ const ElevenLabsInfo = () => {
       toast({
         title: "API Key Removed",
         description: "Your ElevenLabs API key has been removed.",
-        variant: "default",
       });
     } catch (error: any) {
       toast({
