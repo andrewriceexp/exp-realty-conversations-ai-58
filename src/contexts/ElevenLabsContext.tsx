@@ -18,7 +18,7 @@ const DEFAULT_AGENT_ID = '6Optf6WRTzp3rEyj2aiL';
 export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
 
   const getSignedUrl = async (agentId?: string): Promise<string | null> => {
@@ -26,6 +26,16 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
       toast({
         title: "Authentication required",
         description: "You need to be logged in to use the conversation AI features",
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    // Check if user has an ElevenLabs API key configured
+    if (!profile?.elevenlabs_api_key) {
+      toast({
+        title: "ElevenLabs API Key Required",
+        description: "Please configure your ElevenLabs API key in the agent configuration",
         variant: "destructive"
       });
       return null;
@@ -48,10 +58,17 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
 
     try {
       console.log("Calling elevenlabs-signed-url function with agentId:", agentIdToUse);
+      
+      // Pass the auth token explicitly to the edge function
+      const { data: authData } = await supabase.auth.getSession();
+      
       // Call the Supabase Edge Function that will generate a signed URL
       const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
         body: { 
           agentId: agentIdToUse 
+        },
+        headers: {
+          Authorization: `Bearer ${authData.session?.access_token || ''}`,
         }
       });
 
