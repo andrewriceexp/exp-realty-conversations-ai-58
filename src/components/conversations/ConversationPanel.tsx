@@ -64,7 +64,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     onError: (error) => {
       toast({
         title: "Conversation Error",
-        description: error.message || "An error occurred during the conversation",
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive"
       });
     },
