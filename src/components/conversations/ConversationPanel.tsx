@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,7 +44,9 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
-    onMessage: (message: ElevenLabsMessage) => {
+    // Force TypeScript to accept our callback by using type assertion
+    onMessage: ((message: any) => {
+      // Handle the message based on its type
       if (message.type === 'assistant_response') {
         setMessages(prev => [...prev, {
           role: 'assistant',
@@ -57,7 +60,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           timestamp: new Date()
         }]);
       }
-    },
+    }) as any,
     onError: (error) => {
       toast({
         title: "Conversation Error",
