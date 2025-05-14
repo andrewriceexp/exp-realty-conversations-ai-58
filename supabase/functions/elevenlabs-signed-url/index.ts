@@ -14,13 +14,31 @@ serve(async (req) => {
   }
 
   try {
+    // Extract the auth token from the request header
+    const authHeader = req.headers.get('Authorization')
+    
+    if (!authHeader) {
+      console.error('Unauthorized: No Authorization header provided')
+      return new Response(
+        JSON.stringify({ 
+          error: 'Unauthorized: No Authorization header provided' 
+        }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+    
+    console.log('Auth header present:', authHeader.startsWith('Bearer'))
+    
     // Create authenticated Supabase client using the request headers
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
         global: {
-          headers: { Authorization: req.headers.get('Authorization') ?? '' },
+          headers: { Authorization: authHeader },
         },
       }
     )
@@ -45,10 +63,12 @@ serve(async (req) => {
       )
     }
 
+    console.log('Authentication successful for user:', user.id)
     console.log('elevenlabs-signed-url function called')
     
     // Parse the request body
-    const { agentId } = await req.json()
+    const requestData = await req.json()
+    const { agentId } = requestData || {}
     
     if (!agentId) {
       return new Response(
@@ -81,6 +101,8 @@ serve(async (req) => {
       )
     }
 
+    console.log('Found ElevenLabs API key for user')
+    
     // Make request to ElevenLabs API to get a signed URL
     const elevenlabsResponse = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
@@ -110,6 +132,7 @@ serve(async (req) => {
     }
 
     const elevenlabsData = await elevenlabsResponse.json()
+    console.log('Successfully obtained signed URL from ElevenLabs')
 
     return new Response(
       JSON.stringify({ signed_url: elevenlabsData.signed_url }),

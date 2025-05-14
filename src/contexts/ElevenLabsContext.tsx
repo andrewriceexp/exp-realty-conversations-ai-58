@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ElevenLabsContextType {
   getSignedUrl: (agentId?: string) => Promise<string | null>;
@@ -18,7 +18,7 @@ const DEFAULT_AGENT_ID = '6Optf6WRTzp3rEyj2aiL';
 export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user, profile } = useAuth();
+  const { user, profile, session } = useAuth(); // Get session from AuthContext
   const { toast } = useToast();
 
   const getSignedUrl = async (agentId?: string): Promise<string | null> => {
@@ -59,8 +59,13 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
     try {
       console.log("Calling elevenlabs-signed-url function with agentId:", agentIdToUse);
       
-      // Pass the auth token explicitly to the edge function
-      const { data: authData } = await supabase.auth.getSession();
+      // Check if we have a valid session and access token
+      if (!session || !session.access_token) {
+        console.error("No valid session or access token available");
+        throw new Error("Authentication session is missing");
+      }
+      
+      console.log("Session access token is available for Auth");
       
       // Call the Supabase Edge Function that will generate a signed URL
       const { data, error: funcError } = await supabase.functions.invoke('elevenlabs-signed-url', {
@@ -68,7 +73,7 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
           agentId: agentIdToUse 
         },
         headers: {
-          Authorization: `Bearer ${authData.session?.access_token || ''}`,
+          Authorization: `Bearer ${session.access_token}`, // Use session access token directly
         }
       });
 
