@@ -28,9 +28,10 @@ serve(async (req) => {
     const nextConversationCount = (parseInt(conversationCount) + 1).toString();
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true';
+    const callType = url.searchParams.get('call_type') || 'prospect'; // 'prospect' or 'recruit'
     
     console.log(`Processing response for prospect: ${prospectId}, agent config: ${agentConfigId}, user: ${userId}, call log: ${callLogId}, conversation count: ${conversationCount}`);
-    console.log(`Voice ID: ${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, Bypass validation: ${bypassValidation}, Debug mode: ${debugMode}`);
+    console.log(`Voice ID: ${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, Bypass validation: ${bypassValidation}, Debug mode: ${debugMode}, Call type: ${callType}`);
     
     // Initialize Supabase clients
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -184,18 +185,29 @@ serve(async (req) => {
       try {
         console.log('Calling OpenAI to generate a response');
         
-        const systemPrompt = agentConfig.system_prompt || 
-          'You are an AI assistant for an eXp Realty agent making calls to potential clients. Your goal is to schedule a meeting with the agent. Be conversational, respectful, and aim to understand the prospect\'s needs.';
+        // Determine system prompt based on call type and user configuration
+        let systemPrompt = agentConfig.system_prompt;
+        
+        if (!systemPrompt) {
+          if (callType === 'recruit') {
+            systemPrompt = 'You are an AI assistant for an eXp Realty agent making calls to recruit other real estate agents. Your goal is to schedule a meeting with the agent to discuss joining eXp Realty. Be conversational, respectful, and aim to understand their current situation and needs. Explain the benefits of eXp Realty such as revenue sharing, cloud-based brokerage model, and superior commission splits.';
+          } else {
+            systemPrompt = 'You are an AI assistant for an eXp Realty agent making calls to potential clients. Your goal is to schedule a meeting with the agent. Be conversational, respectful, and aim to understand the prospect\'s real estate needs, whether buying, selling, or investing.';
+          }
+        }
         
         // Add prospect context if available
         let contextualPrompt = systemPrompt;
         if (prospectDetails) {
-          contextualPrompt += `\nYou are speaking with ${prospectDetails.first_name} ${prospectDetails.last_name}`;
+          contextualPrompt += `\nYou are speaking with ${prospectDetails.first_name || ''} ${prospectDetails.last_name || ''}`;
           if (prospectDetails.email) {
             contextualPrompt += `, their email is ${prospectDetails.email}`;
           }
           if (prospectDetails.notes) {
             contextualPrompt += `. Notes about them: ${prospectDetails.notes}`;
+          }
+          if (prospectDetails.property_address) {
+            contextualPrompt += `. Property address: ${prospectDetails.property_address}`;
           }
         }
         
@@ -205,8 +217,24 @@ serve(async (req) => {
           contextualPrompt += `\nThis is turn ${conversationCountNum + 1} in the conversation.`;
         }
         
+        // Add context about handling specific situations based on call type
+        if (callType === 'recruit') {
+          // Recruiting-specific context
+          contextualPrompt += `\nCommon objections from real estate agents include: being happy at current brokerage, uncertainty about eXp's model, concerns about lack of physical office, and skepticism about revenue sharing. Address objections thoughtfully but focus on scheduling a meeting with the agent for a more detailed conversation.`;
+        } else {
+          // Prospect-specific context
+          contextualPrompt += `\nCommon objections from real estate prospects include: already working with another agent, not ready to buy/sell yet, concerns about market conditions, and wanting lower commission rates. Address objections thoughtfully but focus on scheduling a meeting with the agent for a personalized consultation.`;
+        }
+        
+        // Add instruction about extracting appointment scheduling details
+        contextualPrompt += `\nIf the person expresses interest in meeting, try to get specific information about when they're available. Extract day, time preferences, and contact method (phone/email/in-person).`;
+        
+        // Model selection based on agent config
+        const modelToUse = agentConfig.llm_model || 'gpt-4o-mini';
+        const temperature = agentConfig.temperature || 0.7;
+        
         // Construct user message with the normalized input
-        const userMessage = `The prospect said: "${normalizedInput}". Generate a conversational, helpful response as a real estate assistant. Keep your response concise (maximum 3-4 sentences) and end with a question if appropriate.`;
+        const userMessage = `The ${callType === 'recruit' ? 'agent' : 'prospect'} said: "${normalizedInput}". Generate a conversational, helpful response as a real estate assistant. Keep your response concise (maximum 3-4 sentences) and end with a question if appropriate.`;
         
         // Make the OpenAI API call
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -216,12 +244,12 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: agentConfig.llm_model || 'gpt-4o-mini',
+            model: modelToUse,
             messages: [
               { role: 'system', content: contextualPrompt },
               { role: 'user', content: userMessage }
             ],
-            temperature: agentConfig.temperature || 0.7,
+            temperature: temperature,
             max_tokens: 150, // Keep responses reasonably short for voice
           }),
         });
@@ -233,6 +261,33 @@ serve(async (req) => {
         const data = await response.json();
         aiResponse = data.choices[0].message.content.trim();
         console.log(`Generated AI response: "${aiResponse}"`);
+        
+        // Store conversation in the call log if we have a call log ID
+        if (callLogId) {
+          try {
+            // Get existing transcript or create new one
+            const { data: callLog } = await supabaseAdmin
+              .from('call_logs')
+              .select('transcript')
+              .eq('id', callLogId)
+              .maybeSingle();
+            
+            let transcript = callLog?.transcript || '';
+            
+            // Append new conversation exchange
+            transcript += `\nProspect: ${normalizedInput}\nAI: ${aiResponse}\n`;
+            
+            // Update call log with the latest transcript
+            await supabaseAdmin
+              .from('call_logs')
+              .update({ transcript })
+              .eq('id', callLogId);
+              
+            console.log('Updated call log with transcript');
+          } catch (error) {
+            console.error('Error updating call log transcript:', error);
+          }
+        }
         
       } catch (error) {
         console.error('Error generating AI response:', error);
@@ -258,7 +313,7 @@ serve(async (req) => {
     // Should we continue the conversation or end the call?
     const isPositiveResponse = aiResponse.includes("Great!") || aiResponse.includes("specific time");
     const isNegativeResponse = aiResponse.includes("I understand") || aiResponse.includes("Have a great day");
-    const isEndingCall = isNegativeResponse || parseInt(conversationCount) >= 3;
+    const isEndingCall = isNegativeResponse || parseInt(conversationCount) >= 5; // Allow up to 5 turns
     
     console.log(`Conversation flow - Positive: ${isPositiveResponse}, Negative: ${isNegativeResponse}, Ending: ${isEndingCall}, Count: ${conversationCount}`);
     
@@ -301,7 +356,11 @@ serve(async (req) => {
           body: {
             text: aiResponse,
             voiceId: selectedVoiceId,
-            model: 'eleven_multilingual_v2'
+            model: 'eleven_multilingual_v2',
+            settings: {
+              stability: 0.5,
+              similarity_boost: 0.75
+            }
           }
         });
         
@@ -317,8 +376,8 @@ serve(async (req) => {
         
         console.log('ElevenLabs speech generated successfully');
         
-        // Instead of trying to play the audio directly (which Twilio doesn't support), 
-        // we'll use Twilio's <Say> with the generated text
+        // Currently, Twilio doesn't support directly playing audio from ElevenLabs
+        // Instead, we use Twilio's Say with the AI-generated text
         if (debugMode) {
           response.say("Using ElevenLabs voice synthesis.");
           response.pause({ length: 1 });
@@ -365,7 +424,8 @@ serve(async (req) => {
         voice_id: selectedVoiceId,
         conversation_count: nextConversationCount,
         bypass_validation: bypassValidation ? 'true' : undefined,
-        debug_mode: debugMode ? 'true' : undefined
+        debug_mode: debugMode ? 'true' : undefined,
+        call_type: callType
       };
       
       if (callLogId) {

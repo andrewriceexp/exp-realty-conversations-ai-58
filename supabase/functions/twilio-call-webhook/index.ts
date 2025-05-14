@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -29,8 +30,9 @@ serve(async (req) => {
     const voiceId = url.searchParams.get('voice_id');
     const bypassValidation = url.searchParams.get('bypass_validation') === 'true';
     const debugMode = url.searchParams.get('debug_mode') === 'true' || bypassValidation;
+    const callType = url.searchParams.get('call_type') || 'prospect'; // 'prospect' or 'recruit'
     
-    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}`);
+    console.log(`Query parameters: call_log_id=${callLogId}, prospect_id=${prospectId}, agent_config_id=${agentConfigId}, user_id=${userId}, voice_id=${voiceId ? voiceId.substring(0, 8) + '...' : 'undefined'}, bypass_validation=${bypassValidation}, debug_mode=${debugMode}, call_type=${callType}`);
     
     // Check path to see if this is a status callback
     const isStatusCallback = url.pathname.endsWith('/status');
@@ -142,7 +144,8 @@ serve(async (req) => {
         agentConfigId,
         userId,
         bypassValidation,
-        voiceId
+        voiceId,
+        callType
       });
       
       return new Response(debugResponse, { 
@@ -163,7 +166,8 @@ serve(async (req) => {
         voice_id: voiceId,
         conversation_count: '0',
         bypass_validation: bypassValidation ? 'true' : undefined, 
-        debug_mode: debugMode ? 'true' : undefined
+        debug_mode: debugMode ? 'true' : undefined,
+        call_type: callType
       };
       
       if (callLogId) {
@@ -186,9 +190,7 @@ serve(async (req) => {
       createGatherWithSay(response, processResponseUrl, "How can I assist you with your real estate needs today?", {
         timeout: 10,
         speechTimeout: "auto",
-        language: "en-US",
-        voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
-        method: "POST"
+        language: "en-US"
       });
       
       // Add a redirect outside the Gather (as a sibling, not a child)
@@ -218,7 +220,10 @@ serve(async (req) => {
     const response = twiml.VoiceResponse();
     
     // Fetch agent configuration to use the correct greeting
-    let greeting = "Hello, this is the eXp Realty AI assistant. I'm here to help with your real estate needs.";
+    let greeting = callType === 'recruit' 
+      ? "Hello, this is calling on behalf of eXp Realty. I'd like to discuss a potential opportunity with your brokerage."
+      : "Hello, this is the eXp Realty AI assistant. I'm calling about your real estate needs.";
+    
     let useElevenLabs = false;
     let agentVoiceId = voiceId || null; 
     
@@ -269,14 +274,51 @@ serve(async (req) => {
       useElevenLabs = true;
     }
     
+    // Set appropriate first message based on call type
+    let firstQuestion = callType === 'recruit' 
+      ? "Are you currently a licensed real estate agent? I'd love to discuss some opportunities at eXp Realty."
+      : "How can I assist you with your real estate needs today?";
+    
     // Say the greeting
     if (useElevenLabs) {
-      // When using ElevenLabs, use a nicer Twilio voice as fallback for initial greeting
-      response.say({
-        voice: 'Polly.Amy-Neural' // Use a higher quality voice
-      }, greeting);
+      try {
+        // Try to generate the greeting with ElevenLabs
+        console.log(`Generating initial greeting using ElevenLabs with voice ID: ${agentVoiceId}`);
+        
+        // Call the generate-speech edge function
+        const speechResponse = await supabaseAdmin.functions.invoke('generate-speech', {
+          body: {
+            text: greeting,
+            voiceId: agentVoiceId,
+            model: 'eleven_multilingual_v2',
+            settings: {
+              stability: 0.5,
+              similarity_boost: 0.75
+            }
+          }
+        });
+        
+        if (speechResponse.error) {
+          throw new Error(`ElevenLabs error: ${speechResponse.error}`);
+        }
+        
+        // When using ElevenLabs, use a nicer Twilio voice as fallback
+        response.say({
+          voice: 'Polly.Amy-Neural' // Use a higher quality voice
+        }, greeting);
+      } catch (error) {
+        console.error('Error generating ElevenLabs speech for greeting:', error);
+        
+        // Fall back to Polly voice
+        response.say({
+          voice: 'Polly.Amy-Neural'
+        }, greeting);
+      }
     } else {
-      response.say(greeting);
+      // Use Polly voice for better quality
+      response.say({
+        voice: 'Polly.Amy-Neural'
+      }, greeting);
     }
     
     // Add a pause to make it more natural
@@ -291,7 +333,8 @@ serve(async (req) => {
       voice_id: agentVoiceId,
       conversation_count: '0',
       bypass_validation: bypassValidation ? 'true' : undefined, 
-      debug_mode: debugMode ? 'true' : undefined
+      debug_mode: debugMode ? 'true' : undefined,
+      call_type: callType
     };
     
     if (callLogId) {
@@ -302,12 +345,10 @@ serve(async (req) => {
     const processResponseUrl = encodeXmlUrl(processResponseBaseUrl, processResponseParams);
     
     // Create a Gather with Say element using the modified twiml builder
-    createGatherWithSay(response, processResponseUrl, "How can I assist you with your real estate needs today?", {
+    createGatherWithSay(response, processResponseUrl, firstQuestion, {
       timeout: 10,
       speechTimeout: "auto",
-      language: "en-US",
-      voice: useElevenLabs ? 'Polly.Amy-Neural' : undefined,
-      method: "POST"
+      language: "en-US"
     });
     
     // Add a redirect outside the Gather (as a sibling, not a child)
