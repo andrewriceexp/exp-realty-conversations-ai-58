@@ -1,6 +1,7 @@
-import { useState } from 'react';
+
+import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 
 export interface MakeCallParams {
@@ -39,14 +40,14 @@ export interface CallStatusResponse {
 export function useTwilioCall() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
-  const { session, user } = useAuth();
+  const { session, user, profile } = useAuth();
 
   // Make sure we get and log the user object from auth context
   console.log("[TwilioCall] Auth user:", user?.id);
   console.log("[TwilioCall] Auth session:", session?.user?.id);
 
   // Check for valid authentication
-  const checkAuthentication = () => {
+  const checkAuthentication = useCallback(() => {
     if (!session?.access_token) {
       console.error("[TwilioCall] No authentication token available");
       toast({
@@ -71,7 +72,31 @@ export function useTwilioCall() {
     }
     
     return userId;
-  };
+  }, [session, user, toast]);
+
+  // Function to validate Twilio credentials without making a call
+  const validateTwilioCredentials = useCallback(async (userId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-twilio-creds', {
+        body: { user_id: userId }
+      });
+      
+      if (error) {
+        console.error("[TwilioCall] Error verifying credentials:", error);
+        return false;
+      }
+      
+      if (!data?.valid) {
+        console.error("[TwilioCall] Invalid Twilio credentials:", data?.message);
+        return false;
+      }
+      
+      return true;
+    } catch (err) {
+      console.error("[TwilioCall] Unexpected error validating credentials:", err);
+      return false;
+    }
+  }, []);
 
   const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
     const userId = checkAuthentication();
@@ -100,24 +125,37 @@ export function useTwilioCall() {
           userId: String(userId) // Ensure userId is passed as string
         });
       } else {
-        // Do a quick check if the user has Twilio credentials set up
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('twilio_account_sid, twilio_auth_token')
-          .eq('id', userId)
-          .maybeSingle();
+        // Skip validation if in bypass mode
+        if (!params.bypassValidation) {
+          // Do a quick check if the user has Twilio credentials set up
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('twilio_account_sid, twilio_auth_token')
+            .eq('id', userId)
+            .maybeSingle();
 
-        if (profileError) {
-          console.error("[TwilioCall] Error fetching profile:", profileError);
-        }
+          if (profileError) {
+            console.error("[TwilioCall] Error fetching profile:", profileError);
+          }
 
-        if (!profileData?.twilio_account_sid || !profileData?.twilio_auth_token) {
-          console.error("[TwilioCall] Missing Twilio credentials");
-          return {
-            success: false,
-            message: "Twilio credentials are not configured. Please update your profile with Twilio credentials.",
-            code: "TWILIO_CONFIG_INCOMPLETE"
-          };
+          if (!profileData?.twilio_account_sid || !profileData?.twilio_auth_token) {
+            console.error("[TwilioCall] Missing Twilio credentials");
+            return {
+              success: false,
+              message: "Twilio credentials are not configured. Please update your profile with Twilio credentials.",
+              code: "TWILIO_CONFIG_INCOMPLETE"
+            };
+          }
+          
+          // Validate Twilio credentials
+          const credentialsValid = await validateTwilioCredentials(String(userId));
+          if (!credentialsValid) {
+            return {
+              success: false,
+              message: "Your Twilio credentials appear to be invalid. Please check your account SID and auth token.",
+              code: "TWILIO_INVALID_CREDENTIALS"
+            };
+          }
         }
 
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
@@ -215,6 +253,16 @@ export function useTwilioCall() {
     try {
       console.log("[TwilioCall] Making ElevenLabs call with agent ID:", params.elevenLabsAgentId);
       console.log("[TwilioCall] Using user ID:", userId);
+      
+      // Check if ElevenLabs API key is configured for user
+      if (!params.bypassValidation && !profile?.elevenlabs_api_key) {
+        console.error("[TwilioCall] ElevenLabs API key not configured");
+        return {
+          success: false,
+          message: "ElevenLabs API key is not configured in your profile",
+          code: "ELEVENLABS_API_KEY_MISSING"
+        };
+      }
       
       // Fetch the prospect details to get the phone number
       const { data: prospectData, error: prospectError } = await supabase

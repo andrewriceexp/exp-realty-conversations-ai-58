@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Phone, Loader2, AlertCircle, Settings, Bug, Headphones } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
+import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
@@ -44,7 +45,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   
   const { makeCall, makeDevelopmentCall, verifyCallStatus, isLoading: isCallingLoading } = useTwilioCall();
   const { getVoices } = useElevenLabs();
-  const { user } = useAuth();
+  const { apiKeyStatus } = useElevenLabsAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
 
   // Default ElevenLabs voices
@@ -53,6 +55,46 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
     { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" }, 
     { id: "9BWtsMINqrJLrRacOk9x", name: "Aria" }
   ];
+
+  // Check for necessary configurations before allowing calls
+  const [configurationStatus, setConfigurationStatus] = useState<{
+    twilioSetup: boolean;
+    elevenLabsSetup: boolean;
+    message: string | null;
+  }>({
+    twilioSetup: false,
+    elevenLabsSetup: false,
+    message: null
+  });
+
+  // Verify configuration on component mount
+  useEffect(() => {
+    const checkConfiguration = async () => {
+      try {
+        // Check if user has Twilio credentials
+        const hasTwilioSetup = !!(profile?.twilio_account_sid && 
+                              profile?.twilio_auth_token && 
+                              profile?.twilio_phone_number);
+        
+        // Check if ElevenLabs API key is valid
+        const hasElevenLabsSetup = apiKeyStatus === 'valid';
+
+        setConfigurationStatus({
+          twilioSetup: hasTwilioSetup,
+          elevenLabsSetup: hasElevenLabsSetup,
+          message: !hasTwilioSetup 
+            ? "Twilio credentials are not configured"
+            : !hasElevenLabsSetup && useElevenLabsVoice
+            ? "ElevenLabs API key is not configured or invalid"
+            : null
+        });
+      } catch (error) {
+        console.error("Error checking configuration:", error);
+      }
+    };
+
+    checkConfiguration();
+  }, [profile, apiKeyStatus, useElevenLabsVoice]);
 
   // Add effect to periodically check call status
   useEffect(() => {
@@ -220,6 +262,19 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       });
       return;
     }
+
+    // Check configuration status before proceeding
+    if (!configurationStatus.twilioSetup && !bypassValidation) {
+      setCallError("Twilio credentials are not configured. Please update your profile settings.");
+      setErrorCode("TWILIO_CONFIG_INCOMPLETE");
+      return;
+    }
+
+    if (useElevenLabsVoice && !configurationStatus.elevenLabsSetup && !bypassValidation) {
+      setCallError("ElevenLabs API key is not configured or invalid. Please update your profile settings.");
+      setErrorCode("ELEVENLABS_API_KEY_MISSING");
+      return;
+    }
     
     try {
       console.log('Making call with:', {
@@ -333,6 +388,45 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
            ));
   };
 
+  // Add configuration warnings to the dialog
+  const renderConfigWarnings = () => {
+    const warnings = [];
+    
+    if (!configurationStatus.twilioSetup && !bypassValidation) {
+      warnings.push(
+        <Alert key="twilio" variant="warning" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Twilio credentials are not configured. Calls may fail.
+            <div className="mt-2">
+              <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+              </Link>
+            </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    if (useElevenLabsVoice && !configurationStatus.elevenLabsSetup && !bypassValidation) {
+      warnings.push(
+        <Alert key="eleven" variant="warning" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            ElevenLabs API key is not configured or invalid. Custom voices may not work.
+            <div className="mt-2">
+              <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+              </Link>
+            </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    return warnings.length > 0 ? warnings : null;
+  };
+
   return (
     <>
       <Button variant="outline" size="sm" onClick={openCallDialog}>
@@ -356,7 +450,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                   {callError}
                   {isProfileError() && (
                     <div className="mt-2">
-                      <Link to="/profile" className="flex items-center text-sm font-medium underline">
+                      <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
                         <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
                       </Link>
                     </div>
@@ -364,6 +458,8 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                 </AlertDescription>
               </Alert>
             )}
+            
+            {renderConfigWarnings()}
             
             {callStatus && (
               <Alert variant={callStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">

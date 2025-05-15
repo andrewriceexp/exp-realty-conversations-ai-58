@@ -5,7 +5,7 @@ export {
   toast,
   Toaster,
   ToastAction,
-  setToast,  // Add this export
+  toast as setToast,  // Export toast as setToast for backward compatibility
   type Toast,
   type ToastProps,
   type ToastActionElement,
