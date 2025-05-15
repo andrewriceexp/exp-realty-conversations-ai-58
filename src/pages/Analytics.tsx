@@ -1,11 +1,10 @@
-
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/lib/supabase';
 import { DashboardStats } from '@/types';
-import { format, subDays, startOfDay, endOfDay, formatDistanceToNow } from 'date-fns';
+import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -110,25 +109,24 @@ const Analytics = () => {
       const averageCallDuration = totalCalls ? Math.round(totalDuration / totalCalls) : 0;
       
       // Safely handle count values from Supabase responses
-      const totalProspectsCount = typeof prospectData?.[0]?.count === 'number' 
-        ? prospectData[0].count 
-        : parseInt(prospectData?.[0]?.count as string || '0');
+      const getCountValue = (countData: any) => {
+        if (!countData || !countData[0]) return 0;
+        
+        // Handle count value which might be returned in different formats
+        const countValue = countData[0].count;
+        if (typeof countValue === 'number') {
+          return countValue;
+        } else if (typeof countValue === 'string') {
+          return parseInt(countValue, 10) || 0;
+        }
+        return 0;
+      };
       
-      const pendingProspectsCount = typeof pendingProspectsData?.[0]?.count === 'number'
-        ? pendingProspectsData[0].count
-        : parseInt(pendingProspectsData?.[0]?.count as string || '0');
-      
-      const completedProspectsCount = typeof completedProspectsData?.[0]?.count === 'number'
-        ? completedProspectsData[0].count
-        : parseInt(completedProspectsData?.[0]?.count as string || '0');
-      
-      const todayCallsCount = typeof todayCallsData?.[0]?.count === 'number'
-        ? todayCallsData[0].count
-        : parseInt(todayCallsData?.[0]?.count as string || '0');
-      
-      const weekCallsCount = typeof weekCallsData?.[0]?.count === 'number'
-        ? weekCallsData[0].count
-        : parseInt(weekCallsData?.[0]?.count as string || '0');
+      const totalProspectsCount = getCountValue(prospectData);
+      const pendingProspectsCount = getCountValue(pendingProspectsData);
+      const completedProspectsCount = getCountValue(completedProspectsData);
+      const todayCallsCount = getCountValue(todayCallsData);
+      const weekCallsCount = getCountValue(weekCallsData);
       
       // Prepare dashboard stats
       const dashboardStats: DashboardStats = {
