@@ -174,4 +174,5 @@ export interface DashboardStats {
   successRate: number;
   callsToday?: number; // Added to match Analytics.tsx usage
   callsThisWeek?: number; // Added to fix build error in Analytics.tsx
+  pendingProspects?: number; // Added to fix build error in Analytics.tsx
 }
