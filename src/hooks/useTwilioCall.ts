@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 export interface MakeCallParams {
@@ -292,7 +292,7 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
-    // Ensure userId is always set
+    // Ensure userId is always set - THIS WAS THE CRITICAL FIX!
     const userId = params.userId || user?.id || session?.user?.id;
     if (!userId) {
       console.error("[TwilioCall:Dev] No user ID available");
@@ -319,7 +319,7 @@ export function useTwilioCall() {
             agent_config_id: params.agentConfigId,
             user_id: userId, // Use the resolved userId
             bypass_validation: true,
-            debug_mode: params.debugMode || false,
+            debug_mode: params.debugMode || true, // For development calls, always set debug mode
             voice_id: params.voiceId
           }
         });
@@ -373,11 +373,21 @@ export function useTwilioCall() {
 
   // Add verifyCallStatus function to check the status of a call
   const verifyCallStatus = async (callSid: string): Promise<CallStatusResponse> => {
+    if (!callSid) {
+      return {
+        success: false,
+        message: "No call SID provided"
+      };
+    }
+    
     try {
       console.log("[TwilioCall] Verifying status for call SID:", callSid);
       
       const { data, error } = await supabase.functions.invoke('twilio-call-status', {
-        body: { call_sid: callSid }
+        body: { 
+          call_sid: callSid,
+          user_id: user?.id // Also pass user ID for accessing Twilio credentials
+        }
       });
 
       if (error) {
@@ -430,7 +440,10 @@ export function useTwilioCall() {
       console.log("[TwilioCall] Ending call with SID:", sidToEnd);
 
       const { data, error } = await supabase.functions.invoke('twilio-end-call', {
-        body: { call_sid: sidToEnd }
+        body: { 
+          call_sid: sidToEnd,
+          user_id: user?.id // Added user ID for accessing Twilio credentials
+        }
       });
 
       if (error) {

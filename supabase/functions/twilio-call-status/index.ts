@@ -13,161 +13,180 @@ serve(async (req) => {
   }
   
   try {
-    const { callSid, userId } = await req.json();
-
-    if (!callSid) {
-      throw new Error("Call SID is required");
+    // Parse request body
+    let body;
+    try {
+      body = await req.json();
+    } catch (error) {
+      console.error("Error parsing request body:", error.message);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: "Invalid request format. Expected JSON body.",
+          error: error.message
+        }), 
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
     }
     
-    console.log(`Checking call status for SID: ${callSid}`);
-
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseAdminKey);
+    // Validate required parameters
+    const callSid = body.call_sid;
     
-    // Get user profile with Twilio credentials
-    let profile = null;
+    if (!callSid) {
+      console.error("Call SID is required but was not provided");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: "Call SID is required",
+          error: "MISSING_PARAMETER"
+        }), 
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+    
+    console.log(`Checking status for call SID: ${callSid}`);
+    
+    // Initialize Supabase client (for future use if we need to log/store results)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("Missing Supabase credentials in environment");
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: "Server configuration error", 
+          error: "SERVER_CONFIG_ERROR"
+        }), 
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+    
+    // Get user Twilio credentials if userId is provided
+    const userId = body.user_id;
+    let twilioAccountSid = null;
+    let twilioAuthToken = null;
     
     if (userId) {
-      console.log(`Fetching profile for user ID: ${userId}`);
-      const { data: profileData, error: profileError } = await supabase
+      // Initialize admin client to access profiles
+      const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      if (!supabaseAdminKey) {
+        console.error("Missing Supabase admin key");
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: "Server configuration error", 
+            error: "SERVER_CONFIG_ERROR"
+          }), 
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+      
+      const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey);
+      const { data: profile, error: profileError } = await supabaseAdmin
         .from('profiles')
-        .select('*')
+        .select('twilio_account_sid, twilio_auth_token')
         .eq('id', userId)
         .maybeSingle();
-        
-      if (profileError || !profileData) {
+      
+      if (profileError) {
         console.error("Error fetching user profile:", profileError);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          message: "Error fetching user profile. User profile not found."
-        }), {
-          status: 200, // Return 200 instead of error code to prevent client errors
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      } else if (profile) {
+        twilioAccountSid = profile.twilio_account_sid;
+        twilioAuthToken = profile.twilio_auth_token;
       }
-      
-      profile = profileData;
-      
-      // Verify Twilio credentials presence
-      if (!profile.twilio_account_sid || !profile.twilio_auth_token) {
-        console.error("Missing Twilio credentials for user");
-        return new Response(JSON.stringify({ 
-          success: false, 
-          message: "Twilio configuration incomplete. Please add your Twilio credentials."
-        }), {
-          status: 200, // Return 200 instead of error code to prevent client errors
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    } else {
-      console.warn("No userId provided - will try to find profile from call_logs");
-      // Try to find the user ID from call_logs table using callSid
-      // Fixed the column name from call_sid to twilio_call_sid
-      const { data: callLog, error: callLogError } = await supabase
-        .from('call_logs')
-        .select('user_id')
-        .eq('twilio_call_sid', callSid)
-        .maybeSingle();
-        
-      if (callLogError || !callLog || !callLog.user_id) {
-        console.error("Could not find user ID from call logs:", callLogError);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          message: "Could not determine which user's Twilio credentials to use"
-        }), {
-          status: 200, // Return 200 instead of error code to prevent client errors
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      // Now fetch the profile using the user ID from call logs
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', callLog.user_id)
-        .maybeSingle();
-        
-      if (profileError || !profileData) {
-        console.error("Error fetching user profile from call log user ID:", profileError);
-        return new Response(JSON.stringify({ 
-          success: false, 
-          message: "Error fetching user profile from call log reference"
-        }), {
-          status: 200, // Return 200 instead of error code to prevent client errors
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      profile = profileData;
     }
     
-    // Initialize Twilio client with user credentials
-    try {
-      console.log(`Initializing Twilio client with account SID: ${profile.twilio_account_sid.substring(0, 8)}...`);
-      const twilioClient = twilio(profile.twilio_account_sid, profile.twilio_auth_token);
+    // Fall back to environment variables if no user credentials
+    if (!twilioAccountSid || !twilioAuthToken) {
+      twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
       
-      // Call Twilio API to get call status
-      console.log(`Fetching call status from Twilio for SID: ${callSid}`);
+      if (!twilioAccountSid || !twilioAuthToken) {
+        console.error("No Twilio credentials available");
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: "Twilio credentials not available", 
+            error: "TWILIO_CREDS_UNAVAILABLE"
+          }), 
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+    }
+    
+    // Initialize Twilio client
+    const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+    
+    try {
+      // Fetch call status from Twilio
       const call = await twilioClient.calls(callSid).fetch();
       
-      console.log(`Call status retrieved: ${call.status}`);
-      
-      // Update call log if needed
-      try {
-        // Fixed column name from call_sid to twilio_call_sid
-        const { data: callLog, error: callLogError } = await supabase
-          .from('call_logs')
-          .select('id, call_status')
-          .eq('twilio_call_sid', callSid)
-          .maybeSingle();
-          
-        if (!callLogError && callLog && callLog.call_status !== call.status) {
-          console.log(`Updating call log ${callLog.id} status from ${callLog.call_status} to ${call.status}`);
-          await supabase
-            .from('call_logs')
-            .update({ call_status: call.status })
-            .eq('twilio_call_sid', callSid);
+      // Create the response
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: call.status,
+          duration: call.duration,
+          timestamp: new Date().toISOString(),
+          direction: call.direction,
+          from: call.from,
+          to: call.to,
+          price: call.price
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
         }
-      } catch (updateError) {
-        console.error("Error updating call log status:", updateError);
-        // Continue anyway - this is not critical
-      }
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        call_status: call.status,
-        call_direction: call.direction,
-        call_duration: call.duration,
-        call_price: call.price,
-        call_answered_by: call.answeredBy,
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-      
+      );
     } catch (twilioError) {
-      console.error("Error fetching call status from Twilio:", twilioError);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: twilioError.message || "Error fetching call status from Twilio",
-        error_code: twilioError.code
-      }), {
-        status: 200, // Return 200 to prevent client errors
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.error("Twilio API error:", twilioError);
+      
+      // Determine if this is an authentication error or other error
+      const errorMessage = twilioError.message || "Unknown Twilio error";
+      const statusCode = twilioError.status || 400;
+      const errorCode = twilioError.code || "TWILIO_ERROR";
+      
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: errorMessage,
+          code: errorCode
+        }),
+        {
+          status: statusCode,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
     }
-    
   } catch (error) {
     console.error("Unexpected error in twilio-call-status:", error);
     
-    return new Response(JSON.stringify({ 
-      success: false, 
-      message: error.message || "An unexpected error occurred",
-    }), {
-      status: 200, // Return 200 to prevent client errors
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error: "UNEXPECTED_ERROR"
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
   }
 });
