@@ -6,7 +6,7 @@ import twilio from 'npm:twilio@3.84.1';
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, elevenlabs-signature, x-elevenlabs-api-key, x-deno-subhost, twilio-signature, X-Twilio-Signature",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
@@ -31,7 +31,7 @@ export async function validateTwilioRequest(request: Request, url: string, authT
     }
     
     // Get Twilio signature from headers
-    const signature = request.headers.get("X-Twilio-Signature");
+    const signature = request.headers.get("X-Twilio-Signature") || request.headers.get("twilio-signature");
     if (!signature) {
       console.warn("No Twilio signature found in request headers");
       return false;

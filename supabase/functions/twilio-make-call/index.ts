@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { corsHeaders } from "../_shared/cors.ts";
-import * as twilio from "https://esm.sh/twilio@4.20.0";
+import twilio from 'npm:twilio@3.84.1';
 
 console.log("Function \"twilio-make-call\" up and running!");
 
@@ -248,8 +248,8 @@ serve(async (req) => {
         console.log("Initializing Twilio client with account SID:", accountSid.substring(0, 5) + "...");
         
         try {
-          // Create a properly initialized Twilio client
-          const twilioClient = twilio.Twilio(accountSid, authToken);
+          // Create a properly initialized Twilio client - FIXED initialization
+          const twilioClient = twilio(accountSid, authToken);
           
           console.log(`Initiating Twilio call to ${prospectPhoneNumber} from ${userTwilioPhoneNumber}`);
           
