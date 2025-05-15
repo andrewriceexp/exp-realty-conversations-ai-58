@@ -5,6 +5,7 @@ export {
   toast,
   Toaster,
   ToastAction,
+  setToast,  // Add this export
   type Toast,
   type ToastProps,
   type ToastActionElement,

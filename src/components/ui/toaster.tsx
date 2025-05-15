@@ -3,7 +3,7 @@
 
 import { Toaster as ToastComponent } from "@/hooks/use-toast";
 import { useEffect } from "react";
-import { setToast, useToast } from "@/hooks/use-toast";
+import { useToast, setToast } from "@/hooks/use-toast";
 
 export function Toaster() {
   // Initialize the toast function when the component mounts
