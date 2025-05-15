@@ -21,14 +21,18 @@ serve(async (req) => {
     const callLogId = url.searchParams.get("call_log_id");
     const debug = url.searchParams.get("debug") === "true";
     
-    // Validate required parameters
-    if (!agentId) {
-      console.error("Missing required parameter: agent_id");
-      throw new Error("Missing agent_id parameter");
+    // CRITICAL FIX: Supply default ElevenLabs agent ID if missing
+    const finalAgentId = agentId || Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+    
+    if (!finalAgentId) {
+      console.error("No agent_id parameter provided and no default agent available");
+      throw new Error("Agent ID is required for calling. Please specify an agent_id parameter.");
+    } else if (!agentId) {
+      console.warn(`No agent_id parameter provided, using default: ${finalAgentId}`);
     }
     
     console.log("Webhook triggered with params:", {
-      agentId,
+      agentId: finalAgentId,
       voiceId: voiceId || "default",
       userId: userId || "none",
       callLogId: callLogId || "none",
@@ -57,8 +61,8 @@ serve(async (req) => {
     
     // Log truncated Twilio parameters for debugging
     console.log("Twilio parameters:", 
-      JSON.stringify(twilioParams).substring(0, 100) + 
-      (JSON.stringify(twilioParams).length > 100 ? "..." : "")
+      JSON.stringify(twilioParams).substring(0, 200) + 
+      (JSON.stringify(twilioParams).length > 200 ? "..." : "")
     );
     
     // Get the server hostname - CRITICAL CHANGE: Use the Supabase project ref in the URL
@@ -70,9 +74,8 @@ serve(async (req) => {
     // Add query parameters
     const params = new URLSearchParams();
     
-    if (agentId) {
-      params.append("agent_id", agentId);
-    }
+    // CRITICAL: Always use the final agent ID (original or default)
+    params.append("agent_id", finalAgentId);
     
     if (voiceId) {
       params.append("voice_id", voiceId);
@@ -122,15 +125,15 @@ serve(async (req) => {
               direction: 'inbound',
               metadata: {
                 voice_id: voiceId,
-                agent_id: agentId,
+                agent_id: finalAgentId,
                 debug_mode: debug,
                 twilio_params: twilioParams
               }
             };
             
             // Set required fields that might not be in the URL params
-            if (agentId) {
-              callData.agent_id = agentId;
+            if (finalAgentId) {
+              callData.agent_id = finalAgentId;
             }
             
             try {

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -196,6 +195,7 @@ serve(async (req) => {
         const params = new URLSearchParams();
         
         // Get agent ID from agent config
+        let foundAgentId = null;
         if (agent_config_id) {
           const { data: agentConfig } = await supabaseClient
             .from('agent_configs')
@@ -204,17 +204,33 @@ serve(async (req) => {
             .maybeSingle();
             
           if (agentConfig?.elevenlabs_agent_id) {
+            foundAgentId = agentConfig.elevenlabs_agent_id;
             params.append("agent_id", agentConfig.elevenlabs_agent_id);
             console.log("Using agent_id from config:", agentConfig.elevenlabs_agent_id);
           } else {
             console.warn("No elevenlabs_agent_id found in agent_config");
+            
+            // CRITICAL FIX: Add fallback agent ID when not found in the database
+            const defaultAgentId = Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+            params.append("agent_id", defaultAgentId);
+            foundAgentId = defaultAgentId;
+            console.log("Using fallback agent_id:", defaultAgentId);
           }
         }
         
         // Use the explicitly provided agent ID if available (overrides config)
         if (body.agent_id) {
           params.append("agent_id", body.agent_id);
+          foundAgentId = body.agent_id;
           console.log("Using explicitly provided agent_id:", body.agent_id);
+        }
+        
+        // CRITICAL FIX: Check if we have an agent ID
+        if (!foundAgentId) {
+          const defaultAgentId = Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+          params.append("agent_id", defaultAgentId);
+          foundAgentId = defaultAgentId;
+          console.log("No agent ID found in any source, using default agent_id:", defaultAgentId);
         }
         
         if (voiceId) {

@@ -9,7 +9,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
-
+  
   try {
     // Get URL parameters from the incoming request
     const url = new URL(req.url);
@@ -27,7 +27,17 @@ serve(async (req) => {
     
     // Build query parameters
     const params = new URLSearchParams();
-    if (agentId) params.append("agent_id", agentId);
+    if (agentId) {
+      params.append("agent_id", agentId);
+    } else {
+      // CRITICAL FIX: Add a default agent_id if none was provided
+      // This ensures we always have an agent_id available
+      console.log("No agent_id provided, using default value from Deno.env or hardcoded backup");
+      const defaultAgentId = Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+      params.append("agent_id", defaultAgentId);
+      console.log(`Using default agent_id: ${defaultAgentId}`);
+    }
+
     if (voiceId) params.append("voice_id", voiceId);
     if (userId) params.append("user_id", userId);
     if (callLogId) params.append("call_log_id", callLogId);
@@ -47,10 +57,10 @@ serve(async (req) => {
         for (const [key, value] of formData.entries()) {
           twilioParams[key] = value;
         }
-        console.log("Received Twilio parameters:", JSON.stringify(twilioParams).substring(0, 100) + "...");
+        console.log("Received Twilio parameters:", JSON.stringify(twilioParams).substring(0, 200) + "...");
       } else if (contentType.includes("application/json")) {
         twilioParams = await req.json();
-        console.log("Received JSON parameters:", JSON.stringify(twilioParams).substring(0, 100) + "...");
+        console.log("Received JSON parameters:", JSON.stringify(twilioParams).substring(0, 200) + "...");
       }
     } catch (error) {
       console.warn("Error parsing request data:", error.message);
@@ -63,18 +73,32 @@ serve(async (req) => {
     // CRITICAL FIX: Set the required x-deno-subhost header
     headers.set("x-deno-subhost", supabaseProjectRef);
     
-    // CRITICAL FIX: Add explicit authorization header 
-    headers.set("Authorization", "Bearer " + Deno.env.get("SUPABASE_ANON_KEY"));
+    // CRITICAL FIX: Always set the Authorization header with SUPABASE_ANON_KEY
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (anonKey) {
+      console.log("Found SUPABASE_ANON_KEY, setting Authorization header");
+      headers.set("Authorization", `Bearer ${anonKey}`);
+    } else {
+      console.warn("SUPABASE_ANON_KEY environment variable not found - expect 401 errors!");
+    }
     
-    // Copy any Twilio signature headers if present (could be under different case variations)
-    const twilioSignature = req.headers.get("twilio-signature") || 
-                           req.headers.get("X-Twilio-Signature") || 
-                           req.headers.get("x-twilio-signature");
+    // Copy any Twilio signature headers if present (handle ALL possible variations)
+    const twilioSignatures = [
+      req.headers.get("twilio-signature"), 
+      req.headers.get("X-Twilio-Signature"),
+      req.headers.get("x-twilio-signature")
+    ].filter(Boolean);
     
-    if (twilioSignature) {
-      console.log("Found Twilio signature, forwarding it");
-      headers.set("twilio-signature", twilioSignature);
-      headers.set("X-Twilio-Signature", twilioSignature);
+    if (twilioSignatures.length > 0) {
+      console.log(`Found ${twilioSignatures.length} Twilio signature header(s), forwarding them`);
+      // Set all possible variations to ensure the signature is properly forwarded
+      twilioSignatures.forEach(signature => {
+        headers.set("twilio-signature", signature);
+        headers.set("X-Twilio-Signature", signature);
+        headers.set("x-twilio-signature", signature);
+      });
+    } else {
+      console.warn("No Twilio signature headers found in the request");
     }
     
     // Copy any other authorization headers if present
@@ -121,6 +145,8 @@ serve(async (req) => {
     console.log(`Proxy received response with status: ${response.status}`);
     if (response.status !== 200) {
       console.error(`Error from target function: ${responseData}`);
+    } else {
+      console.log("Successfully forwarded request and received 200 OK response");
     }
     
     // Return the response from the target function

@@ -1,155 +1,55 @@
-
-// Helper functions for TwiML generation
-
-/**
- * Create a TwiML response with a WebSocket stream
- * @param host - The host server URL
- * @param params - Optional parameters to include in the WebSocket URL
- * @returns XML string for TwiML response
- */
-export function createWebSocketStreamTwiML(host: string, params?: Record<string, string>): string {
-  // Remove any trailing slashes from host
-  const cleanHost = host.replace(/\/+$/, '');
-  
-  // Build the WebSocket URL for media streaming
-  const wsProtocol = cleanHost.startsWith('https') ? 'wss' : 'ws';
-  let mediaStreamUrl = `${wsProtocol}://${cleanHost.replace(/^https?:\/\//, '')}/twilio-media-stream`;
-  
-  // Add URL parameters if present
-  if (params) {
-    const urlParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value) {
-        urlParams.append(key, value);
-      }
-    }
-    
-    const paramString = urlParams.toString();
-    if (paramString) {
-      mediaStreamUrl += `?${paramString}`;
-    }
-  }
-
-  // Create the TwiML response with WebSocket stream
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Connect>
-    <Stream url="${mediaStreamUrl}" />
-  </Connect>
-</Response>`;
-
-  return twiml;
-}
+// Helper functions to generate TwiML responses for Twilio
 
 /**
- * Create a standard TwiML HTTP response
- * @param twimlString - TwiML XML string
- * @param headers - Additional headers to include
- * @returns Response object
- */
-export function createTwiMLResponse(twimlString: string, headers: Record<string, string> = {}): Response {
-  return new Response(twimlString, {
-    headers: {
-      'Content-Type': 'text/xml',
-      ...headers
-    }
-  });
-}
-
-/**
- * Create an error response in TwiML format
- * @param errorMessage - Error message to include
- * @returns TwiML string with error message
- */
-export function createErrorResponse(errorMessage: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>Error: ${errorMessage}</Say>
-  <Hangup />
-</Response>`;
-}
-
-/**
- * Encode URL parameters safely for use in TwiML
- * @param baseUrl - Base URL for the webhook
- * @param params - URL parameters to encode
- * @returns XML-safe encoded URL 
- */
-export function encodeXmlUrl(baseUrl: string, params: Record<string, string | undefined>): string {
-  // Build URL with parameters
-  const url = new URL(baseUrl);
-  
-  // Add parameters that are defined
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) {
-      url.searchParams.append(key, value);
-    }
-  }
-  
-  // XML-encode the URL
-  return url.toString().replace(/&/g, '&amp;');
-}
-
-/**
- * Helper to create a TwiML Gather with Say element 
- * Ensures proper nesting and voice attributes are applied correctly
- */
-export function createGatherWithSay(
-  response: any, 
-  actionUrl: string, 
-  sayText: string, 
-  gatherOptions: Record<string, any> = {}
-) {
-  // Create the Gather element with proper action URL
-  const gather = response.gather({
-    input: 'speech dtmf',
-    action: actionUrl,
-    ...gatherOptions
-  });
-  
-  // Add Say element inside the Gather
-  gather.say(sayText);
-  
-  return gather;
-}
-
-/**
- * Create a safe TwiML response with timeout protection
- * This prevents the function from hanging if TwiML generation times out
- */
-export function createTimeoutSafetyTwiML(): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>I'm sorry, but I'm having trouble understanding. Please try again later.</Say>
-  <Pause length="1"/>
-  <Hangup />
-</Response>`;
-}
-
-/**
- * Generate a TwiML response for connecting to a WebSocket stream
- * This is the main function used by twilio-call-webhook
- * @param mediaStreamUrl - The WebSocket URL to connect to
- * @param debug - Whether to include debug information
- * @returns TwiML string for the response
+ * Generates a TwiML response with a Connect and Stream tag
+ * @param mediaStreamUrl The WebSocket stream URL to connect to
+ * @param debug Whether to include additional debugging information
+ * @returns TwiML response as a string
  */
 export function generateTwiMLResponse(mediaStreamUrl: string, debug: boolean = false): string {
-  // Create basic TwiML with WebSocket stream
+  // Basic header for all TwiML responses
   let twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
+<Response>`;
+
+  // If debug mode is enabled, add a Say tag with debugging information
+  if (debug) {
+    twiml += `
+  <Say>Debug mode is enabled. Connecting to media stream at ${truncateUrl(mediaStreamUrl)}.</Say>`;
+  }
+
+  // Add the Connect and Stream tags
+  twiml += `
   <Connect>
     <Stream url="${mediaStreamUrl}" />
   </Connect>`;
-  
-  // Add debug information if requested
-  if (debug) {
-    twiml += `
-  <Say>Debug mode enabled. Using stream URL: ${mediaStreamUrl.replace(/&/g, ' and ')}</Say>`;
-  }
-  
-  // Close the response
+
+  // Close the Response tag
   twiml += `
 </Response>`;
 
   return twiml;
+}
+
+/**
+ * Helper function to truncate URLs for logging/debugging
+ * @param url The URL to truncate
+ * @returns Truncated URL
+ */
+function truncateUrl(url: string): string {
+  // Keep the protocol and host, but truncate the query string
+  const urlObj = new URL(url);
+  return `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}?...`;
+}
+
+/**
+ * Generates an error TwiML response
+ * @param message Error message to say to the user
+ * @returns TwiML response as a string
+ */
+export function generateErrorTwiML(message: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>${message || "We're sorry, but an error occurred. Please try again later."}</Say>
+  <Hangup/>
+</Response>`;
 }
