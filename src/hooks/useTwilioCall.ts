@@ -106,8 +106,8 @@ export function useTwilioCall() {
 
     try {
       setIsLoading(true);
-      console.log("[TwilioCall] Making call to prospect ID:", params.prospectId);
-      console.log("[TwilioCall] Using user ID:", userId);
+      console.log('[TwilioCall] Making call to prospect ID:', params.prospectId);
+      console.log('[TwilioCall] Using user ID:', userId);
 
       // Enhanced parameter validation with clear error messages
       if (!params.prospectId) {
@@ -181,7 +181,9 @@ export function useTwilioCall() {
             user_id: String(userId), // Always use the resolved userId as string
             bypass_validation: params.bypassValidation || false,
             debug_mode: params.debugMode || false,
-            voice_id: params.voiceId
+            voice_id: params.voiceId,
+            // CRITICAL CHANGE: Add this flag to use the proxy for webhook URL generation
+            use_webhook_proxy: true
           }
         });
 
@@ -454,7 +456,9 @@ export function useTwilioCall() {
             user_id: String(userId), // Always convert to string
             bypass_validation: true,
             debug_mode: true, // For development calls, always set debug mode
-            voice_id: params.voiceId
+            voice_id: params.voiceId,
+            // CRITICAL CHANGE: Add this flag to use the proxy for webhook URL generation
+            use_webhook_proxy: true
           }
         });
 

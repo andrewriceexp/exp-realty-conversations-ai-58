@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -53,10 +52,10 @@ serve(async (req) => {
       );
     }
     
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
     
     // Try to get user profile
-    const { data: userProfile, error: userProfileError } = await supabase
+    const { data: userProfile, error: userProfileError } = await supabaseClient
       .from('profiles')
       .select('email, twilio_account_sid, twilio_auth_token, twilio_phone_number')
       .eq('id', user_id)
@@ -115,7 +114,7 @@ serve(async (req) => {
     }
     
     // Get the prospect's phone number
-    const { data: prospect, error: prospectError } = await supabase
+    const { data: prospect, error: prospectError } = await supabaseClient
       .from('prospects')
       .select('phone_number')
       .eq('id', finalProspectId)
@@ -173,7 +172,7 @@ serve(async (req) => {
           }
         };
         
-        const { data: insertResult, error: insertError } = await supabase
+        const { data: insertResult, error: insertError } = await supabaseClient
           .from('call_logs')
           .insert([callData])
           .select();
@@ -189,15 +188,63 @@ serve(async (req) => {
         console.error("Error creating call log:", error);
       }
       
-      // Get project reference for constructing the webhooks URLs
+      // Get configuration parameters
+      const bypassValidation = body.bypass_validation || false;
+      const debugMode = body.debug_mode || false;
+      const voiceId = body.voice_id || null;
+      // NEW: Check if we should use the webhook proxy (default to true for better compatibility)
+      const useWebhookProxy = body.use_webhook_proxy !== false;
+      
+      // CRITICAL CHANGE: Use the correct URL format based on the proxy flag
+      let twimlWebhookUrl;
       const supabaseProjectRef = Deno.env.get("SUPABASE_PROJECT_REF") || "uttebgyhijrdcjiczxrg";
       
-      // CRITICAL FIX: Use the correct full URL format for edge functions
-      // Format should be: https://{project-ref}.supabase.co/functions/v1/{function-name}
-      // The previous edge-runtime.supabase.com domain caused 401 errors
-      const twimlWebhookUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/twilio-call-webhook?agent_id=${agent_config_id}&voice_id=${voice_id || ""}&debug=${debug_mode ? "true" : "false"}&user_id=${user_id}${callLogId ? `&call_log_id=${callLogId}` : ""}`;
+      if (useWebhookProxy) {
+        // Use the new proxy function URL that will add the required headers
+        twimlWebhookUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/twilio-webhook-proxy`;
+      } else {
+        // Use the regular function URL (may not work with direct Twilio calls)
+        twimlWebhookUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/twilio-call-webhook`;
+      }
       
-      console.log("Using TwiML URL:", twimlWebhookUrl);
+      // Add query parameters
+      const params = new URLSearchParams();
+      
+      if (agentConfigId) {
+        const { data: agentConfig } = await supabaseClient
+          .from('agent_configs')
+          .select('elevenlabs_agent_id')
+          .eq('id', agentConfigId)
+          .maybeSingle();
+          
+        if (agentConfig?.elevenlabs_agent_id) {
+          params.append("agent_id", agentConfig.elevenlabs_agent_id);
+        }
+      }
+      
+      // Use the explicitly provided agent ID if available (overrides config)
+      if (body.agent_id) {
+        params.append("agent_id", body.agent_id);
+      }
+      
+      if (voiceId) {
+        params.append("voice_id", voiceId);
+      }
+      
+      if (userId) {
+        params.append("user_id", userId);
+      }
+      
+      if (debugMode) {
+        params.append("debug", "true");
+      }
+      
+      if (callLogId) {
+        params.append("call_log_id", callLogId);
+      }
+      
+      twimlWebhookUrl += `?${params.toString()}`;
+      console.log(`Using TwiML URL: ${twimlWebhookUrl}`);
       
       // Initialize Twilio client
       const twilioClient = twilio(
@@ -219,7 +266,7 @@ serve(async (req) => {
       // Update call log with Twilio SID
       if (callLogId) {
         try {
-          await supabase
+          await supabaseClient
             .from('call_logs')
             .update({ twilio_call_sid: call.sid })
             .eq('id', callLogId);
