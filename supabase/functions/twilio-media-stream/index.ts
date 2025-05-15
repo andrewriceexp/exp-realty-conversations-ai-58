@@ -5,6 +5,13 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 console.log(`Function "twilio-media-stream" up and running!`);
 
+// Enhanced CORS headers specifically for WebSocket connections
+const webSocketCorsHeaders = {
+  ...corsHeaders,
+  'Access-Control-Allow-Headers': corsHeaders['Access-Control-Allow-Headers'] + ', Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
 // Define an error helper function for consistent error handling and logging
 function formatError(error: Error | string): string {
   const message = error instanceof Error ? error.message : error;
@@ -15,9 +22,13 @@ function formatError(error: Error | string): string {
 
 serve(async (req) => {
   try {
-    // Handle CORS preflight requests
+    // Handle CORS preflight requests with enhanced WebSocket headers
     if (req.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
+      console.log("Handling CORS preflight request for WebSocket");
+      return new Response(null, { 
+        status: 204, 
+        headers: webSocketCorsHeaders 
+      });
     }
     
     // Check if the request is a WebSocket upgrade request
@@ -26,7 +37,7 @@ serve(async (req) => {
       console.error("Expected WebSocket connection, received regular HTTP request");
       return new Response("Expected WebSocket connection", { 
         status: 400, 
-        headers: corsHeaders 
+        headers: webSocketCorsHeaders 
       });
     }
     
@@ -44,7 +55,7 @@ serve(async (req) => {
       console.error(errorMessage);
       return new Response(errorMessage, { 
         status: 400, 
-        headers: corsHeaders 
+        headers: webSocketCorsHeaders 
       });
     }
     
@@ -58,10 +69,16 @@ serve(async (req) => {
     });
     
     try {
-      // Upgrade the connection to WebSocket
-      const { socket: twilioSocket, response } = Deno.upgradeWebSocket(req);
+      console.log("Attempting to upgrade connection to WebSocket");
       
-      console.log("WebSocket connection established with Twilio");
+      // Upgrade the connection to WebSocket with explicit options
+      const { socket: twilioSocket, response } = Deno.upgradeWebSocket(req, {
+        protocol: req.headers.get("sec-websocket-protocol") || undefined,
+        idleTimeout: 60000, // 60 seconds idle timeout
+        compress: false // Disable compression for better compatibility
+      });
+      
+      console.log("WebSocket connection successfully established with Twilio");
       
       // Parameters for ElevenLabs WebSocket URL
       const elevenLabsParams = new URLSearchParams();
@@ -90,8 +107,10 @@ serve(async (req) => {
         try {
           console.log("Establishing connection to ElevenLabs");
           
-          // Create WebSocket connection to ElevenLabs
-          elevenLabsSocket = new WebSocket(elevenLabsWsUrl);
+          // Create WebSocket connection to ElevenLabs with explicit timeout
+          elevenLabsSocket = new WebSocket(elevenLabsWsUrl, [], {
+            handshakeTimeout: 10000, // 10 seconds timeout for handshake
+          });
           
           // Handle successful connection
           elevenLabsSocket.onopen = () => {
@@ -315,7 +334,7 @@ serve(async (req) => {
       console.error("Error establishing WebSocket connection:", formatError(error));
       return new Response(`WebSocket error: ${error instanceof Error ? error.message : String(error)}`, {
         status: 500,
-        headers: corsHeaders
+        headers: webSocketCorsHeaders
       });
     }
   } catch (error) {
@@ -323,7 +342,7 @@ serve(async (req) => {
     console.error("Unhandled error in twilio-media-stream:", errorMessage);
     return new Response(`Internal server error: ${errorMessage}`, {
       status: 500,
-      headers: corsHeaders
+      headers: webSocketCorsHeaders
     });
   }
 });
