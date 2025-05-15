@@ -1,4 +1,3 @@
-
 // Import the Json type from the database types
 import { Json } from './integrations/supabase/types';
 
@@ -77,17 +76,17 @@ export interface Prospect {
   first_name: string | null;
   last_name: string | null;
   phone_number: string;
-  email?: string | null; // Optional to match component usage
+  email?: string | null;
   notes: string | null;
-  tags?: string[] | null; // Optional to match component usage
+  tags?: string[] | null;
   list_id: string;
   user_id: string;
   status: ProspectStatus | string;
-  last_contact_at?: string | null; // Optional to match component usage
+  last_contact_at?: string | null;
   last_call_attempted: string | null;
   property_address: string | null; 
-  do_not_call?: boolean; // Optional to match component usage
-  do_not_call_reason?: string | null; // Optional to match component usage
+  do_not_call?: boolean;
+  do_not_call_reason?: string | null;
 }
 
 export interface Campaign {
@@ -99,10 +98,10 @@ export interface Campaign {
   status: CampaignStatus | string;
   prospect_list_id: string | null;
   agent_config_id: string | null;
-  schedule?: any | null; // Optional to match component usage
-  call_count?: number | null; // Optional to match component usage
-  call_count_completed?: number | null; // Optional to match component usage
-  call_count_scheduled?: number | null; // Optional to match component usage
+  schedule?: any | null;
+  call_count?: number | null;
+  call_count_completed?: number | null;
+  call_count_scheduled?: number | null;
   description: string | null;
   prospect_list_name?: string;
   calls_made?: number | null;
@@ -114,23 +113,21 @@ export interface Campaign {
 export interface CallLog {
   id: string;
   user_id: string;
-  campaign_id?: string | null; // Optional to match component usage
+  campaign_id?: string | null;
   prospect_id: string;
   agent_config_id: string;
-  status?: string; // Optional to match component usage
   call_status?: string | CallStatus;
-  call_sid?: string | null; // Optional to match component usage
-  twilio_call_sid?: string;
-  direction?: string | null; // Optional to match component usage
+  twilio_call_sid: string;
+  direction?: string | null;
   call_duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
-  extracted_data: Json | null; // Using Json type for better type safety
+  extracted_data: Json | null;
   summary: string | null;
   cost: number | null;
   started_at: string;
   ended_at: string | null;
-  created_at?: string; // Optional to match component usage
+  created_at?: string;
   updated_at: string;
   config_name?: string;
   agent_configs?: {
@@ -142,16 +139,16 @@ export interface CallLog {
 export interface AgentConfig {
   id: string;
   user_id: string;
-  config_name: string; // Changed from name to config_name
-  system_prompt: string; // Added to match database
+  config_name: string;
+  system_prompt: string;
   goal_extraction_prompt: string | null;
   created_at: string;
   updated_at: string;
-  voice_id: string; // Added to match database
-  llm_provider: string; // Added to match database
-  llm_model: string; // Added to match database
-  temperature: number; // Added to match database
-  voice_provider: string; // Added to match database
+  voice_id: string;
+  llm_provider: string;
+  llm_model: string;
+  temperature: number;
+  voice_provider: string;
   prompts?: Record<string, any> | null;
   elevenlabs_voice_id?: string | null;
   elevenlabs_agent_id?: string | null;
@@ -161,7 +158,7 @@ export interface AgentConfig {
 export interface MainNavItem {
   title: string;
   href: string;
-  icon?: JSX.Element; // Changed to JSX.Element to match Sidebar usage
+  icon?: JSX.Element;
   disabled?: boolean;
 }
 
@@ -172,8 +169,8 @@ export interface DashboardStats {
   completedCalls: number;
   averageCallDuration: number;
   successRate: number;
-  callsToday?: number; // Added to match Analytics.tsx usage
-  callsThisWeek?: number; // Added to fix build error in Analytics.tsx
-  pendingProspects?: number; // Added to fix build error in Analytics.tsx
-  completedProspects?: number; // Added to fix build error in Analytics.tsx
+  callsToday?: number;
+  callsThisWeek?: number;
+  pendingProspects?: number;
+  completedProspects?: number;
 }
