@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -88,17 +87,32 @@ export function useTwilioCall() {
       
       if (error) {
         console.error("[TwilioCall] Error invoking verify-twilio-creds:", error);
+        toast({
+          title: "Verification Error",
+          description: `Failed to verify credentials: ${error.message}`,
+          variant: "destructive"
+        });
         return false;
       }
       
       if (!data?.success) {
         console.error("[TwilioCall] Invalid Twilio credentials:", data?.error || "Unknown error");
+        toast({
+          title: "Invalid Credentials",
+          description: data?.error || "Your Twilio credentials appear to be invalid",
+          variant: "destructive"
+        });
         return false;
       }
       
       return true;
     } catch (err) {
       console.error("[TwilioCall] Unexpected error validating credentials:", err);
+      toast({
+        title: "Verification Error",
+        description: err instanceof Error ? err.message : "Unknown error occurred",
+        variant: "destructive"
+      });
       return false;
     }
   }, []);
@@ -182,7 +196,17 @@ export function useTwilioCall() {
           }
         }
 
-        // IMPORTANT FIX: Use the correct function invocation approach
+        // IMPROVED ERROR HANDLING: Add more detailed request logging
+        console.log('[TwilioCall] Invoking twilio-make-call function with params:', {
+          prospectId: params.prospectId,
+          agent_config_id: params.agentConfigId,
+          user_id: String(userId),
+          bypass_validation: params.bypassValidation || false,
+          debug_mode: params.debugMode || false,
+          voice_id: params.voiceId ? params.voiceId.substring(0, 10) + "..." : undefined,
+          use_webhook_proxy: true
+        });
+
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
@@ -190,15 +214,21 @@ export function useTwilioCall() {
             agent_config_id: params.agentConfigId,
             user_id: String(userId), // Always use the resolved userId as string
             bypass_validation: params.bypassValidation || false,
-            debug_mode: params.debugMode || false,
+            debug_mode: params.debugMode || true, // Enable debug mode for better logging
             voice_id: params.voiceId,
-            // CRITICAL CHANGE: Add this flag to use the proxy for webhook URL generation
-            use_webhook_proxy: true
+            use_webhook_proxy: true // Always use the webhook proxy
           }
         });
 
+        // IMPROVED ERROR HANDLING: More detailed error logging
         if (error) {
           console.error("[TwilioCall] Error making call:", error);
+          console.error("[TwilioCall] Error details:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          
           toast({
             title: "Call Error",
             description: `Failed to initiate call: ${error.message}`,
@@ -210,6 +240,8 @@ export function useTwilioCall() {
             error: error.message
           };
         }
+
+        console.log("[TwilioCall] Edge function response:", data);
 
         if (data?.callSid) {
           console.log("[TwilioCall] Call initiated successfully, SID:", data.callSid);
@@ -449,6 +481,15 @@ export function useTwilioCall() {
       console.log("[TwilioCall:Dev] Making development call to prospect ID:", params.prospectId);
       console.log("[TwilioCall:Dev] Using user ID:", userId);
 
+      // Validate parameters
+      if (!params.prospectId) {
+        throw new Error("Prospect ID is required");
+      }
+      
+      if (!params.agentConfigId) {
+        throw new Error("Agent configuration ID is required");
+      }
+
       if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
         return await makeElevenLabsCall({
           ...params,
@@ -457,7 +498,17 @@ export function useTwilioCall() {
           userId // Ensure userId is passed
         });
       } else {
-        // For development calls, add debugging flags
+        // For development calls, add debugging flags and more detailed logging
+        console.log("[TwilioCall:Dev] Invoking twilio-make-call with parameters:", {
+          prospect_id: params.prospectId,
+          agent_config_id: params.agentConfigId,
+          user_id: String(userId),
+          bypass_validation: true,
+          debug_mode: true,
+          voice_id: params.voiceId?.substring(0, 10) + "...",
+          use_webhook_proxy: true
+        });
+
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
@@ -467,13 +518,25 @@ export function useTwilioCall() {
             bypass_validation: true,
             debug_mode: true, // For development calls, always set debug mode
             voice_id: params.voiceId,
-            // CRITICAL CHANGE: Add this flag to use the proxy for webhook URL generation
-            use_webhook_proxy: true
+            use_webhook_proxy: true // CRITICAL: Always use the webhook proxy
           }
         });
 
+        // Enhanced error logging for development calls
         if (error) {
           console.error("[TwilioCall:Dev] Error making development call:", error);
+          console.error("[TwilioCall:Dev] Error details:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+          });
+          
+          toast({
+            title: "Development Call Error",
+            description: `Failed to initiate development call: ${error.message}`,
+            variant: "destructive"
+          });
+          
           return {
             success: false,
             message: `Failed to initiate development call: ${error.message}`,
@@ -481,9 +544,18 @@ export function useTwilioCall() {
           };
         }
 
+        console.log("[TwilioCall:Dev] Edge function response:", data);
+
         if (data?.callSid) {
           console.log("[TwilloCall:Dev] Development call initiated successfully, SID:", data.callSid);
           setCurrentCallSid(data.callSid);
+          
+          toast({
+            title: "Development Call Initiated",
+            description: `Call has been initiated in development mode`,
+            variant: "success"
+          });
+          
           return {
             success: true,
             message: "Development call initiated successfully",
@@ -493,6 +565,14 @@ export function useTwilioCall() {
         } else if (data?.success === false) {
           // Handle specific error codes from the edge function
           console.error("[TwilioCall:Dev] Call failed with message:", data.message);
+          console.error("[TwilioCall:Dev] Error code:", data.code);
+          
+          toast({
+            title: "Development Call Error",
+            description: data.message || "Failed to initiate development call",
+            variant: "destructive"
+          });
+          
           return {
             success: false,
             message: data.message || "Failed to initiate development call",
@@ -500,6 +580,13 @@ export function useTwilioCall() {
           };
         } else {
           console.error("[TwilloCall:Dev] No call SID returned");
+          
+          toast({
+            title: "Development Call Error",
+            description: "Failed to initiate development call: No call ID returned",
+            variant: "destructive"
+          });
+          
           return {
             success: false,
             message: "Failed to initiate development call: No call ID returned"
@@ -509,6 +596,13 @@ export function useTwilioCall() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error("[TwilioCall:Dev] Unexpected error making development call:", errorMessage);
+      
+      toast({
+        title: "Development Call Error",
+        description: `Unexpected error: ${errorMessage}`,
+        variant: "destructive"
+      });
+      
       return {
         success: false,
         message: `Unexpected error: ${errorMessage}`,

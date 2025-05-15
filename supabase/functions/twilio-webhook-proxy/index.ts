@@ -23,7 +23,6 @@ serve(async (req) => {
     const supabaseProjectRef = Deno.env.get("SUPABASE_PROJECT_REF") || "uttebgyhijrdcjiczxrg";
     
     // Construct the proper URL for the Supabase edge function
-    // This uses the domain format that includes the project ref
     const targetUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/twilio-call-webhook`;
     
     // Build query parameters
@@ -60,7 +59,9 @@ serve(async (req) => {
     // Create a new request to forward to the actual function
     const headers = new Headers();
     headers.set("Content-Type", req.headers.get("content-type") || "application/x-www-form-urlencoded");
-    headers.set("x-deno-subhost", supabaseProjectRef); // Critical header that was missing
+    
+    // CRITICAL FIX: Set the required x-deno-subhost header
+    headers.set("x-deno-subhost", supabaseProjectRef);
     
     // Copy any authorization headers if present
     const authHeader = req.headers.get("authorization");
@@ -76,10 +77,20 @@ serve(async (req) => {
         newFormData.append(key, value);
       }
       forwardBody = newFormData;
-    } else {
+    } else if (Object.keys(twilioParams).length > 0) {
       // Forward JSON or other body types
       forwardBody = JSON.stringify(twilioParams);
+    } else {
+      // Try to handle any other possible content
+      try {
+        forwardBody = await req.text();
+      } catch (error) {
+        console.warn("Error reading request body:", error.message);
+        forwardBody = null;
+      }
     }
+    
+    console.log(`Forwarding ${req.method} request to ${fullUrl}`);
     
     const response = await fetch(fullUrl, {
       method: req.method,
@@ -93,6 +104,9 @@ serve(async (req) => {
     responseHeaders.set("Content-Type", response.headers.get("Content-Type") || "application/xml");
     
     console.log(`Proxy received response with status: ${response.status}`);
+    if (response.status !== 200) {
+      console.error(`Error from target function: ${responseData}`);
+    }
     
     // Return the response from the target function
     return new Response(responseData, {

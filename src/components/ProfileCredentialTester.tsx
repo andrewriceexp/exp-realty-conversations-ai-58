@@ -2,10 +2,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
+import { AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ProfileCredentialTesterProps {
   accountSid: string;
@@ -17,8 +18,10 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
   const [verificationResult, setVerificationResult] = useState<{
     success: boolean;
     message: string;
+    accountInfo?: { friendly_name?: string };
   } | null>(null);
   const [progressValue, setProgressValue] = useState(0);
+  const [detailedError, setDetailedError] = useState<string | null>(null);
 
   const verifyCredentials = async () => {
     if (!accountSid || !authToken) {
@@ -35,6 +38,7 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
 
     setIsVerifying(true);
     setVerificationResult(null);
+    setDetailedError(null);
     setProgressValue(25);
 
     try {
@@ -52,6 +56,7 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
 
       if (error) {
         console.error('Error verifying credentials:', error);
+        setDetailedError(JSON.stringify(error, null, 2));
         setVerificationResult({
           success: false,
           message: `Verification failed: ${error.message}`
@@ -66,10 +71,11 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
 
       setTimeout(() => setProgressValue(100), 300);
 
-      if (data.success) {
+      if (data?.success) {
         setVerificationResult({
           success: true,
-          message: `Credentials verified successfully! Account: ${data.account_info?.friendly_name || 'Unknown'}`
+          message: `Credentials verified successfully!`,
+          accountInfo: data.account_info
         });
         toast({
           title: "Twilio Verification Successful",
@@ -77,18 +83,20 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
           variant: "default"
         });
       } else {
+        setDetailedError(data?.error_details || null);
         setVerificationResult({
           success: false,
-          message: data.error || "Verification failed due to an unknown error"
+          message: data?.error || "Verification failed due to an unknown error"
         });
         toast({
           title: "Verification Failed",
-          description: data.error || "Unknown error occurred",
+          description: data?.error || "Unknown error occurred",
           variant: "destructive"
         });
       }
     } catch (err) {
       console.error('Error in verification process:', err);
+      setDetailedError(err instanceof Error ? err.stack || err.message : String(err));
       setVerificationResult({
         success: false,
         message: err instanceof Error ? err.message : "An unknown error occurred"
@@ -136,11 +144,31 @@ export function ProfileCredentialTester({ accountSid, authToken }: ProfileCreden
       )}
 
       {verificationResult && (
-        <Alert className={`mt-2 ${verificationResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-          <AlertDescription>
+        <Alert className={`mt-2 ${verificationResult.success ? 'border-green-200' : 'border-red-200'}`}>
+          {verificationResult.success ? (
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          )}
+          <AlertTitle className={verificationResult.success ? "text-green-700" : "text-red-700"}>
+            {verificationResult.success ? "Verification Successful" : "Verification Failed"}
+          </AlertTitle>
+          <AlertDescription className={verificationResult.success ? "text-green-600" : "text-red-600"}>
             {verificationResult.message}
+            {verificationResult.success && verificationResult.accountInfo?.friendly_name && (
+              <p className="mt-1 font-semibold">
+                Account Name: {verificationResult.accountInfo.friendly_name}
+              </p>
+            )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {detailedError && (
+        <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-700 font-mono overflow-x-auto">
+          <p className="font-semibold mb-1">Error details:</p>
+          <pre>{detailedError}</pre>
+        </div>
       )}
     </div>
   );
