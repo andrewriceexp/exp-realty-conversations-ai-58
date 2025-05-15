@@ -138,7 +138,7 @@ export function useTwilioCall() {
       // Fetch the prospect details to get the phone number
       const { data: prospectData, error: prospectError } = await supabase
         .from('prospects')
-        .select('phone_number')
+        .select('phone_number, first_name, last_name')
         .eq('id', params.prospectId)
         .single();
         
@@ -192,7 +192,7 @@ export function useTwilioCall() {
           to_number: prospectData.phone_number,
           user_id: params.userId || session.user.id,
           dynamic_variables: {
-            prospect_name: prospectData.first_name,
+            prospect_name: prospectData.first_name || 'Prospect', // Add fallback value
             prospect_id: params.prospectId
           },
           conversation_config_override: configOverride
@@ -286,7 +286,7 @@ export function useTwilioCall() {
         }
 
         if (data?.callSid) {
-          console.log("[TwilioCall:Dev] Development call initiated successfully, SID:", data.callSid);
+          console.log("[TwilloCall:Dev] Development call initiated successfully, SID:", data.callSid);
           setCurrentCallSid(data.callSid);
           return {
             success: true,
