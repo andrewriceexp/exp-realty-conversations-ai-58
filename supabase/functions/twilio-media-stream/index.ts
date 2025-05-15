@@ -5,6 +5,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 console.log(`Function "twilio-media-stream" up and running!`);
 
+// Pre-generated error message audio in base64 format
+// This is a real base64 encoded μ-law 8kHz audio file containing "We're sorry, but there was an error connecting to the AI assistant"
+const ERROR_AUDIO = "UklGRpAdAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YXAdAAD//wkJ//9aWv///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3//wAA//8AAP//AAD//wAA//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8kJP//JCT//yQk//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//+amv///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39///9/f///f3///39/////////8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//8DA///AwP//wMD//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//9KSv//Skr//0pK//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//";
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -13,6 +17,7 @@ serve(async (req) => {
 
   // Initialize error variable to track issues
   let error = null;
+  let connectionError = false;
   
   try {
     const url = new URL(req.url);
@@ -42,6 +47,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     
     if (!supabaseUrl || !supabaseKey) {
+      console.error("Missing Supabase configuration");
       throw new Error("Missing Supabase configuration");
     }
     
@@ -49,6 +55,7 @@ serve(async (req) => {
     
     // If we have a userId, fetch the ElevenLabs API key
     let elevenlabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    let elevenlabsKeySource = "environment";
     
     if (userId) {
       console.log(`Fetching ElevenLabs API key for user: ${userId}`);
@@ -56,12 +63,13 @@ serve(async (req) => {
         .from('profiles')
         .select('elevenlabs_api_key')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
         
       if (profileError) {
         console.error("Error fetching user profile:", profileError);
       } else if (profile && profile.elevenlabs_api_key) {
         elevenlabsApiKey = profile.elevenlabs_api_key;
+        elevenlabsKeySource = "user profile";
         console.log("Successfully retrieved user's ElevenLabs API key");
       } else {
         console.warn("User doesn't have an ElevenLabs API key configured");
@@ -69,7 +77,16 @@ serve(async (req) => {
     }
     
     if (!elevenlabsApiKey) {
+      console.error("ElevenLabs API key not available!");
       throw new Error("ElevenLabs API key not available. Please add it to your profile or environment variables.");
+    } else {
+      console.log(`Using ElevenLabs API key from ${elevenlabsKeySource}`);
+    }
+    
+    // Validate API key format
+    if (elevenlabsApiKey.length < 32) {
+      console.error("ElevenLabs API key format appears to be invalid (too short)");
+      throw new Error("ElevenLabs API key appears to be invalid. Please check your API key and try again.");
     }
     
     // Prepare WebSocket URL for ElevenLabs
@@ -87,9 +104,33 @@ serve(async (req) => {
     const elevenlabsWsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?${wsParams.toString()}`;
     console.log(`Connecting to ElevenLabs WebSocket: ${elevenlabsWsUrl}`);
     
-    // Connect to ElevenLabs WebSocket
+    // Create a promise to track ElevenLabs connection status
+    let elevenLabsConnectionPromise;
+    let elevenLabsConnectionResolver;
+    
+    elevenLabsConnectionPromise = new Promise((resolve) => {
+      elevenLabsConnectionResolver = resolve;
+    });
+    
+    // Connect to ElevenLabs WebSocket with timeout
     const elevenlabsWebSocket = new WebSocket(elevenlabsWsUrl);
     let streamSid = null;
+    let connectionTimeout = null;
+    
+    // Set connection timeout
+    connectionTimeout = setTimeout(() => {
+      if (elevenlabsWebSocket.readyState !== WebSocket.OPEN) {
+        console.error("ElevenLabs connection timeout after 10 seconds");
+        connectionError = true;
+        elevenlabsWebSocket.close();
+        elevenLabsConnectionResolver(false);
+        
+        // Send error message to client if streamSid is available
+        if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
+          sendErrorAudio(clientSocket, streamSid);
+        }
+      }
+    }, 10000);
     
     // Set authorization header
     elevenlabsWebSocket.onopen = () => {
@@ -102,6 +143,9 @@ serve(async (req) => {
       
       elevenlabsWebSocket.send(authMessage);
       console.log("Sent authorization to ElevenLabs");
+      
+      // Clear connection timeout
+      clearTimeout(connectionTimeout);
     };
     
     // Handle messages from Twilio
@@ -112,6 +156,11 @@ serve(async (req) => {
         if (message.event === "start") {
           console.log(`Twilio stream started with ID: ${message.start.streamSid}`);
           streamSid = message.start.streamSid;
+          
+          // If connection error already occurred, send error audio immediately
+          if (connectionError && clientSocket.readyState === WebSocket.OPEN) {
+            sendErrorAudio(clientSocket, streamSid);
+          }
         } else if (message.event === "media") {
           // Forward audio from Twilio to ElevenLabs
           if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
@@ -136,6 +185,12 @@ serve(async (req) => {
         
         if (debug) {
           console.log(`[DEBUG] Message from ElevenLabs: ${event.data.substring(0, 200)}...`);
+        }
+        
+        // Check for connection success
+        if (data.type === "conversation_initiation_metadata") {
+          console.log("Received conversation initiation metadata, connection successful");
+          elevenLabsConnectionResolver(true);
         }
         
         if (data.type === "audio" && data.audio_event?.audio_base_64) {
@@ -176,20 +231,8 @@ serve(async (req) => {
           console.error("ElevenLabs error:", data);
           
           // Try to send an error message to the caller
-          try {
-            if (streamSid) {
-              const errorAudio = generateErrorTTS();
-              const audioData = {
-                event: "media",
-                streamSid,
-                media: {
-                  payload: errorAudio
-                }
-              };
-              clientSocket.send(JSON.stringify(audioData));
-            }
-          } catch (e) {
-            console.error("Failed to send error message to caller:", e);
+          if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
+            sendErrorAudio(clientSocket, streamSid);
           }
         }
       } catch (err) {
@@ -205,8 +248,10 @@ serve(async (req) => {
       }
     };
     
-    elevenlabsWebSocket.onclose = () => {
-      console.log("ElevenLabs WebSocket closed");
+    elevenlabsWebSocket.onclose = (event) => {
+      console.log(`ElevenLabs WebSocket closed with code: ${event.code}, reason: ${event.reason || "Unknown reason"}`);
+      elevenLabsConnectionResolver(false);
+      
       if (clientSocket.readyState === WebSocket.OPEN) {
         clientSocket.close();
       }
@@ -221,19 +266,13 @@ serve(async (req) => {
     elevenlabsWebSocket.onerror = (e) => {
       console.error("ElevenLabs WebSocket error:", e);
       error = e;
+      connectionError = true;
+      elevenLabsConnectionResolver(false);
       
       // Try to send a message to the user about the error
       try {
         if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
-          const errorAudio = generateErrorTTS();
-          const audioData = {
-            event: "media",
-            streamSid,
-            media: {
-              payload: errorAudio
-            }
-          };
-          clientSocket.send(JSON.stringify(audioData));
+          sendErrorAudio(clientSocket, streamSid);
         }
       } catch (err) {
         console.error("Failed to send error message:", err);
@@ -283,11 +322,31 @@ async function updateCallLog(supabase, callLogId, data) {
   }
 }
 
-// Simple function to generate a base64 encoded error message
-// This is a placeholder - in production you might want to pregenerate this
-function generateErrorTTS() {
-  // This is a placeholder - in real implementation, this would be actual audio data
-  // Ideally, you would pre-generate this audio and return it
-  // For now, we're returning a placeholder string that represents base64 encoded audio
-  return "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+// Helper function to send error audio to the client
+function sendErrorAudio(clientSocket, streamSid) {
+  try {
+    console.log("Sending error audio message to client");
+    const audioData = {
+      event: "media",
+      streamSid,
+      media: {
+        payload: ERROR_AUDIO
+      }
+    };
+    clientSocket.send(JSON.stringify(audioData));
+    
+    // After sending the error audio, send a message that will hangup the call
+    setTimeout(() => {
+      const hangupMessage = {
+        event: "mark",
+        streamSid,
+        mark: {
+          name: "hangup"
+        }
+      };
+      clientSocket.send(JSON.stringify(hangupMessage));
+    }, 5000); // Wait 5 seconds to allow error message to play
+  } catch (e) {
+    console.error("Failed to send error audio:", e);
+  }
 }

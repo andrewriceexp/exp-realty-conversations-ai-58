@@ -1,6 +1,5 @@
-
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -46,7 +45,8 @@ export function useTwilioCall() {
   console.log("[TwilioCall] Auth user:", user?.id);
   console.log("[TwilioCall] Auth session:", session?.user?.id);
 
-  const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
+  // Check for valid authentication
+  const checkAuthentication = () => {
     if (!session?.access_token) {
       console.error("[TwilioCall] No authentication token available");
       toast({
@@ -54,11 +54,11 @@ export function useTwilioCall() {
         description: "You must be logged in to make calls",
         variant: "destructive"
       });
-      return { success: false, message: "Authentication required" };
+      return false;
     }
-
+    
     // Ensure userId is always set - THIS IS CRITICAL
-    const userId = params.userId || user?.id || session?.user?.id;
+    const userId = user?.id || session?.user?.id;
     
     if (!userId) {
       console.error("[TwilioCall] No user ID available");
@@ -67,7 +67,16 @@ export function useTwilioCall() {
         description: "User ID is required to make calls. Please refresh and try again.",
         variant: "destructive"
       });
-      return { success: false, message: "User ID is required" };
+      return false;
+    }
+    
+    return userId;
+  };
+
+  const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
+    const userId = checkAuthentication();
+    if (!userId) {
+      return { success: false, message: "Authentication required" };
     }
 
     try {
@@ -75,19 +84,48 @@ export function useTwilioCall() {
       console.log("[TwilioCall] Making call to prospect ID:", params.prospectId);
       console.log("[TwilioCall] Using user ID:", userId);
 
+      // Pre-validate parameters
+      if (!params.prospectId) {
+        throw new Error("Prospect ID is required");
+      }
+      
+      if (!params.agentConfigId) {
+        throw new Error("Agent configuration ID is required");
+      }
+
       // Determine whether to use ElevenLabs agent or regular Twilio call
       if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
         return await makeElevenLabsCall({
           ...params,
-          userId // Ensure userId is passed
+          userId: String(userId) // Ensure userId is passed as string
         });
       } else {
+        // Do a quick check if the user has Twilio credentials set up
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('twilio_account_sid, twilio_auth_token')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("[TwilioCall] Error fetching profile:", profileError);
+        }
+
+        if (!profileData?.twilio_account_sid || !profileData?.twilio_auth_token) {
+          console.error("[TwilioCall] Missing Twilio credentials");
+          return {
+            success: false,
+            message: "Twilio credentials are not configured. Please update your profile with Twilio credentials.",
+            code: "TWILIO_CONFIG_INCOMPLETE"
+          };
+        }
+
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
             prospect_id: params.prospectId, // Include both formats for backward compatibility
             agent_config_id: params.agentConfigId,
-            user_id: userId, // Always use the resolved userId
+            user_id: String(userId), // Always use the resolved userId as string
             bypass_validation: params.bypassValidation || false,
             debug_mode: params.debugMode || false,
             voice_id: params.voiceId

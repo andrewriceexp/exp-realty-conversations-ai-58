@@ -125,3 +125,31 @@ export function createTimeoutSafetyTwiML(): string {
   <Hangup />
 </Response>`;
 }
+
+/**
+ * Generate a TwiML response for connecting to a WebSocket stream
+ * This is the main function used by twilio-call-webhook
+ * @param mediaStreamUrl - The WebSocket URL to connect to
+ * @param debug - Whether to include debug information
+ * @returns TwiML string for the response
+ */
+export function generateTwiMLResponse(mediaStreamUrl: string, debug: boolean = false): string {
+  // Create basic TwiML with WebSocket stream
+  let twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Connect>
+    <Stream url="${mediaStreamUrl}" />
+  </Connect>`;
+  
+  // Add debug information if requested
+  if (debug) {
+    twiml += `
+  <Say>Debug mode enabled. Using stream URL: ${mediaStreamUrl.replace(/&/g, ' and ')}</Say>`;
+  }
+  
+  // Close the response
+  twiml += `
+</Response>`;
+
+  return twiml;
+}

@@ -67,7 +67,7 @@ serve(async (req) => {
     const mediaStreamUrlWithParams = `${mediaStreamUrl}?${params.toString()}`;
     console.log(`Using media stream URL: ${mediaStreamUrlWithParams}`);
     
-    // Generate TwiML response
+    // Generate TwiML response using the correct helper function
     const twiml = generateTwiMLResponse(mediaStreamUrlWithParams, debug);
     
     // Create a call log entry if we have a user ID
