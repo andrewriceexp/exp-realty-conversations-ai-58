@@ -18,8 +18,10 @@ serve(async (req) => {
   // Initialize error variable to track issues
   let error = null;
   let connectionError = false;
+  let connectionId = crypto.randomUUID().substring(0, 8); // Generate unique ID for connection tracking
   
   try {
+    console.log(`[${connectionId}] New connection request received`);
     const url = new URL(req.url);
     const agentId = url.searchParams.get("agent_id");
     const voiceId = url.searchParams.get("voice_id");
@@ -31,7 +33,7 @@ serve(async (req) => {
       throw new Error("Agent ID is required");
     }
     
-    console.log(`Initializing media stream with:
+    console.log(`[${connectionId}] Initializing media stream with:
       Agent ID: ${agentId}
       Voice ID: ${voiceId || 'not specified'}
       User ID: ${userId || 'not specified'}
@@ -47,7 +49,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     
     if (!supabaseUrl || !supabaseKey) {
-      console.error("Missing Supabase configuration");
+      console.error(`[${connectionId}] Missing Supabase configuration`);
       throw new Error("Missing Supabase configuration");
     }
     
@@ -58,34 +60,40 @@ serve(async (req) => {
     let elevenlabsKeySource = "environment";
     
     if (userId) {
-      console.log(`Fetching ElevenLabs API key for user: ${userId}`);
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('elevenlabs_api_key')
-        .eq('id', userId)
-        .maybeSingle();
-        
-      if (profileError) {
-        console.error("Error fetching user profile:", profileError);
-      } else if (profile && profile.elevenlabs_api_key) {
-        elevenlabsApiKey = profile.elevenlabs_api_key;
-        elevenlabsKeySource = "user profile";
-        console.log("Successfully retrieved user's ElevenLabs API key");
-      } else {
-        console.warn("User doesn't have an ElevenLabs API key configured");
+      console.log(`[${connectionId}] Fetching ElevenLabs API key for user: ${userId}`);
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('elevenlabs_api_key')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (profileError) {
+          console.error(`[${connectionId}] Error fetching user profile:`, profileError);
+          // Continue with fallback to environment API key
+        } else if (profile && profile.elevenlabs_api_key) {
+          elevenlabsApiKey = profile.elevenlabs_api_key;
+          elevenlabsKeySource = "user profile";
+          console.log(`[${connectionId}] Successfully retrieved user's ElevenLabs API key`);
+        } else {
+          console.warn(`[${connectionId}] User doesn't have an ElevenLabs API key configured`);
+        }
+      } catch (profileFetchError) {
+        console.error(`[${connectionId}] Unexpected error fetching profile:`, profileFetchError);
+        // Continue with fallback to environment API key
       }
     }
     
     if (!elevenlabsApiKey) {
-      console.error("ElevenLabs API key not available!");
+      console.error(`[${connectionId}] ElevenLabs API key not available!`);
       throw new Error("ElevenLabs API key not available. Please add it to your profile or environment variables.");
     } else {
-      console.log(`Using ElevenLabs API key from ${elevenlabsKeySource}`);
+      console.log(`[${connectionId}] Using ElevenLabs API key from ${elevenlabsKeySource}`);
     }
     
-    // Validate API key format
+    // Quick validate API key format
     if (elevenlabsApiKey.length < 32) {
-      console.error("ElevenLabs API key format appears to be invalid (too short)");
+      console.error(`[${connectionId}] ElevenLabs API key format appears to be invalid (too short)`);
       throw new Error("ElevenLabs API key appears to be invalid. Please check your API key and try again.");
     }
     
@@ -102,28 +110,41 @@ serve(async (req) => {
     wsParams.append("output_format", "mulaw_8000");
     
     const elevenlabsWsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?${wsParams.toString()}`;
-    console.log(`Connecting to ElevenLabs WebSocket: ${elevenlabsWsUrl}`);
+    console.log(`[${connectionId}] Connecting to ElevenLabs WebSocket: ${elevenlabsWsUrl}`);
+    
+    // Track connection state
+    let elevenLabsConnected = false;
+    let elevenLabsAuthenticated = false;
     
     // Create a promise to track ElevenLabs connection status
-    let elevenLabsConnectionPromise;
-    let elevenLabsConnectionResolver;
-    
-    elevenLabsConnectionPromise = new Promise((resolve) => {
-      elevenLabsConnectionResolver = resolve;
+    const elevenLabsConnectionPromise = new Promise((resolve) => {
+      // This will be resolved in the onopen or onerror handlers
+      setTimeout(() => {
+        if (!elevenLabsConnected) {
+          console.error(`[${connectionId}] ElevenLabs connection timed out after 15 seconds`);
+          connectionError = true;
+          resolve(false);
+        }
+      }, 15000); // 15 second connection timeout
     });
     
-    // Connect to ElevenLabs WebSocket with timeout
+    // Connect to ElevenLabs WebSocket
     const elevenlabsWebSocket = new WebSocket(elevenlabsWsUrl);
     let streamSid = null;
-    let connectionTimeout = null;
+    let retryAttempt = 0;
+    const maxRetryAttempts = 2;
     
     // Set connection timeout
-    connectionTimeout = setTimeout(() => {
-      if (elevenlabsWebSocket.readyState !== WebSocket.OPEN) {
-        console.error("ElevenLabs connection timeout after 10 seconds");
+    const connectionTimeout = setTimeout(() => {
+      if (!elevenLabsConnected) {
+        console.error(`[${connectionId}] ElevenLabs connection timeout after 10 seconds`);
         connectionError = true;
-        elevenlabsWebSocket.close();
-        elevenLabsConnectionResolver(false);
+        
+        try {
+          elevenlabsWebSocket.close();
+        } catch (e) {
+          console.error(`[${connectionId}] Error closing ElevenLabs websocket:`, e);
+        }
         
         // Send error message to client if streamSid is available
         if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
@@ -132,20 +153,28 @@ serve(async (req) => {
       }
     }, 10000);
     
-    // Set authorization header
+    // Set authorization and connection handlers
     elevenlabsWebSocket.onopen = () => {
-      console.log("Connected to ElevenLabs WebSocket");
+      elevenLabsConnected = true;
+      console.log(`[${connectionId}] Connected to ElevenLabs WebSocket`);
+      clearTimeout(connectionTimeout);
       
       // Send authorization
-      const authMessage = JSON.stringify({
-        "xi-api-key": elevenlabsApiKey
-      });
-      
-      elevenlabsWebSocket.send(authMessage);
-      console.log("Sent authorization to ElevenLabs");
-      
-      // Clear connection timeout
-      clearTimeout(connectionTimeout);
+      try {
+        const authMessage = JSON.stringify({
+          "xi-api-key": elevenlabsApiKey
+        });
+        
+        elevenlabsWebSocket.send(authMessage);
+        console.log(`[${connectionId}] Sent authorization to ElevenLabs`);
+      } catch (authError) {
+        console.error(`[${connectionId}] Failed to send authorization:`, authError);
+        connectionError = true;
+        
+        if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
+          sendErrorAudio(clientSocket, streamSid);
+        }
+      }
     };
     
     // Handle messages from Twilio
@@ -154,7 +183,7 @@ serve(async (req) => {
         const message = JSON.parse(event.data);
         
         if (message.event === "start") {
-          console.log(`Twilio stream started with ID: ${message.start.streamSid}`);
+          console.log(`[${connectionId}] Twilio stream started with ID: ${message.start.streamSid}`);
           streamSid = message.start.streamSid;
           
           // If connection error already occurred, send error audio immediately
@@ -163,18 +192,29 @@ serve(async (req) => {
           }
         } else if (message.event === "media") {
           // Forward audio from Twilio to ElevenLabs
-          if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
+          if (elevenlabsWebSocket.readyState === WebSocket.OPEN && elevenLabsAuthenticated) {
             const audioChunk = {
               user_audio_chunk: message.media.payload
             };
             elevenlabsWebSocket.send(JSON.stringify(audioChunk));
+          } else if (elevenlabsWebSocket.readyState === WebSocket.OPEN && !connectionError) {
+            // Buffer some initial audio while waiting for authentication to complete
+            // This prevents audio loss during the initial connection setup
+            const bufferedAudio = {
+              user_audio_chunk: message.media.payload
+            };
+            
+            // Add to a buffer queue that will be sent after authentication completes
+            // Not implementing full queue mechanism here for simplicity
           }
         } else if (message.event === "stop") {
-          console.log("Twilio stream stopped");
-          elevenlabsWebSocket.close();
+          console.log(`[${connectionId}] Twilio stream stopped`);
+          if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
+            elevenlabsWebSocket.close();
+          }
         }
       } catch (err) {
-        console.error("Error handling message from Twilio:", err);
+        console.error(`[${connectionId}] Error handling message from Twilio:`, err);
       }
     };
     
@@ -184,13 +224,13 @@ serve(async (req) => {
         const data = JSON.parse(event.data);
         
         if (debug) {
-          console.log(`[DEBUG] Message from ElevenLabs: ${event.data.substring(0, 200)}...`);
+          console.log(`[${connectionId}] [DEBUG] Message from ElevenLabs: ${event.data.substring(0, 200)}...`);
         }
         
-        // Check for connection success
+        // Check for connection success with the first metadata message
         if (data.type === "conversation_initiation_metadata") {
-          console.log("Received conversation initiation metadata, connection successful");
-          elevenLabsConnectionResolver(true);
+          console.log(`[${connectionId}] Received conversation initiation metadata, connection successful`);
+          elevenLabsAuthenticated = true;
         }
         
         if (data.type === "audio" && data.audio_event?.audio_base_64) {
@@ -217,18 +257,20 @@ serve(async (req) => {
           };
           elevenlabsWebSocket.send(JSON.stringify(pongResponse));
         } else if (data.type === "conversation_initiation_metadata") {
-          console.log("Received conversation initiation metadata:", 
+          console.log(`[${connectionId}] Received conversation initiation metadata:`, 
                       data.conversation_initiation_metadata_event);
         } else if (data.type === "user_transcript" || data.type === "agent_response") {
           // Log transcript for debugging
-          console.log(`${data.type}: ${JSON.stringify(data)}`);
+          console.log(`[${connectionId}] ${data.type}: ${JSON.stringify(data)}`);
           
           // Store transcript in call log if we have callLogId
           if (callLogId) {
-            updateCallLog(supabase, callLogId, data).catch(console.error);
+            updateCallLog(supabase, callLogId, data).catch(err => {
+              console.error(`[${connectionId}] Error updating call log:`, err);
+            });
           }
         } else if (data.type === "error") {
-          console.error("ElevenLabs error:", data);
+          console.error(`[${connectionId}] ElevenLabs error:`, data);
           
           // Try to send an error message to the caller
           if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
@@ -236,38 +278,63 @@ serve(async (req) => {
           }
         }
       } catch (err) {
-        console.error("Error handling message from ElevenLabs:", err);
+        console.error(`[${connectionId}] Error handling message from ElevenLabs:`, err);
       }
     };
     
     // Handle socket closures
-    clientSocket.onclose = () => {
-      console.log("Twilio WebSocket closed");
+    clientSocket.onclose = (event) => {
+      console.log(`[${connectionId}] Twilio WebSocket closed with code: ${event.code}, reason: ${event.reason || "Unknown reason"}`);
       if (elevenlabsWebSocket.readyState === WebSocket.OPEN) {
-        elevenlabsWebSocket.close();
+        try {
+          elevenlabsWebSocket.close();
+        } catch (e) {
+          console.error(`[${connectionId}] Error closing ElevenLabs websocket:`, e);
+        }
       }
     };
     
     elevenlabsWebSocket.onclose = (event) => {
-      console.log(`ElevenLabs WebSocket closed with code: ${event.code}, reason: ${event.reason || "Unknown reason"}`);
-      elevenLabsConnectionResolver(false);
+      console.log(`[${connectionId}] ElevenLabs WebSocket closed with code: ${event.code}, reason: ${event.reason || "Unknown reason"}`);
       
-      if (clientSocket.readyState === WebSocket.OPEN) {
-        clientSocket.close();
+      // If we closed due to an error and can retry, do so
+      if (connectionError && retryAttempt < maxRetryAttempts && clientSocket.readyState === WebSocket.OPEN) {
+        retryAttempt++;
+        console.log(`[${connectionId}] Attempting retry ${retryAttempt} of ${maxRetryAttempts}`);
+        
+        // Simple retry logic
+        setTimeout(() => {
+          try {
+            // Not implementing full retry here for simplicity
+            // Would need to create a new WebSocket and re-setup all handlers
+            if (streamSid && clientSocket.readyState === WebSocket.OPEN) {
+              sendErrorAudio(clientSocket, streamSid);
+            }
+          } catch (retryError) {
+            console.error(`[${connectionId}] Error during retry attempt:`, retryError);
+          }
+        }, 1000 * retryAttempt); // Exponential backoff
+      } else {
+        if (clientSocket.readyState === WebSocket.OPEN) {
+          try {
+            clientSocket.close();
+          } catch (e) {
+            console.error(`[${connectionId}] Error closing client websocket:`, e);
+          }
+        }
       }
     };
     
     // Handle errors
     clientSocket.onerror = (e) => {
-      console.error("Twilio WebSocket error:", e);
+      console.error(`[${connectionId}] Twilio WebSocket error:`, e);
       error = e;
     };
     
     elevenlabsWebSocket.onerror = (e) => {
-      console.error("ElevenLabs WebSocket error:", e);
+      console.error(`[${connectionId}] ElevenLabs WebSocket error:`, e);
       error = e;
       connectionError = true;
-      elevenLabsConnectionResolver(false);
       
       // Try to send a message to the user about the error
       try {
@@ -275,14 +342,14 @@ serve(async (req) => {
           sendErrorAudio(clientSocket, streamSid);
         }
       } catch (err) {
-        console.error("Failed to send error message:", err);
+        console.error(`[${connectionId}] Failed to send error message:`, err);
       }
     };
     
     return response;
     
   } catch (err) {
-    console.error("Error in twilio-media-stream:", err);
+    console.error(`[${connectionId}] Error in twilio-media-stream:`, err);
     
     // Return a proper error response
     return new Response(

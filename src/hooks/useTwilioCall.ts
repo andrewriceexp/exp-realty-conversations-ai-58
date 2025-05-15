@@ -72,7 +72,7 @@ export function useTwilioCall() {
     }
     
     return userId;
-  }, [session, user, toast]);
+  }, [session, user]);
 
   // Function to validate Twilio credentials without making a call
   const validateTwilioCredentials = useCallback(async (userId: string): Promise<boolean> => {
@@ -130,12 +130,17 @@ export function useTwilioCall() {
           // Do a quick check if the user has Twilio credentials set up
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('twilio_account_sid, twilio_auth_token')
+            .select('twilio_account_sid, twilio_auth_token, twilio_phone_number')
             .eq('id', userId)
             .maybeSingle();
 
           if (profileError) {
             console.error("[TwilioCall] Error fetching profile:", profileError);
+            return {
+              success: false,
+              message: `Error fetching profile: ${profileError.message}`,
+              error: profileError.message
+            };
           }
 
           if (!profileData?.twilio_account_sid || !profileData?.twilio_auth_token) {
@@ -143,6 +148,15 @@ export function useTwilioCall() {
             return {
               success: false,
               message: "Twilio credentials are not configured. Please update your profile with Twilio credentials.",
+              code: "TWILIO_CONFIG_INCOMPLETE"
+            };
+          }
+
+          if (!profileData?.twilio_phone_number) {
+            console.error("[TwilioCall] Missing Twilio phone number");
+            return {
+              success: false,
+              message: "Twilio phone number is not configured. Please update your profile with a Twilio phone number.",
               code: "TWILIO_CONFIG_INCOMPLETE"
             };
           }
@@ -255,13 +269,30 @@ export function useTwilioCall() {
       console.log("[TwilioCall] Using user ID:", userId);
       
       // Check if ElevenLabs API key is configured for user
-      if (!params.bypassValidation && !profile?.elevenlabs_api_key) {
-        console.error("[TwilioCall] ElevenLabs API key not configured");
-        return {
-          success: false,
-          message: "ElevenLabs API key is not configured in your profile",
-          code: "ELEVENLABS_API_KEY_MISSING"
-        };
+      if (!params.bypassValidation) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('elevenlabs_api_key')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (profileError) {
+          console.error("[TwilioCall] Error fetching profile for ElevenLabs key:", profileError);
+          return {
+            success: false,
+            message: `Error checking ElevenLabs setup: ${profileError.message}`,
+            error: profileError.message
+          };
+        }
+        
+        if (!profileData?.elevenlabs_api_key) {
+          console.error("[TwilioCall] ElevenLabs API key not configured");
+          return {
+            success: false,
+            message: "ElevenLabs API key is not configured in your profile. Please add your ElevenLabs API key in your profile settings.",
+            code: "ELEVENLABS_API_KEY_MISSING"
+          };
+        }
       }
       
       // Fetch the prospect details to get the phone number
@@ -313,6 +344,10 @@ export function useTwilioCall() {
       if (agentConfig?.first_message) {
         configOverride.agent.first_message = agentConfig.first_message;
       }
+      
+      // Make sure we set the input_format and output_format for telephony
+      configOverride.agent.input_format = "mulaw_8000";
+      configOverride.agent.output_format = "mulaw_8000";
       
       // Call the elevenlabs-outbound-call edge function
       const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
