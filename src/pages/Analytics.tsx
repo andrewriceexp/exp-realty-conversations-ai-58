@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { DownloadIcon } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import ActiveCallsCard from '@/components/dashboard/ActiveCallsCard';
+import { ActiveCallsCard } from '@/components/dashboard/ActiveCallsCard';
 
 const Analytics = () => {
   const { user } = useAuth();
@@ -108,17 +109,38 @@ const Analytics = () => {
       });
       const averageCallDuration = totalCalls ? Math.round(totalDuration / totalCalls) : 0;
       
+      // Safely handle count values from Supabase responses
+      const totalProspectsCount = typeof prospectData?.[0]?.count === 'number' 
+        ? prospectData[0].count 
+        : parseInt(prospectData?.[0]?.count as string || '0');
+      
+      const pendingProspectsCount = typeof pendingProspectsData?.[0]?.count === 'number'
+        ? pendingProspectsData[0].count
+        : parseInt(pendingProspectsData?.[0]?.count as string || '0');
+      
+      const completedProspectsCount = typeof completedProspectsData?.[0]?.count === 'number'
+        ? completedProspectsData[0].count
+        : parseInt(completedProspectsData?.[0]?.count as string || '0');
+      
+      const todayCallsCount = typeof todayCallsData?.[0]?.count === 'number'
+        ? todayCallsData[0].count
+        : parseInt(todayCallsData?.[0]?.count as string || '0');
+      
+      const weekCallsCount = typeof weekCallsData?.[0]?.count === 'number'
+        ? weekCallsData[0].count
+        : parseInt(weekCallsData?.[0]?.count as string || '0');
+      
       // Prepare dashboard stats
       const dashboardStats: DashboardStats = {
-        totalProspects: parseInt(prospectData?.[0]?.count) || 0,
+        totalProspects: totalProspectsCount,
         totalCalls: totalCalls,
         completedCalls: completedCalls,
         averageCallDuration: averageCallDuration,
         successRate: successRate,
-        callsToday: parseInt(todayCallsData?.[0]?.count) || 0,
-        callsThisWeek: parseInt(weekCallsData?.[0]?.count) || 0,
-        pendingProspects: parseInt(pendingProspectsData?.[0]?.count) || 0,
-        completedProspects: parseInt(completedProspectsData?.[0]?.count) || 0
+        callsToday: todayCallsCount,
+        callsThisWeek: weekCallsCount,
+        pendingProspects: pendingProspectsCount,
+        completedProspects: completedProspectsCount
       };
       
       setStats(dashboardStats);
