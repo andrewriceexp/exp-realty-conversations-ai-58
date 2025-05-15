@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -12,7 +13,8 @@ serve(async (req) => {
   }
   
   try {
-    const { prospectId, prospect_id, agent_config_id, user_id, bypass_validation, debug_mode, voice_id } = await req.json();
+    const body = await req.json();
+    const { prospectId, prospect_id, agent_config_id, user_id, bypass_validation, debug_mode, voice_id, use_webhook_proxy } = body;
     
     // Use either prospectId or prospect_id for backwards compatibility
     const finalProspectId = prospectId || prospect_id;
@@ -189,11 +191,11 @@ serve(async (req) => {
       }
       
       // Get configuration parameters
-      const bypassValidation = body.bypass_validation || false;
-      const debugMode = body.debug_mode || false;
-      const voiceId = body.voice_id || null;
+      const bypassValidation = bypass_validation || false;
+      const debugMode = debug_mode || false;
+      const voiceId = voice_id || null;
       // NEW: Check if we should use the webhook proxy (default to true for better compatibility)
-      const useWebhookProxy = body.use_webhook_proxy !== false;
+      const useWebhookProxy = use_webhook_proxy !== false;
       
       // CRITICAL CHANGE: Use the correct URL format based on the proxy flag
       let twimlWebhookUrl;
@@ -210,11 +212,12 @@ serve(async (req) => {
       // Add query parameters
       const params = new URLSearchParams();
       
-      if (agentConfigId) {
+      // Get agent ID from agent config
+      if (agent_config_id) {
         const { data: agentConfig } = await supabaseClient
           .from('agent_configs')
           .select('elevenlabs_agent_id')
-          .eq('id', agentConfigId)
+          .eq('id', agent_config_id)
           .maybeSingle();
           
         if (agentConfig?.elevenlabs_agent_id) {
@@ -231,8 +234,8 @@ serve(async (req) => {
         params.append("voice_id", voiceId);
       }
       
-      if (userId) {
-        params.append("user_id", userId);
+      if (user_id) {
+        params.append("user_id", user_id);
       }
       
       if (debugMode) {

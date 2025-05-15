@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -74,19 +75,24 @@ export function useTwilioCall() {
   }, [session, user]);
 
   // Function to validate Twilio credentials without making a call
-  const validateTwilioCredentials = useCallback(async (userId: string): Promise<boolean> => {
+  const validateTwilioCredentials = useCallback(async (accountSid: string, authToken: string): Promise<boolean> => {
     try {
+      console.log("[TwilioCall] Validating credentials with accountSid:", accountSid?.substring(0, 10) + "...");
+      
       const { data, error } = await supabase.functions.invoke('verify-twilio-creds', {
-        body: { user_id: userId }
+        body: { 
+          account_sid: accountSid,
+          auth_token: authToken
+        }
       });
       
       if (error) {
-        console.error("[TwilioCall] Error verifying credentials:", error);
+        console.error("[TwilioCall] Error invoking verify-twilio-creds:", error);
         return false;
       }
       
-      if (!data?.valid) {
-        console.error("[TwilioCall] Invalid Twilio credentials:", data?.message);
+      if (!data?.success) {
+        console.error("[TwilioCall] Invalid Twilio credentials:", data?.error || "Unknown error");
         return false;
       }
       
@@ -162,7 +168,11 @@ export function useTwilioCall() {
           }
           
           // Validate Twilio credentials
-          const credentialsValid = await validateTwilioCredentials(String(userId));
+          const credentialsValid = await validateTwilioCredentials(
+            profileData.twilio_account_sid,
+            profileData.twilio_auth_token
+          );
+          
           if (!credentialsValid) {
             return {
               success: false,

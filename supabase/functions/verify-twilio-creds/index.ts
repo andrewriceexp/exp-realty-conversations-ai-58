@@ -1,7 +1,6 @@
 
 // Function to verify Twilio credentials
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,7 +17,25 @@ serve(async (req) => {
   try {
     // Get request payload
     const requestData = await req.json();
-    const { account_sid, auth_token } = requestData;
+    const { account_sid, auth_token, user_id } = requestData;
+    
+    // For user_id based lookup (check if we should get credentials from the database)
+    if (user_id && !account_sid && !auth_token) {
+      // This would require fetching credentials from the database - not implemented yet
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'User ID based validation is not implemented yet',
+        }),
+        { 
+          status: 400, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      );
+    }
     
     if (!account_sid || !auth_token) {
       return new Response(
@@ -70,6 +87,7 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           message: 'Twilio credentials are valid',
+          valid: true,
           account_info: {
             friendly_name: responseData.friendly_name,
             status: responseData.status
