@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -34,8 +33,31 @@ serve(async (req) => {
     const finalBypassValidation = bypassValidation || bypass_validation || false;
     const finalDebugMode = debugMode || debug_mode || false;
     const finalVoiceId = voiceId || voice_id;
+    const finalUserId = user_id; // This is critical - ensure it exists
+
+    // Log incoming request with all parameters
+    console.log(`Request received:`, {
+      prospectId: finalProspectId,
+      agentConfigId: finalAgentConfigId,
+      userId: finalUserId,
+      bypassValidation: finalBypassValidation,
+      debugMode: finalDebugMode,
+      voiceId: finalVoiceId ? `${finalVoiceId.slice(0, 8)}...` : 'none'
+    });
 
     // Validate required parameters
+    if (!finalUserId) {
+      console.error("Missing user ID in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Missing user ID",
+        code: "MISSING_USER_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (!finalProspectId) {
       console.error("Missing prospect ID in request");
       return new Response(JSON.stringify({
@@ -54,18 +76,6 @@ serve(async (req) => {
         success: false,
         message: "Missing agent configuration ID",
         code: "MISSING_AGENT_CONFIG_ID"
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!user_id) {
-      console.error("Missing user ID in request");
-      return new Response(JSON.stringify({
-        success: false,
-        message: "Missing user ID",
-        code: "MISSING_USER_ID"
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -95,7 +105,7 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey);
 
     // Log incoming request data
-    console.log(`Initiating call with prospect ID: ${finalProspectId}, agent config ID: ${finalAgentConfigId}, user ID: ${user_id}`);
+    console.log(`Initiating call with prospect ID: ${finalProspectId}, agent config ID: ${finalAgentConfigId}, user ID: ${finalUserId}`);
     console.log(`bypassValidation: ${finalBypassValidation}, debugMode: ${finalDebugMode}, voiceId: ${finalVoiceId ? `${finalVoiceId.slice(0, 8)}...` : 'none'}`);
 
     // Step 1: Get user profile with Twilio credentials
@@ -107,7 +117,7 @@ serve(async (req) => {
     const { data: profileData, error: profileErr } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', user_id)
+      .eq('id', finalUserId)
       .maybeSingle();
     
     if (profileErr || !profileData) {
@@ -117,7 +127,7 @@ serve(async (req) => {
       const { data: adminProfileData, error: adminProfileError } = await supabaseAdmin
         .from('profiles')
         .select('*')
-        .eq('id', user_id)
+        .eq('id', finalUserId)
         .maybeSingle();
         
       if (adminProfileError || !adminProfileData) {
@@ -140,7 +150,7 @@ serve(async (req) => {
       profile = profileData;
     }
     
-    console.log(`Successfully fetched profile for user: ${profile.email || user_id}`);
+    console.log(`Successfully fetched profile for user: ${profile.email || finalUserId}`);
     
     // Ensure Twilio credentials are present
     if (!profile.twilio_account_sid || !profile.twilio_auth_token || !profile.twilio_phone_number) {
@@ -197,7 +207,7 @@ serve(async (req) => {
     const { data: callLog, error: callLogError } = await supabaseAdmin
       .from('call_logs')
       .insert([{
-        user_id: user_id,
+        user_id: finalUserId,
         prospect_id: finalProspectId,
         agent_config_id: finalAgentConfigId,
         status: 'Initiating',
@@ -244,7 +254,7 @@ serve(async (req) => {
     }
     
     // Add user ID for authentication
-    urlParams.append('user_id', user_id);
+    urlParams.append('user_id', finalUserId);
     
     // Append parameters to URL
     const paramString = urlParams.toString();

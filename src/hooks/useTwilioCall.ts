@@ -40,7 +40,7 @@ export interface CallStatusResponse {
 export function useTwilioCall() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
-  const { session } = useAuth();
+  const { session, user } = useAuth();
 
   const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
     if (!session?.access_token) {
@@ -53,19 +53,36 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
+    // Ensure userId is always set
+    const userId = params.userId || user?.id || session?.user?.id;
+    if (!userId) {
+      console.error("[TwilioCall] No user ID available");
+      toast({
+        title: "Configuration Error",
+        description: "User ID is required to make calls",
+        variant: "destructive"
+      });
+      return { success: false, message: "User ID is required" };
+    }
+
     try {
       setIsLoading(true);
       console.log("[TwilioCall] Making call to prospect ID:", params.prospectId);
+      console.log("[TwilioCall] Using user ID:", userId);
 
       // Determine whether to use ElevenLabs agent or regular Twilio call
       if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
-        return await makeElevenLabsCall(params);
+        return await makeElevenLabsCall({
+          ...params,
+          userId // Ensure userId is passed
+        });
       } else {
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
+            prospect_id: params.prospectId, // Include both formats for backward compatibility
             agent_config_id: params.agentConfigId,
-            user_id: params.userId || session.user.id, // Always ensure user_id is passed
+            user_id: userId, // Always use the resolved userId
             bypass_validation: params.bypassValidation || false,
             debug_mode: params.debugMode || false,
             voice_id: params.voiceId
@@ -145,8 +162,16 @@ export function useTwilioCall() {
   };
 
   const makeElevenLabsCall = async (params: MakeCallParams): Promise<CallResponse> => {
+    // Ensure userId is always set
+    const userId = params.userId || user?.id || session?.user?.id;
+    if (!userId) {
+      console.error("[TwilioCall] No user ID available for ElevenLabs call");
+      return { success: false, message: "User ID is required" };
+    }
+
     try {
       console.log("[TwilioCall] Making ElevenLabs call with agent ID:", params.elevenLabsAgentId);
+      console.log("[TwilioCall] Using user ID:", userId);
       
       // Fetch the prospect details to get the phone number
       const { data: prospectData, error: prospectError } = await supabase
@@ -203,9 +228,11 @@ export function useTwilioCall() {
         body: {
           agent_id: params.elevenLabsAgentId,
           to_number: prospectData.phone_number,
-          user_id: params.userId || session.user.id,
+          user_id: userId, // Use the resolved userId
+          prospect_id: params.prospectId, // Add for call_logs
+          agent_config_id: params.agentConfigId, // Add for call_logs
           dynamic_variables: {
-            prospect_name: prospectData.first_name || 'Prospect', // Add fallback value
+            prospect_name: prospectData.first_name || 'Prospect',
             prospect_id: params.prospectId
           },
           conversation_config_override: configOverride
@@ -265,22 +292,32 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
+    // Ensure userId is always set
+    const userId = params.userId || user?.id || session?.user?.id;
+    if (!userId) {
+      console.error("[TwilioCall:Dev] No user ID available");
+      return { success: false, message: "User ID is required" };
+    }
+
     try {
       setIsLoading(true);
       console.log("[TwilioCall:Dev] Making development call to prospect ID:", params.prospectId);
+      console.log("[TwilioCall:Dev] Using user ID:", userId);
 
       if (params.useElevenLabsAgent && params.elevenLabsAgentId) {
         return await makeElevenLabsCall({
           ...params,
           bypassValidation: true,
-          debugMode: params.debugMode || true
+          debugMode: params.debugMode || true,
+          userId // Ensure userId is passed
         });
       } else {
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
-            prospect_id: params.prospectId,
+            prospectId: params.prospectId,
+            prospect_id: params.prospectId, // Include both formats for backward compatibility
             agent_config_id: params.agentConfigId,
-            user_id: params.userId || session.user.id, // Critical fix: ensure user_id is always passed
+            user_id: userId, // Use the resolved userId
             bypass_validation: true,
             debug_mode: params.debugMode || false,
             voice_id: params.voiceId

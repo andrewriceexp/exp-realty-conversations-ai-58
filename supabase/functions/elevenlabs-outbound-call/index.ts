@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -9,6 +8,8 @@ interface OutboundCallRequest {
   agent_id: string;
   to_number: string;
   user_id: string;
+  prospect_id?: string;
+  agent_config_id?: string;
   dynamic_variables?: Record<string, any>;
   conversation_config_override?: {
     agent?: {
@@ -32,12 +33,63 @@ serve(async (req) => {
   
   try {
     const requestBody = await req.json();
-    const { agent_id, to_number, user_id, dynamic_variables, conversation_config_override } = requestBody as OutboundCallRequest;
+    const { 
+      agent_id, 
+      to_number, 
+      user_id, 
+      prospect_id, 
+      agent_config_id,
+      dynamic_variables, 
+      conversation_config_override 
+    } = requestBody as OutboundCallRequest;
+
+    // Log received parameters for debugging
+    console.log("Request received:", {
+      agent_id,
+      to_number: to_number?.substring(0, 6) + "xxxx", // Mask for privacy in logs
+      user_id,
+      prospect_id,
+      agent_config_id,
+      has_dynamic_variables: !!dynamic_variables,
+      has_config_override: !!conversation_config_override
+    });
 
     // Validate required fields
-    if (!agent_id) throw new Error("Agent ID is required");
-    if (!to_number) throw new Error("Phone number is required");
-    if (!user_id) throw new Error("User ID is required");
+    if (!agent_id) {
+      console.error("Missing agent_id in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Agent ID is required",
+        code: "MISSING_AGENT_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    if (!to_number) {
+      console.error("Missing to_number in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Phone number is required",
+        code: "MISSING_PHONE_NUMBER"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    if (!user_id) {
+      console.error("Missing user_id in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "User ID is required",
+        code: "MISSING_USER_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     console.log(`Initiating outbound call to ${to_number.substring(0, 6)}xxxx with agent ${agent_id}`);
 
@@ -61,7 +113,14 @@ serve(async (req) => {
       
     if (profileError || !profile?.elevenlabs_api_key) {
       console.error("Error fetching profile or missing API key:", profileError);
-      throw new Error("ElevenLabs API key not configured in your profile");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "ElevenLabs API key not configured in your profile",
+        code: "ELEVENLABS_API_KEY_MISSING"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     
     // Prepare the payload for ElevenLabs API
@@ -203,7 +262,7 @@ serve(async (req) => {
     
     // Enhanced error classification
     let errorCode = "GENERAL_ERROR";
-    let status = 200; // Keep 200 to prevent client errors
+    let status = 400; // Use 400 for client errors
     
     if (error.message?.includes("ElevenLabs API key")) {
       errorCode = "ELEVENLABS_API_KEY_MISSING";
