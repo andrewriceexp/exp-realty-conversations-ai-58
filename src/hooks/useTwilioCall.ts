@@ -42,6 +42,10 @@ export function useTwilioCall() {
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
   const { session, user } = useAuth();
 
+  // Make sure we get and log the user object from auth context
+  console.log("[TwilioCall] Auth user:", user?.id);
+  console.log("[TwilioCall] Auth session:", session?.user?.id);
+
   const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
     if (!session?.access_token) {
       console.error("[TwilioCall] No authentication token available");
@@ -53,13 +57,14 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
-    // Ensure userId is always set
+    // Ensure userId is always set - THIS IS CRITICAL
     const userId = params.userId || user?.id || session?.user?.id;
+    
     if (!userId) {
       console.error("[TwilioCall] No user ID available");
       toast({
         title: "Configuration Error",
-        description: "User ID is required to make calls",
+        description: "User ID is required to make calls. Please refresh and try again.",
         variant: "destructive"
       });
       return { success: false, message: "User ID is required" };
@@ -292,10 +297,16 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
-    // Ensure userId is always set - THIS WAS THE CRITICAL FIX!
+    // Ensure userId is always set - THIS IS CRITICAL
     const userId = params.userId || user?.id || session?.user?.id;
+    
     if (!userId) {
       console.error("[TwilioCall:Dev] No user ID available");
+      toast({
+        title: "Configuration Error", 
+        description: "User ID is required to make calls. Please refresh and try again.",
+        variant: "destructive"
+      });
       return { success: false, message: "User ID is required" };
     }
 
@@ -319,7 +330,7 @@ export function useTwilioCall() {
             agent_config_id: params.agentConfigId,
             user_id: userId, // Use the resolved userId
             bypass_validation: true,
-            debug_mode: params.debugMode || true, // For development calls, always set debug mode
+            debug_mode: true, // For development calls, always set debug mode
             voice_id: params.voiceId
           }
         });
@@ -351,7 +362,7 @@ export function useTwilioCall() {
             code: data.code
           };
         } else {
-          console.error("[TwilioCall:Dev] No call SID returned");
+          console.error("[TwilloCall:Dev] No call SID returned");
           return {
             success: false,
             message: "Failed to initiate development call: No call ID returned"
