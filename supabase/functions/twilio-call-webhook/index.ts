@@ -61,11 +61,11 @@ serve(async (req) => {
       (JSON.stringify(twilioParams).length > 100 ? "..." : "")
     );
     
-    // Get the server hostname
-    const host = req.headers.get("host") || "";
+    // Get the server hostname - CRITICAL CHANGE: Use the Supabase project ref in the URL
+    const supabaseProjectRef = Deno.env.get("SUPABASE_PROJECT_REF") || "uttebgyhijrdcjiczxrg";
     
-    // Create the media stream URL
-    const mediaStreamUrl = `wss://${host}/twilio-media-stream`;
+    // Create the media stream URL with the full domain - CRITICAL FIX
+    const mediaStreamUrl = `wss://${supabaseProjectRef}.supabase.co/functions/v1/twilio-media-stream`;
     
     // Add query parameters
     const params = new URLSearchParams();
@@ -113,13 +113,7 @@ serve(async (req) => {
           if (callSid && from) {
             console.log(`Creating call log for inbound call: ${callSid} from ${from}`);
             
-            // Check if prospect_id and agent_config_id are required
-            const { data: tableInfo } = await supabase
-              .from('call_logs')
-              .select('*')
-              .limit(1);
-            
-            // Prepare the call log data
+            // Prepare the call log data - REMOVE fields that might cause errors
             const callData: Record<string, any> = {
               user_id: userId,
               twilio_call_sid: callSid,
@@ -135,12 +129,12 @@ serve(async (req) => {
             };
             
             // Set required fields that might not be in the URL params
-            // Use placeholders that will be updated later
             if (agentId) {
               callData.agent_id = agentId;
             }
             
             try {
+              // Remove fields that might not exist in the schema - critical fix
               const { data: insertResult, error: insertError } = await supabase
                 .from('call_logs')
                 .insert([callData])

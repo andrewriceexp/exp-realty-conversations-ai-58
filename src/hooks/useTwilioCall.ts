@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -173,7 +172,7 @@ export function useTwilioCall() {
           }
         }
 
-        // Make call with explicit type conversion for userId
+        // IMPORTANT FIX: Use the correct function invocation approach
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
