@@ -63,7 +63,21 @@ serve(async (req) => {
     // CRITICAL FIX: Set the required x-deno-subhost header
     headers.set("x-deno-subhost", supabaseProjectRef);
     
-    // Copy any authorization headers if present
+    // CRITICAL FIX: Add explicit authorization header 
+    headers.set("Authorization", "Bearer " + Deno.env.get("SUPABASE_ANON_KEY"));
+    
+    // Copy any Twilio signature headers if present (could be under different case variations)
+    const twilioSignature = req.headers.get("twilio-signature") || 
+                           req.headers.get("X-Twilio-Signature") || 
+                           req.headers.get("x-twilio-signature");
+    
+    if (twilioSignature) {
+      console.log("Found Twilio signature, forwarding it");
+      headers.set("twilio-signature", twilioSignature);
+      headers.set("X-Twilio-Signature", twilioSignature);
+    }
+    
+    // Copy any other authorization headers if present
     const authHeader = req.headers.get("authorization");
     if (authHeader) headers.set("authorization", authHeader);
     
@@ -91,6 +105,7 @@ serve(async (req) => {
     }
     
     console.log(`Forwarding ${req.method} request to ${fullUrl}`);
+    console.log(`Headers: ${[...headers.entries()].map(([k, v]) => `${k}=${v.substring(0, 20)}...`).join(', ')}`);
     
     const response = await fetch(fullUrl, {
       method: req.method,
