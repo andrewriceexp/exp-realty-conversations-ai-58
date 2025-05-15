@@ -9,5 +9,6 @@ verify_jwt = false
 
 [functions.twilio-media-stream] 
 verify_jwt = false
-timeout_seconds = 600
-max_duration = 600
+timeout_seconds = 1800
+max_duration = 1800
+

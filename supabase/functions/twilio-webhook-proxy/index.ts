@@ -28,15 +28,6 @@ serve(async (req) => {
       body = "";
     }
     
-    // Parse Twilio parameters for logging
-    try {
-      const formData = new URLSearchParams(body);
-      const twilioParams = Object.fromEntries(formData.entries());
-      console.log("Received Twilio parameters:", JSON.stringify(twilioParams).substring(0, 200) + "...");
-    } catch (error) {
-      console.error("Error parsing Twilio parameters:", error);
-    }
-
     // Determine target endpoint - usually twilio-call-webhook unless it's the media stream
     const pathSegments = url.pathname.split('/');
     const lastSegment = pathSegments[pathSegments.length - 1];
@@ -44,24 +35,12 @@ serve(async (req) => {
     let targetEndpoint = "twilio-call-webhook";
     if (lastSegment === "media-stream" || lastSegment === "twilio-media-stream") {
       targetEndpoint = "twilio-media-stream";
-      console.log("Detected media stream request, forwarding to twilio-media-stream");
+      console.log("WebSocket request detected, forwarding to twilio-media-stream");
     }
     
     // Construct the target URL
     const targetUrl = `${url.protocol}//${url.hostname}/functions/v1/${targetEndpoint}?${queryParams}`;
     console.log("Proxying request to:", targetUrl);
-
-    // Check for Twilio signature headers and forward them
-    const twilioSignatureHeadersToForward = [];
-    for (const [key, value] of req.headers.entries()) {
-      if (key.toLowerCase().includes("twilio-signature")) {
-        twilioSignatureHeadersToForward.push([key, value]);
-      }
-    }
-    
-    if (twilioSignatureHeadersToForward.length > 0) {
-      console.log(`Found ${twilioSignatureHeadersToForward.length} Twilio signature header(s), forwarding them`);
-    }
 
     // Create new headers for the request to the target endpoint
     const headers = new Headers();
@@ -71,66 +50,63 @@ serve(async (req) => {
       headers.set("content-type", req.headers.get("content-type")!);
     }
     
-    // Forward Twilio signature headers
-    for (const [key, value] of twilioSignatureHeadersToForward) {
-      headers.set(key, value);
+    // Forward all WebSocket-related headers - this is critical for the handshake
+    const headersToForward = [
+      "upgrade", 
+      "connection", 
+      "sec-websocket-key", 
+      "sec-websocket-version", 
+      "sec-websocket-extensions", 
+      "sec-websocket-protocol",
+      "twilio-signature",
+      "x-twilio-signature"
+    ];
+    
+    for (const header of headersToForward) {
+      const value = req.headers.get(header);
+      if (value) {
+        console.log(`Forwarding header: ${header}=${value}`);
+        headers.set(header, value);
+      }
     }
 
     // If we have Supabase anon key, set it to authenticate with the target endpoint
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
     if (supabaseAnonKey) {
-      console.log("Found SUPABASE_ANON_KEY, setting Authorization header");
       headers.set("Authorization", `Bearer ${supabaseAnonKey}`);
     }
-
-    // Forward WebSocket-related headers for media stream
-    if (targetEndpoint === "twilio-media-stream") {
-      for (const header of ["upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions"]) {
-        const value = req.headers.get(header);
-        if (value) {
-          console.log(`Forwarding WebSocket header: ${header}`);
-          headers.set(header, value);
-        }
-      }
-    }
-
-    // Log what headers we're forwarding
-    const headersLog = Array.from(headers.entries()).map(([key, value]) => 
-      `${key}=${value.substring(0, 20)}${value.length > 20 ? '...' : ''}`
-    ).join(', ');
-    console.log("Headers:", headersLog);
-
+    
     // Make the request to the target endpoint
+    console.log("Making request to target with WebSocket headers:", targetUrl);
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: headers,
       body: ["GET", "HEAD"].includes(req.method) ? undefined : body
     });
 
-    console.log("Proxy received response with status:", response.status);
-
-    // Return the response from the target endpoint
-    if (response.status === 101) {
-      // Handle WebSocket upgrade specially
-      console.log("Successfully received WebSocket upgrade response (101), forwarding as-is");
+    console.log("Received response with status:", response.status);
+    
+    // For WebSocket upgrade, we need to return the response directly
+    if (response.status === 101 || req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      console.log("WebSocket upgrade detected, forwarding response directly");
       return response;
-    } else {
-      // For regular responses
-      const responseHeaders = new Headers(response.headers);
-      
-      // Ensure CORS headers are set in the response
-      for (const [key, value] of Object.entries(corsHeaders)) {
-        responseHeaders.set(key, value);
-      }
-      
-      const responseBody = await response.text();
-      console.log("Successfully forwarded request and received", response.status, "response");
-      
-      return new Response(responseBody, {
-        status: response.status,
-        headers: responseHeaders
-      });
+    } 
+    
+    // For regular responses
+    const responseHeaders = new Headers(response.headers);
+    
+    // Ensure CORS headers are set in the response
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      responseHeaders.set(key, value);
     }
+    
+    const responseBody = await response.text();
+    console.log("Successfully forwarded request and received", response.status, "response");
+    
+    return new Response(responseBody, {
+      status: response.status,
+      headers: responseHeaders
+    });
   } catch (error) {
     console.error("Error proxying request:", error);
     return new Response(`Error proxying request: ${error instanceof Error ? error.message : String(error)}`, {
