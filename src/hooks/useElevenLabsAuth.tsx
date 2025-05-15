@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 
 export type ApiKeyStatus = 'valid' | 'invalid' | 'checking' | 'missing' | null;
@@ -29,6 +29,7 @@ export function useElevenLabsAuth() {
     try {
       setIsLoading(true);
       setError(null);
+      setApiKeyStatus('checking');
       console.log("[ElevenLabsAuth] Validating API key");
       
       // Call the elevenlabs-voices function to validate the API key
@@ -40,11 +41,16 @@ export function useElevenLabsAuth() {
         console.error("[ElevenLabsAuth] API key validation error:", error);
         setApiKeyStatus('invalid');
         setError(`API key validation failed: ${error.message}`);
-        toast({
-          title: "ElevenLabs API Key Error",
-          description: `Your API key could not be validated: ${error.message}`,
-          variant: "destructive"
-        });
+        
+        // Only show a toast if this is a user-initiated validation 
+        // and not just the automatic check on component mount
+        if (isReady) {
+          toast({
+            title: "ElevenLabs API Key Error",
+            description: `Your API key could not be validated: ${error.message}`,
+            variant: "destructive"
+          });
+        }
         return false;
       }
 
@@ -57,11 +63,15 @@ export function useElevenLabsAuth() {
         console.error("[ElevenLabsAuth] API key validation failed:", data?.message || "Unknown error");
         setApiKeyStatus('invalid');
         setError(`API key validation failed: ${data?.message || "Unknown error"}`);
-        toast({
-          title: "ElevenLabs API Key Error",
-          description: data?.message || "Your API key could not be validated",
-          variant: "destructive"
-        });
+        
+        // Only show a toast if this is a user-initiated validation
+        if (isReady) {
+          toast({
+            title: "ElevenLabs API Key Error",
+            description: data?.message || "Your API key could not be validated",
+            variant: "destructive"
+          });
+        }
         return false;
       }
     } catch (err) {
@@ -69,28 +79,37 @@ export function useElevenLabsAuth() {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setApiKeyStatus('invalid');
       setError(`API key validation error: ${errorMessage}`);
-      toast({
-        title: "ElevenLabs API Key Error",
-        description: `Unexpected error: ${errorMessage}`,
-        variant: "destructive"
-      });
+      
+      // Only show a toast if this is a user-initiated validation
+      if (isReady) {
+        toast({
+          title: "ElevenLabs API Key Error",
+          description: `Unexpected error: ${errorMessage}`,
+          variant: "destructive"
+        });
+      }
       return false;
     } finally {
       setIsLoading(false);
       setIsReady(true);
     }
-  }, [profile?.elevenlabs_api_key]);
+  }, [profile?.elevenlabs_api_key, isReady]);
 
   // Validate API key when profile changes
   useEffect(() => {
-    if (profile && hasApiKey && !isReady && !isLoading && apiKeyStatus !== 'valid') {
-      validateApiKey().catch(err => {
-        console.error("[ElevenLabsAuth] Error in validation effect:", err);
-      });
-    } else if (!hasApiKey) {
-      setApiKeyStatus('missing');
-      setIsReady(true);
-    }
+    // Debounce check to avoid hammering the API
+    const validateDebounced = setTimeout(() => {
+      if (profile && hasApiKey && !isReady && !isLoading && apiKeyStatus !== 'valid') {
+        validateApiKey().catch(err => {
+          console.error("[ElevenLabsAuth] Error in validation effect:", err);
+        });
+      } else if (!hasApiKey) {
+        setApiKeyStatus('missing');
+        setIsReady(true);
+      }
+    }, 500);
+    
+    return () => clearTimeout(validateDebounced);
   }, [profile, hasApiKey, isReady, validateApiKey, isLoading, apiKeyStatus]);
 
   return {

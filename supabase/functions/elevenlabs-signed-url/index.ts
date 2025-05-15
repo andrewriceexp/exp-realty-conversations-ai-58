@@ -122,46 +122,74 @@ serve(async (req) => {
       );
     }
     
-    // Call the ElevenLabs API to get a signed URL with retry logic
+    // Call the ElevenLabs API to get a signed URL with improved retry logic
     console.log("[elevenlabs-signed-url] Requesting signed URL for agent:", agent_id);
     
     const maxRetries = 3;
     let currentRetry = 0;
     let elevenlabsResponse;
     let responseOk = false;
+    let lastStatusCode = 0;
+    let lastErrorDetails = "";
     
     while (currentRetry < maxRetries && !responseOk) {
       try {
-        // Add input_format and output_format to the query parameters
+        // Use simple URL without adding any query parameters that might interfere
         const url = new URL(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url`);
         url.searchParams.append('agent_id', agent_id);
         
+        // Add a random delay to avoid rate limiting with exponential backoff
+        const waitTime = currentRetry > 0 ? Math.pow(2, currentRetry - 1) * 500 + Math.random() * 500 : 0;
+        if (waitTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        
+        console.log(`[elevenlabs-signed-url] Attempt ${currentRetry + 1}/${maxRetries} - requesting signed URL`);
+        
+        // Make the request with detailed headers
         elevenlabsResponse = await fetch(url.toString(), {
           method: "GET",
           headers: {
             "xi-api-key": apiKey,
             "Content-Type": "application/json",
+            "User-Agent": "eXp-RealtorAssistant/1.0",
+            "X-Request-ID": `req-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
           },
         });
         
+        lastStatusCode = elevenlabsResponse.status;
         responseOk = elevenlabsResponse.ok;
+        
         if (!responseOk) {
-          console.warn(`[elevenlabs-signed-url] Attempt ${currentRetry + 1}/${maxRetries} failed with status ${elevenlabsResponse.status}`);
-          // Only retry on server errors (5xx), not client errors (4xx)
-          if (elevenlabsResponse.status >= 500) {
+          // Get more details about the error
+          try {
+            const errorText = await elevenlabsResponse.text();
+            lastErrorDetails = errorText;
+            console.warn(`[elevenlabs-signed-url] Attempt ${currentRetry + 1}/${maxRetries} failed with status ${lastStatusCode}: ${errorText.substring(0, 200)}${errorText.length > 200 ? '...' : ''}`);
+          } catch (textError) {
+            console.warn(`[elevenlabs-signed-url] Attempt ${currentRetry + 1}/${maxRetries} failed with status ${lastStatusCode}, couldn't read error details`);
+          }
+          
+          // Special handling for common error codes
+          if (lastStatusCode === 429) {  // Too Many Requests
+            console.warn("[elevenlabs-signed-url] Rate limit hit, applying longer backoff");
+            await new Promise(resolve => setTimeout(resolve, (currentRetry + 1) * 2000)); // Longer backoff for rate limits
+          } else if (lastStatusCode >= 500) {  // Server errors
             currentRetry++;
             if (currentRetry < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 1000 * currentRetry)); // Exponential backoff
+              await new Promise(resolve => setTimeout(resolve, 1000 * currentRetry));
             }
-          } else {
-            // For 4xx errors, break immediately
-            break;
+          } else {  // Client errors (4xx)
+            // For client errors other than 429, break immediately as retrying won't help
+            if (lastStatusCode !== 429) break;
+            currentRetry++;
           }
         }
       } catch (fetchError) {
-        console.error("[elevenlabs-signed-url] Fetch error:", fetchError);
+        console.error("[elevenlabs-signed-url] Network error:", fetchError);
         currentRetry++;
         if (currentRetry < maxRetries) {
+          // Network errors deserve retries too
           await new Promise(resolve => setTimeout(resolve, 1000 * currentRetry));
         }
       }
@@ -170,30 +198,36 @@ serve(async (req) => {
     if (!elevenlabsResponse || !responseOk) {
       console.error("[elevenlabs-signed-url] All attempts failed");
       
-      // Provide detailed error information
-      let errorDetails = "Unknown error";
-      if (elevenlabsResponse) {
-        try {
-          const errorBody = await elevenlabsResponse.text();
-          console.error("[elevenlabs-signed-url] Error response body:", errorBody);
-          errorDetails = errorBody;
-        } catch (e) {
-          console.error("[elevenlabs-signed-url] Could not read error response body");
-        }
+      // Provide detailed error information based on the status code
+      let errorMessage = "Failed to get signed URL from ElevenLabs API";
+      
+      if (lastStatusCode === 401) {
+        errorMessage = "Invalid ElevenLabs API key. Please check your API key in profile settings.";
+      } else if (lastStatusCode === 403) {
+        errorMessage = "Your ElevenLabs API key doesn't have permission to use Conversational AI.";
+      } else if (lastStatusCode === 404) {
+        errorMessage = `Agent with ID '${agent_id}' not found. Please check the agent ID.`;
+      } else if (lastStatusCode === 429) {
+        errorMessage = "ElevenLabs API rate limit exceeded. Please try again in a few minutes.";
+      } else if (lastStatusCode >= 500) {
+        errorMessage = "ElevenLabs API server error. Please try again later.";
       }
       
+      // Include useful error information
       return new Response(
         JSON.stringify({ 
-          error: `ElevenLabs API error: ${elevenlabsResponse?.status} ${elevenlabsResponse?.statusText}`,
-          details: errorDetails
+          error: errorMessage,
+          details: lastErrorDetails ? lastErrorDetails.substring(0, 500) : 'No additional details available',
+          status: lastStatusCode
         }),
         {
-          status: elevenlabsResponse?.status || 500,
+          status: lastStatusCode || 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
     
+    // Successfully got a response, parse it
     const data = await elevenlabsResponse.json();
     if (!data.signed_url) {
       console.error("[elevenlabs-signed-url] No signed URL in response:", data);

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
 import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX, Info } from 'lucide-react';
@@ -24,7 +24,7 @@ interface Message {
 }
 
 const MAX_RETRY_ATTEMPTS = 3;
-const CONNECTION_TIMEOUT_MS = 30000; // Increased to 30 seconds
+const CONNECTION_TIMEOUT_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 1000; // 1 second delay before reconnect
 
 const ConversationPanel: React.FC<ConversationPanelProps> = ({
@@ -63,17 +63,18 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const conversation = useConversation({
     onMessage: ((message: any) => {
       console.log('[ConversationPanel] Received message from conversation:', message);
+      
       // Handle the message based on its type
-      if (message.type === 'assistant_response') {
+      if (message.type === 'assistant_response' || message.type === 'agent_response') {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: message.content,
+          content: message.content || message.agent_response_event?.agent_response || '',
           timestamp: new Date()
         }]);
-      } else if (message.type === 'user_speech_final') {
+      } else if (message.type === 'user_speech_final' || message.type === 'user_transcript') {
         setMessages(prev => [...prev, {
           role: 'user',
-          content: message.content,
+          content: message.content || message.user_transcription_event?.user_transcript || '',
           timestamp: new Date()
         }]);
       }
@@ -240,19 +241,12 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error(errorMsg);
       }
       
-      // Add audio format parameters if they're not already in the URL
-      const urlObj = new URL(signedUrl);
-      
-      // Always ensure these parameters are set correctly regardless of what's in the URL
-      // Using mulaw_8000 format to match what's expected on both browser and server side
-      urlObj.searchParams.set('input_format', 'mulaw_8000');
-      urlObj.searchParams.set('output_format', 'mulaw_8000');
-      
-      const enhancedUrl = urlObj.toString();
-      console.log('[ConversationPanel] Using signed URL with format parameters:', enhancedUrl);
+      // IMPORTANT: Don't modify the URL parameters - let ElevenLabs SDK handle format negotiation 
+      // This was likely causing issues with format incompatibility
+      console.log('[ConversationPanel] Using signed URL without modification:', signedUrl);
       
       // Store debug info to help troubleshoot
-      setDebugInfo(`Agent: ${agentId}, URL params: ${Array.from(urlObj.searchParams.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+      setDebugInfo(`Agent: ${agentId}`);
       
       // Set connection timeout
       const timeoutId = setTimeout(() => {
@@ -280,9 +274,9 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       
       // Start the connection
       try {
-        // Use 'test-mode' for initial connection to verify configuration
+        // Pass the signedUrl directly without modifying it
         await conversation.startSession({
-          signedUrl: enhancedUrl
+          signedUrl
         });
         
         setIsMicEnabled(true);
@@ -407,6 +401,29 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     }
   };
 
+  // Clean up conversation on unmount
+  useEffect(() => {
+    const currentConversation = conversation; // Capture instance
+    
+    return () => {
+      clearError();
+      setConnectionError(null);
+      setDebugInfo(null);
+      
+      if (connectionTimer) {
+        clearTimeout(connectionTimer);
+      }
+      
+      // Check if conversation is active and should be ended
+      if (conversationStarted && !conversationEnded) {
+        console.log('[ConversationPanel] Cleaning up: Ending conversation session on unmount');
+        currentConversation.endSession().catch(err => 
+          console.error("[ConversationPanel] Error ending session on unmount:", err)
+        );
+      }
+    };
+  }, [clearError, agentId, connectionTimer, conversation, conversationStarted, conversationEnded]);
+  
   // Determine what to show based on auth status and API key
   if (apiKeyStatus === 'missing') {
     return (

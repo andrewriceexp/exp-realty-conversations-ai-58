@@ -73,6 +73,8 @@ export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
 
             console.log('[ElevenLabsContext] Successfully obtained signed URL');
+            
+            // Return the signed URL without modifications
             return data.signed_url;
           } catch (err) {
             lastError = err;
@@ -88,7 +90,15 @@ export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (lastError) {
           const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
           console.error('[ElevenLabsContext] Error getting signed URL after retries:', errorMessage);
-          setError(`Failed to get conversation URL after ${maxRetries} attempts: ${errorMessage}`);
+          
+          // Check for specific error patterns to provide better error messages
+          if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+            setError('ElevenLabs API rate limit exceeded. Please wait a moment and try again.');
+          } else if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
+            setError('Your ElevenLabs API key appears to be invalid. Please update it in your profile settings.');
+          } else {
+            setError(`Failed to get conversation URL after ${maxRetries} attempts: ${errorMessage}`);
+          }
         } else {
           setError(`Failed to get conversation URL after ${maxRetries} attempts`);
         }
