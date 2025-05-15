@@ -1,6 +1,6 @@
 
 // Import the Json type from the database types
-import { Json } from './types/database.types';
+import { Json } from './integrations/supabase/types';
 
 // Profile type from Supabase profiles table
 export interface Profile {
@@ -79,7 +79,7 @@ export interface CallLog {
   call_duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
-  extracted_data: Json | null;
+  extracted_data: Json | null; // Using Json type for better type safety
   summary: string | null;
   cost: number | null;
   started_at: string;

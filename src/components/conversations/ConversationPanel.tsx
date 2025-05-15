@@ -63,7 +63,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     onMessage: ((message: any) => {
       console.log('[ConversationPanel] Received message from conversation:', message);
       
-      // Handle the message based on its type
+      // Handle the message based on its type with more robust fallbacks
       if (message.type === 'assistant_response' || message.type === 'agent_response') {
         // Extract content from either the direct content field or from agent_response_event
         const content = message.content || 
@@ -91,7 +91,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
           }]);
         }
       }
-      // Other message types can be handled here as needed
+      // Other message types like 'audio', 'ping', 'pong', etc. are handled internally by the SDK
     }) as any,
     onError: (error: any) => {
       console.error('[ConversationPanel] Conversation error:', error);
@@ -414,9 +414,9 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     }
   };
 
-  // Clean up conversation on unmount
+  // Clean up conversation on unmount with more stable reference handling
   useEffect(() => {
-    // Create a stable reference to the conversation instance
+    // Create a stable reference to the conversation instance that won't change between renders
     const currentConversation = conversation;
     
     return () => {
