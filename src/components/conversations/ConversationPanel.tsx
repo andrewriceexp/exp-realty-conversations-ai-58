@@ -256,7 +256,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         if (retryCount < MAX_RETRY_ATTEMPTS) {
           toast({
             title: "Connection timed out",
-            description: `Automatically retrying (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})...`
+            description: `Automatically retrying (${retryCount + 1}/${MAX_RETRY_ATTEMPTS + 1})...`
           });
           retryConnection();
         } else {
