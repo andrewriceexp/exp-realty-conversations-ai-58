@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/hooks/use-auth';
@@ -242,7 +241,6 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       }
       
       // IMPORTANT: Don't modify the URL parameters - let ElevenLabs SDK handle format negotiation 
-      // This was likely causing issues with format incompatibility
       console.log('[ConversationPanel] Using signed URL without modification:', signedUrl);
       
       // Store debug info to help troubleshoot
