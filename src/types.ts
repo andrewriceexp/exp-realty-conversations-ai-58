@@ -33,6 +33,7 @@ export interface ProspectList {
   description: string | null;
   original_filename: string | null;
   supabase_storage_path: string | null;
+  prospect_count?: number; // Added to support usage in ProspectListTable
 }
 
 export interface ProspectListWithCount extends ProspectList {
@@ -76,17 +77,17 @@ export interface Prospect {
   first_name: string | null;
   last_name: string | null;
   phone_number: string;
-  email: string | null;
+  email?: string | null; // Optional to match component usage
   notes: string | null;
-  tags: string[] | null;
+  tags?: string[] | null; // Optional to match component usage
   list_id: string;
   user_id: string;
   status: ProspectStatus | string;
-  last_contact_at: string | null;
+  last_contact_at?: string | null; // Optional to match component usage
   last_call_attempted: string | null;
   property_address: string | null; 
-  do_not_call: boolean;
-  do_not_call_reason: string | null;
+  do_not_call?: boolean; // Optional to match component usage
+  do_not_call_reason?: string | null; // Optional to match component usage
 }
 
 export interface Campaign {
@@ -98,10 +99,10 @@ export interface Campaign {
   status: CampaignStatus | string;
   prospect_list_id: string | null;
   agent_config_id: string | null;
-  schedule: any | null;
-  call_count: number | null;
-  call_count_completed: number | null;
-  call_count_scheduled: number | null;
+  schedule?: any | null; // Optional to match component usage
+  call_count?: number | null; // Optional to match component usage
+  call_count_completed?: number | null; // Optional to match component usage
+  call_count_scheduled?: number | null; // Optional to match component usage
   description: string | null;
   prospect_list_name?: string;
   calls_made?: number | null;
@@ -113,14 +114,14 @@ export interface Campaign {
 export interface CallLog {
   id: string;
   user_id: string;
-  campaign_id: string | null;
+  campaign_id?: string | null; // Optional to match component usage
   prospect_id: string;
   agent_config_id: string;
-  status: string;
+  status?: string; // Optional to match component usage
   call_status?: string | CallStatus;
-  call_sid: string | null;
+  call_sid?: string | null; // Optional to match component usage
   twilio_call_sid?: string;
-  direction: string | null;
+  direction?: string | null; // Optional to match component usage
   call_duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
@@ -129,7 +130,7 @@ export interface CallLog {
   cost: number | null;
   started_at: string;
   ended_at: string | null;
-  created_at: string;
+  created_at?: string; // Optional to match component usage
   updated_at: string;
   config_name?: string;
   agent_configs?: {
@@ -160,7 +161,7 @@ export interface AgentConfig {
 export interface MainNavItem {
   title: string;
   href: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  icon?: JSX.Element; // Changed to JSX.Element to match Sidebar usage
   disabled?: boolean;
 }
 
@@ -171,4 +172,5 @@ export interface DashboardStats {
   completedCalls: number;
   averageCallDuration: number;
   successRate: number;
+  callsToday?: number; // Added to match Analytics.tsx usage
 }
