@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -18,7 +19,10 @@ serve(async (req) => {
     if (!auth) {
       console.error("[elevenlabs-signed-url] Missing Authorization header");
       return new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Missing Authorization header" 
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -33,7 +37,10 @@ serve(async (req) => {
     } catch (error) {
       console.error("[elevenlabs-signed-url] Error parsing request body", error);
       return new Response(
-        JSON.stringify({ error: "Invalid request body" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Invalid request body" 
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -46,7 +53,10 @@ serve(async (req) => {
     if (!agent_id) {
       console.error("[elevenlabs-signed-url] Missing agentId in request");
       return new Response(
-        JSON.stringify({ error: "Missing agent_id parameter" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Missing agent_id parameter" 
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -61,7 +71,10 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error("[elevenlabs-signed-url] Missing Supabase configuration");
       return new Response(
-        JSON.stringify({ error: "Server configuration error" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Server configuration error" 
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -82,7 +95,11 @@ serve(async (req) => {
     if (userError || !userData?.user) {
       console.error("[elevenlabs-signed-url] Authentication error:", userError);
       return new Response(
-        JSON.stringify({ error: "Authentication failed" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Authentication failed",
+          details: userError?.message 
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -100,7 +117,11 @@ serve(async (req) => {
     if (profileError || !profileData) {
       console.error("[elevenlabs-signed-url] Profile fetch error:", profileError);
       return new Response(
-        JSON.stringify({ error: "Failed to retrieve user profile" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Failed to retrieve user profile",
+          details: profileError?.message 
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -113,7 +134,10 @@ serve(async (req) => {
     if (!apiKey) {
       console.error("[elevenlabs-signed-url] ElevenLabs API key not found in user profile");
       return new Response(
-        JSON.stringify({ error: "ElevenLabs API key not found in user profile" }),
+        JSON.stringify({ 
+          success: false,
+          error: "ElevenLabs API key not found in user profile" 
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -212,15 +236,21 @@ serve(async (req) => {
         errorMessage = "ElevenLabs API server error. Please try again later.";
       }
       
+      // Return proper HTTP status code, not always 500
+      // Use lastStatusCode if it's a standard HTTP error, otherwise default to 500
+      const statusToReturn = (lastStatusCode >= 400 && lastStatusCode < 600) ? 
+                             lastStatusCode : 500;
+      
       // Include useful error information
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: errorMessage,
           details: lastErrorDetails ? lastErrorDetails.substring(0, 500) : 'No additional details available',
           status: lastStatusCode
         }),
         {
-          status: lastStatusCode || 500,
+          status: statusToReturn,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
@@ -231,7 +261,10 @@ serve(async (req) => {
     if (!data.signed_url) {
       console.error("[elevenlabs-signed-url] No signed URL in response:", data);
       return new Response(
-        JSON.stringify({ error: "Invalid response from ElevenLabs API" }),
+        JSON.stringify({ 
+          success: false,
+          error: "Invalid response from ElevenLabs API" 
+        }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -242,7 +275,10 @@ serve(async (req) => {
     console.log("[elevenlabs-signed-url] Successfully obtained signed URL");
     
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify({
+        success: true,
+        ...data
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
@@ -250,7 +286,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("[elevenlabs-signed-url] Unhandled error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ 
+        success: false,
+        error: error.message || "Internal server error" 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

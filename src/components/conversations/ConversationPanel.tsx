@@ -65,18 +65,33 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       
       // Handle the message based on its type
       if (message.type === 'assistant_response' || message.type === 'agent_response') {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: message.content || message.agent_response_event?.agent_response || '',
-          timestamp: new Date()
-        }]);
+        // Extract content from either the direct content field or from agent_response_event
+        const content = message.content || 
+                        (message.agent_response_event?.agent_response) || 
+                        '';
+        
+        if (content) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content,
+            timestamp: new Date()
+          }]);
+        }
       } else if (message.type === 'user_speech_final' || message.type === 'user_transcript') {
-        setMessages(prev => [...prev, {
-          role: 'user',
-          content: message.content || message.user_transcription_event?.user_transcript || '',
-          timestamp: new Date()
-        }]);
+        // Extract content from either the direct content field or from user_transcription_event
+        const content = message.content || 
+                       (message.user_transcription_event?.user_transcript) || 
+                       '';
+                       
+        if (content) {
+          setMessages(prev => [...prev, {
+            role: 'user',
+            content,
+            timestamp: new Date()
+          }]);
+        }
       }
+      // Other message types can be handled here as needed
     }) as any,
     onError: (error: any) => {
       console.error('[ConversationPanel] Conversation error:', error);
@@ -401,7 +416,8 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
 
   // Clean up conversation on unmount
   useEffect(() => {
-    const currentConversation = conversation; // Capture instance
+    // Create a stable reference to the conversation instance
+    const currentConversation = conversation;
     
     return () => {
       clearError();
@@ -420,7 +436,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         );
       }
     };
-  }, [clearError, agentId, connectionTimer, conversation, conversationStarted, conversationEnded]);
+  }, [clearError, connectionTimer, conversationStarted, conversationEnded]);
   
   // Determine what to show based on auth status and API key
   if (apiKeyStatus === 'missing') {
