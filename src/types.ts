@@ -1,3 +1,4 @@
+
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -64,6 +65,9 @@ export interface Prospect {
   created_at: string;
   updated_at: string;
 }
+
+// Import the Json type from the database types
+import { Json } from './types/database.types';
 
 // Call Log type from Supabase call_logs table
 export interface CallLog {
