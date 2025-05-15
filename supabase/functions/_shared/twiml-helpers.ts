@@ -1,4 +1,19 @@
+
 // Helper functions to generate TwiML responses for Twilio
+
+/**
+ * Escapes special characters for XML to prevent parsing errors
+ * @param str String to escape
+ * @returns Escaped string safe for XML
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 /**
  * Generates a TwiML response with a Connect and Stream tag
@@ -7,6 +22,9 @@
  * @returns TwiML response as a string
  */
 export function generateTwiMLResponse(mediaStreamUrl: string, debug: boolean = false): string {
+  // Escape the URL to make it safe for XML
+  const escapedMediaStreamUrl = escapeXml(mediaStreamUrl);
+  
   // Basic header for all TwiML responses
   let twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>`;
@@ -17,10 +35,10 @@ export function generateTwiMLResponse(mediaStreamUrl: string, debug: boolean = f
   <Say>Debug mode is enabled. Connecting to media stream at ${truncateUrl(mediaStreamUrl)}.</Say>`;
   }
 
-  // Add the Connect and Stream tags
+  // Add the Connect and Stream tags with properly escaped URL
   twiml += `
   <Connect>
-    <Stream url="${mediaStreamUrl}" />
+    <Stream url="${escapedMediaStreamUrl}" />
   </Connect>`;
 
   // Close the Response tag
@@ -38,7 +56,7 @@ export function generateTwiMLResponse(mediaStreamUrl: string, debug: boolean = f
 function truncateUrl(url: string): string {
   // Keep the protocol and host, but truncate the query string
   const urlObj = new URL(url);
-  return `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}?...`;
+  return escapeXml(`${urlObj.protocol}//${urlObj.host}${urlObj.pathname}?...`);
 }
 
 /**
@@ -47,9 +65,10 @@ function truncateUrl(url: string): string {
  * @returns TwiML response as a string
  */
 export function generateErrorTwiML(message: string): string {
+  const escapedMessage = escapeXml(message || "We're sorry, but an error occurred. Please try again later.");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>${message || "We're sorry, but an error occurred. Please try again later."}</Say>
+  <Say>${escapedMessage}</Say>
   <Hangup/>
 </Response>`;
 }
