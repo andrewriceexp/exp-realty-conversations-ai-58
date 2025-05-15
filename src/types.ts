@@ -1,3 +1,4 @@
+
 // Import the Json type from the database types
 import { Json } from './integrations/supabase/types';
 
