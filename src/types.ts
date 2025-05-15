@@ -1,4 +1,3 @@
-
 // Import the Json type from the database types
 import { Json } from './integrations/supabase/types';
 
@@ -175,4 +174,5 @@ export interface DashboardStats {
   callsToday?: number; // Added to match Analytics.tsx usage
   callsThisWeek?: number; // Added to fix build error in Analytics.tsx
   pendingProspects?: number; // Added to fix build error in Analytics.tsx
+  completedProspects?: number; // Added to fix build error in Analytics.tsx
 }
