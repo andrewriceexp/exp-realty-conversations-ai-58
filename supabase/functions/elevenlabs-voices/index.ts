@@ -1,6 +1,9 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+
+console.log("[elevenlabs-voices] Function initialized");
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -36,77 +39,70 @@ serve(async (req) => {
     const validateOnly = body?.validate_only === true;
     
     // Get the user's ElevenLabs API key
-    const supabaseClient = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") 
-      ? Deno.createClient(
-          Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-        )
-      : null;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("[elevenlabs-voices] Missing Supabase configuration");
+      return new Response(
+        JSON.stringify({ error: "Server configuration error" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     let apiKey;
     
-    if (supabaseClient) {
-      // Extract JWT token without the "Bearer " prefix
-      const token = auth.replace("Bearer ", "");
-      
-      // Verify the token and get the user
-      const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-      
-      if (userError || !userData.user) {
-        console.error("[elevenlabs-voices] Authentication error:", userError);
-        return new Response(
-          JSON.stringify({ error: "Authentication failed" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-      
-      // Get the user's profile with the API key
-      const { data: profileData, error: profileError } = await supabaseClient
-        .from("profiles")
-        .select("elevenlabs_api_key")
-        .eq("id", userData.user.id)
-        .single();
-      
-      if (profileError || !profileData) {
-        console.error("[elevenlabs-voices] Profile fetch error:", profileError);
-        return new Response(
-          JSON.stringify({ error: "Failed to retrieve user profile" }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-      
-      apiKey = profileData.elevenlabs_api_key;
-      
-      if (!apiKey) {
-        console.error("[elevenlabs-voices] No API key found in profile");
-        return new Response(
-          JSON.stringify({ error: "ElevenLabs API key not found in user profile" }),
-          {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-    } else {
-      // Use the fallback API key from environment variables if Supabase client couldn't be created
-      apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-      
-      if (!apiKey) {
-        console.error("[elevenlabs-voices] No environment API key found");
-        return new Response(
-          JSON.stringify({ error: "ElevenLabs API key not configured" }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
+    // Extract JWT token without the "Bearer " prefix
+    const token = auth.replace("Bearer ", "");
+    
+    // Verify the token and get the user
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !userData?.user) {
+      console.error("[elevenlabs-voices] Authentication error:", userError);
+      return new Response(
+        JSON.stringify({ error: "Authentication failed" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
+    // Get the user's profile with the API key
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("elevenlabs_api_key")
+      .eq("id", userData.user.id)
+      .single();
+    
+    if (profileError || !profileData) {
+      console.error("[elevenlabs-voices] Profile fetch error:", profileError);
+      return new Response(
+        JSON.stringify({ error: "Failed to retrieve user profile" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+    
+    apiKey = profileData.elevenlabs_api_key;
+    
+    if (!apiKey) {
+      console.error("[elevenlabs-voices] No API key found in profile");
+      return new Response(
+        JSON.stringify({ error: "ElevenLabs API key not found in user profile" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
     
     // For validation-only requests, we'll make a simple API call to test the key
@@ -190,14 +186,3 @@ serve(async (req) => {
     );
   }
 });
-
-// Helper to create Supabase client (this is a mock implementation as Deno.createClient doesn't exist)
-// In the actual implementation, you'd use the Supabase JS client
-declare global {
-  interface Deno {
-    createClient(url: string, key: string): any;
-    env: {
-      get(key: string): string | undefined;
-    };
-  }
-}

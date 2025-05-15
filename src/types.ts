@@ -1,4 +1,3 @@
-
 // Profile type from Supabase profiles table
 export interface Profile {
   id: string;
@@ -77,7 +76,7 @@ export interface CallLog {
   call_duration_seconds: number | null;
   recording_url: string | null;
   transcript: string | null;
-  extracted_data: any | null; // Changed from Record<string, any> to any to be compatible with Json type
+  extracted_data: Json | null; // Updated from 'any | null' for better type safety
   summary: string | null;
   cost: number | null;
   started_at: string;
