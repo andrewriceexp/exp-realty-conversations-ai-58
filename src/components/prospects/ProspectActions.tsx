@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Phone, Loader2, AlertCircle, Settings, Bug, Headphones } from 'lucide-react';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
 import { useElevenLabs } from '@/hooks/useElevenLabs';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/lib/supabase';
 import { AgentConfig } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -250,7 +250,9 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         userId: user.id,
         bypassValidation,
         debugMode,
-        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
+        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
+        // Make sure we explicitly set useElevenLabsAgent to false if not specified
+        useElevenLabsAgent: false
       });
       
       console.log('Call response:', response);
@@ -271,7 +273,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       } else {
         // Store the error code if available
         setErrorCode(response.code || null);
-        throw new Error(response.error || 'Unknown error initiating call');
+        throw new Error(response.message || 'Unknown error initiating call');
       }
     } catch (error: any) {
       console.error("Error making call:", error);

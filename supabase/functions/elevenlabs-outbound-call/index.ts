@@ -60,6 +60,7 @@ serve(async (req) => {
       .single();
       
     if (profileError || !profile?.elevenlabs_api_key) {
+      console.error("Error fetching profile or missing API key:", profileError);
       throw new Error("ElevenLabs API key not configured in your profile");
     }
     
@@ -188,7 +189,7 @@ serve(async (req) => {
         success: true,
         message: "Outbound call initiated successfully",
         callSid: data.callSid,
-        callLogId: callLog?.id,
+        callLogId: callLog?.[0]?.id,
         conversationId: data.conversationId || null
       }),
       {

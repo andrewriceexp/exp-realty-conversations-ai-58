@@ -1,10 +1,9 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/hooks/use-auth';
 import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX, Info, Record } from 'lucide-react';
+import { Loader2, Mic, MicOff, RefreshCcw, Volume2, VolumeX, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';

@@ -65,10 +65,10 @@ export function useTwilioCall() {
           body: {
             prospect_id: params.prospectId,
             agent_config_id: params.agentConfigId,
-            user_id: params.userId,
-            voice_id: params.voiceId,
-            use_elevenlabs_agent: params.useElevenLabsAgent || false,
-            elevenlabs_agent_id: params.elevenLabsAgentId
+            user_id: params.userId || session.user.id,
+            bypass_validation: params.bypassValidation,
+            debug_mode: params.debugMode,
+            voice_id: params.voiceId
           }
         });
 
@@ -99,6 +99,19 @@ export function useTwilioCall() {
             message: "Call initiated successfully",
             callSid: data.callSid,
             callLogId: data.callLogId
+          };
+        } else if (data?.success === false) {
+          // Handle specific error codes from the edge function
+          console.error("[TwilioCall] Call failed with message:", data.message);
+          toast({
+            title: "Call Error",
+            description: data.message || "Failed to initiate call",
+            variant: "destructive"
+          });
+          return {
+            success: false,
+            message: data.message || "Failed to initiate call",
+            code: data.code
           };
         } else {
           console.error("[TwilioCall] No call SID returned");
