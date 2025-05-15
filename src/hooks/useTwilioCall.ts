@@ -63,11 +63,11 @@ export function useTwilioCall() {
       } else {
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
-            prospect_id: params.prospectId,
+            prospectId: params.prospectId,
             agent_config_id: params.agentConfigId,
-            user_id: params.userId || session.user.id,
-            bypass_validation: params.bypassValidation,
-            debug_mode: params.debugMode,
+            user_id: params.userId || session.user.id, // Always ensure user_id is passed
+            bypass_validation: params.bypassValidation || false,
+            debug_mode: params.debugMode || false,
             voice_id: params.voiceId
           }
         });
@@ -280,12 +280,10 @@ export function useTwilioCall() {
           body: {
             prospect_id: params.prospectId,
             agent_config_id: params.agentConfigId,
-            user_id: params.userId,
+            user_id: params.userId || session.user.id, // Critical fix: ensure user_id is always passed
             bypass_validation: true,
             debug_mode: params.debugMode || false,
-            voice_id: params.voiceId,
-            use_elevenlabs_agent: params.useElevenLabsAgent || false,
-            elevenlabs_agent_id: params.elevenLabsAgentId
+            voice_id: params.voiceId
           }
         });
 
@@ -306,6 +304,14 @@ export function useTwilioCall() {
             message: "Development call initiated successfully",
             callSid: data.callSid,
             callLogId: data.callLogId
+          };
+        } else if (data?.success === false) {
+          // Handle specific error codes from the edge function
+          console.error("[TwilioCall:Dev] Call failed with message:", data.message);
+          return {
+            success: false,
+            message: data.message || "Failed to initiate development call",
+            code: data.code
           };
         } else {
           console.error("[TwilioCall:Dev] No call SID returned");

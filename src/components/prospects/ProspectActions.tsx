@@ -225,7 +225,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       console.log('Making call with:', {
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id,
+        userId: user.id, // Always ensure user ID is passed
         bypassValidation,
         debugMode,
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
@@ -247,7 +247,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       const response = await callMethod({
         prospectId,
         agentConfigId: selectedConfigId,
-        userId: user.id,
+        userId: user.id, // Always ensure user ID is passed
         bypassValidation,
         debugMode,
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,

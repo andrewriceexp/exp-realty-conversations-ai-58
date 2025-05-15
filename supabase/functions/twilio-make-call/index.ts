@@ -13,12 +13,81 @@ serve(async (req) => {
   }
   
   try {
-    const { prospectId, agentConfigId, userId, bypassValidation = false, debugMode = false, voiceId } = await req.json();
+    const requestBody = await req.json();
+    const { 
+      prospectId, 
+      agent_config_id, 
+      user_id, 
+      prospect_id, // Handle both camelCase and snake_case for backward compatibility
+      agent_config_id: agentConfigId, // Handle both formats
+      bypassValidation = false, 
+      bypass_validation = false, // Handle both formats
+      debugMode = false, 
+      debug_mode = false, // Handle both formats
+      voiceId, 
+      voice_id 
+    } = requestBody;
+
+    // Use whichever format is provided
+    const finalProspectId = prospectId || prospect_id;
+    const finalAgentConfigId = agent_config_id || agentConfigId;
+    const finalBypassValidation = bypassValidation || bypass_validation || false;
+    const finalDebugMode = debugMode || debug_mode || false;
+    const finalVoiceId = voiceId || voice_id;
+
+    // Validate required parameters
+    if (!finalProspectId) {
+      console.error("Missing prospect ID in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Missing prospect ID",
+        code: "MISSING_PROSPECT_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!finalAgentConfigId) {
+      console.error("Missing agent config ID in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Missing agent configuration ID",
+        code: "MISSING_AGENT_CONFIG_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!user_id) {
+      console.error("Missing user ID in request");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Missing user ID",
+        code: "MISSING_USER_ID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     const supabaseAdminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    
+    if (!supabaseUrl || !supabaseKey || !supabaseAdminKey) {
+      console.error("Missing Supabase configuration");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Server configuration error",
+        code: "SERVER_CONFIG_ERROR"
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     // Initialize with regular anon key first
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -26,8 +95,8 @@ serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseAdminKey);
 
     // Log incoming request data
-    console.log(`Initiating call with prospect ID: ${prospectId}, agent config ID: ${agentConfigId}, user ID: ${userId}`);
-    console.log(`bypassValidation: ${bypassValidation}, debugMode: ${debugMode}, voiceId: ${voiceId ? `${voiceId.slice(0, 8)}...` : 'none'}`);
+    console.log(`Initiating call with prospect ID: ${finalProspectId}, agent config ID: ${finalAgentConfigId}, user ID: ${user_id}`);
+    console.log(`bypassValidation: ${finalBypassValidation}, debugMode: ${finalDebugMode}, voiceId: ${finalVoiceId ? `${finalVoiceId.slice(0, 8)}...` : 'none'}`);
 
     // Step 1: Get user profile with Twilio credentials
     // First try with regular client
@@ -38,7 +107,7 @@ serve(async (req) => {
     const { data: profileData, error: profileErr } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
+      .eq('id', user_id)
       .maybeSingle();
     
     if (profileErr || !profileData) {
@@ -48,7 +117,7 @@ serve(async (req) => {
       const { data: adminProfileData, error: adminProfileError } = await supabaseAdmin
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', user_id)
         .maybeSingle();
         
       if (adminProfileError || !adminProfileData) {
@@ -71,7 +140,7 @@ serve(async (req) => {
       profile = profileData;
     }
     
-    console.log(`Successfully fetched profile for user: ${profile.email || userId}`);
+    console.log(`Successfully fetched profile for user: ${profile.email || user_id}`);
     
     // Ensure Twilio credentials are present
     if (!profile.twilio_account_sid || !profile.twilio_auth_token || !profile.twilio_phone_number) {
@@ -90,14 +159,15 @@ serve(async (req) => {
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('prospects')
       .select('*')
-      .eq('id', prospectId)
+      .eq('id', finalProspectId)
       .single();
       
     if (prospectError || !prospect) {
       console.error("Error fetching prospect:", prospectError);
       return new Response(JSON.stringify({ 
         success: false, 
-        message: "Prospect not found"
+        message: "Prospect not found",
+        code: "PROSPECT_NOT_FOUND"
       }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -108,14 +178,15 @@ serve(async (req) => {
     const { data: agentConfig, error: agentConfigError } = await supabaseAdmin
       .from('agent_configs')
       .select('*')
-      .eq('id', agentConfigId)
+      .eq('id', finalAgentConfigId)
       .single();
       
     if (agentConfigError || !agentConfig) {
       console.error("Error fetching agent configuration:", agentConfigError);
       return new Response(JSON.stringify({ 
         success: false, 
-        message: "Agent configuration not found"
+        message: "Agent configuration not found",
+        code: "AGENT_CONFIG_NOT_FOUND"
       }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -126,9 +197,9 @@ serve(async (req) => {
     const { data: callLog, error: callLogError } = await supabaseAdmin
       .from('call_logs')
       .insert([{
-        user_id: userId,
-        prospect_id: prospectId,
-        agent_config_id: agentConfigId,
+        user_id: user_id,
+        prospect_id: finalProspectId,
+        agent_config_id: finalAgentConfigId,
         status: 'Initiating',
         notes: `Call initiated with agent: ${agentConfig.config_name}`,
       }])
@@ -159,11 +230,11 @@ serve(async (req) => {
       urlParams.append('agent_id', '6Optf6WRTzp3rEyj2aiL');
     }
     
-    if (voiceId) {
-      urlParams.append('voice_id', voiceId);
+    if (finalVoiceId) {
+      urlParams.append('voice_id', finalVoiceId);
     }
     
-    if (debugMode) {
+    if (finalDebugMode) {
       urlParams.append('debug', 'true');
     }
     
@@ -173,7 +244,7 @@ serve(async (req) => {
     }
     
     // Add user ID for authentication
-    urlParams.append('user_id', userId);
+    urlParams.append('user_id', user_id);
     
     // Append parameters to URL
     const paramString = urlParams.toString();
@@ -201,7 +272,7 @@ serve(async (req) => {
         const { error: updateError } = await supabaseAdmin
           .from('call_logs')
           .update({
-            call_sid: call.sid,
+            twilio_call_sid: call.sid,
             status: 'Initiated',
           })
           .eq('id', callLog[0].id);
@@ -216,9 +287,9 @@ serve(async (req) => {
         .from('prospects')
         .update({
           status: 'In Progress',
-          last_called_at: new Date().toISOString(),
+          last_call_attempted: new Date().toISOString(),
         })
-        .eq('id', prospectId);
+        .eq('id', finalProspectId);
         
       if (prospectUpdateError) {
         console.error("Error updating prospect status:", prospectUpdateError);
