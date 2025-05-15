@@ -24,9 +24,8 @@ export interface Profile {
 }
 
 // Export ProspectList type that matches the database structure
-export type ProspectList = {
+export interface ProspectList {
   id: string;
-  name: string;
   list_name: string;
   created_at: string;
   updated_at: string;
@@ -34,17 +33,11 @@ export type ProspectList = {
   description: string | null;
   original_filename: string | null;
   supabase_storage_path: string | null;
-};
+}
 
-export interface ProspectListWithCount {
-  id: string;
-  name: string;
-  list_name: string;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-  status: string;
+export interface ProspectListWithCount extends ProspectList {
   prospect_count: number;
+  status?: string;
 }
 
 // Enums for status types
@@ -65,6 +58,15 @@ export enum CallStatus {
   Failed = 'failed',
   NoAnswer = 'no-answer',
   Canceled = 'canceled'
+}
+
+// Campaign status enum
+export enum CampaignStatus {
+  Draft = 'Draft',
+  Active = 'Active',
+  Paused = 'Paused',
+  Completed = 'Completed',
+  Failed = 'Failed'
 }
 
 export interface Prospect {
@@ -93,7 +95,7 @@ export interface Campaign {
   created_at: string;
   updated_at: string;
   user_id: string;
-  status: string;
+  status: CampaignStatus | string;
   prospect_list_id: string | null;
   agent_config_id: string | null;
   schedule: any | null;
@@ -103,6 +105,8 @@ export interface Campaign {
   description: string | null;
   prospect_list_name?: string;
   calls_made?: number | null;
+  agent_config_name?: string;
+  scheduled_start?: string | null;
 }
 
 // Call Log type from Supabase call_logs table
@@ -153,9 +157,18 @@ export interface AgentConfig {
   elevenlabs_model_id?: string | null;
 }
 
-export type MainNavItem = {
+export interface MainNavItem {
   title: string;
   href: string;
   icon?: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
-};
+}
+
+// Dashboard stats type for analytics
+export interface DashboardStats {
+  totalProspects: number;
+  totalCalls: number;
+  completedCalls: number;
+  averageCallDuration: number;
+  successRate: number;
+}
