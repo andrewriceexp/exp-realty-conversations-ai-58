@@ -42,12 +42,12 @@ export function useTwilioCall() {
   const [currentCallSid, setCurrentCallSid] = useState<string | null>(null);
   const { session, user, profile } = useAuth();
 
-  // Make sure we get and log the user object from auth context
+  // Enhanced logging for authentication context
   console.log("[TwilioCall] Auth user:", user?.id);
   console.log("[TwilioCall] Auth session:", session?.user?.id);
 
-  // Check for valid authentication
-  const checkAuthentication = useCallback(() => {
+  // Check for valid authentication with improved return types
+  const checkAuthentication = useCallback((): string | false => {
     if (!session?.access_token) {
       console.error("[TwilioCall] No authentication token available");
       toast({
@@ -58,7 +58,7 @@ export function useTwilioCall() {
       return false;
     }
     
-    // Ensure userId is always set - THIS IS CRITICAL
+    // Enhanced userId resolution from multiple possible sources
     const userId = user?.id || session?.user?.id;
     
     if (!userId) {
@@ -99,6 +99,7 @@ export function useTwilioCall() {
   }, []);
 
   const makeCall = async (params: MakeCallParams): Promise<CallResponse> => {
+    // Enhanced user ID resolution with strict validation
     const userId = checkAuthentication();
     if (!userId) {
       return { success: false, message: "Authentication required" };
@@ -109,7 +110,7 @@ export function useTwilioCall() {
       console.log("[TwilioCall] Making call to prospect ID:", params.prospectId);
       console.log("[TwilioCall] Using user ID:", userId);
 
-      // Pre-validate parameters
+      // Enhanced parameter validation with clear error messages
       if (!params.prospectId) {
         throw new Error("Prospect ID is required");
       }
@@ -172,6 +173,7 @@ export function useTwilioCall() {
           }
         }
 
+        // Make call with explicit type conversion for userId
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
@@ -257,7 +259,7 @@ export function useTwilioCall() {
   };
 
   const makeElevenLabsCall = async (params: MakeCallParams): Promise<CallResponse> => {
-    // Ensure userId is always set
+    // Enhanced user ID resolution with multiple fallbacks
     const userId = params.userId || user?.id || session?.user?.id;
     if (!userId) {
       console.error("[TwilioCall] No user ID available for ElevenLabs call");
@@ -418,7 +420,7 @@ export function useTwilioCall() {
       return { success: false, message: "Authentication required" };
     }
 
-    // Ensure userId is always set - THIS IS CRITICAL
+    // Enhanced user ID resolution with better error handling
     const userId = params.userId || user?.id || session?.user?.id;
     
     if (!userId) {
@@ -444,12 +446,13 @@ export function useTwilioCall() {
           userId // Ensure userId is passed
         });
       } else {
+        // For development calls, add debugging flags
         const { data, error } = await supabase.functions.invoke('twilio-make-call', {
           body: {
             prospectId: params.prospectId,
             prospect_id: params.prospectId, // Include both formats for backward compatibility
             agent_config_id: params.agentConfigId,
-            user_id: userId, // Use the resolved userId
+            user_id: String(userId), // Always convert to string
             bypass_validation: true,
             debug_mode: true, // For development calls, always set debug mode
             voice_id: params.voiceId

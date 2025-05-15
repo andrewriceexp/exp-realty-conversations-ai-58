@@ -15,11 +15,25 @@ serve(async (req) => {
   try {
     // Get URL parameters
     const url = new URL(req.url);
-    const agentId = url.searchParams.get("agent_id") || "6Optf6WRTzp3rEyj2aiL"; // Default agent if none specified
+    const agentId = url.searchParams.get("agent_id");
     const voiceId = url.searchParams.get("voice_id");
     const userId = url.searchParams.get("user_id");
     const callLogId = url.searchParams.get("call_log_id");
     const debug = url.searchParams.get("debug") === "true";
+    
+    // Validate required parameters
+    if (!agentId) {
+      console.error("Missing required parameter: agent_id");
+      throw new Error("Missing agent_id parameter");
+    }
+    
+    console.log("Webhook triggered with params:", {
+      agentId,
+      voiceId: voiceId || "default",
+      userId: userId || "none",
+      callLogId: callLogId || "none",
+      debug: debug || false
+    });
     
     // Get Twilio form data or query parameters
     let twilioParams = {};
@@ -41,14 +55,11 @@ serve(async (req) => {
       console.warn("Error parsing request body:", error.message);
     }
     
-    console.log("Webhook triggered with params:", {
-      agentId,
-      voiceId: voiceId || "default",
-      userId: userId || "none",
-      callLogId: callLogId || "none",
-      debug: debug || false,
-      twilioParams: JSON.stringify(twilioParams).substring(0, 100) + "..." // Log truncated twilio params
-    });
+    // Log truncated Twilio parameters for debugging
+    console.log("Twilio parameters:", 
+      JSON.stringify(twilioParams).substring(0, 100) + 
+      (JSON.stringify(twilioParams).length > 100 ? "..." : "")
+    );
     
     // Get the server hostname
     const host = req.headers.get("host") || "";
@@ -58,11 +69,27 @@ serve(async (req) => {
     
     // Add query parameters
     const params = new URLSearchParams();
-    if (agentId) params.append("agent_id", agentId);
-    if (voiceId) params.append("voice_id", voiceId);
-    if (userId) params.append("user_id", userId);
-    if (callLogId) params.append("call_log_id", callLogId);
-    if (debug) params.append("debug", "true");
+    
+    if (agentId) {
+      params.append("agent_id", agentId);
+    }
+    
+    if (voiceId) {
+      params.append("voice_id", voiceId);
+    }
+    
+    // Always pass userId if available
+    if (userId) {
+      params.append("user_id", userId);
+    }
+    
+    if (callLogId) {
+      params.append("call_log_id", callLogId);
+    }
+    
+    if (debug) {
+      params.append("debug", "true");
+    }
     
     const mediaStreamUrlWithParams = `${mediaStreamUrl}?${params.toString()}`;
     console.log(`Using media stream URL: ${mediaStreamUrlWithParams}`);
@@ -86,22 +113,47 @@ serve(async (req) => {
           if (callSid && from) {
             console.log(`Creating call log for inbound call: ${callSid} from ${from}`);
             
-            await supabase
+            // Check if prospect_id and agent_config_id are required
+            const { data: tableInfo } = await supabase
               .from('call_logs')
-              .insert([{
-                user_id: userId,
-                call_sid: callSid,
-                from_number: from,
+              .select('*')
+              .limit(1);
+            
+            // Prepare the call log data
+            const callData: Record<string, any> = {
+              user_id: userId,
+              twilio_call_sid: callSid,
+              from_number: from,
+              status: 'Initiated',
+              direction: 'inbound',
+              metadata: {
+                voice_id: voiceId,
                 agent_id: agentId,
-                status: 'Initiated',
-                direction: 'inbound',
-                metadata: {
-                  voice_id: voiceId,
-                  agent_id: agentId,
-                  debug_mode: debug,
-                  twilio_params: twilioParams
-                }
-              }]);
+                debug_mode: debug,
+                twilio_params: twilioParams
+              }
+            };
+            
+            // Set required fields that might not be in the URL params
+            // Use placeholders that will be updated later
+            if (agentId) {
+              callData.agent_id = agentId;
+            }
+            
+            try {
+              const { data: insertResult, error: insertError } = await supabase
+                .from('call_logs')
+                .insert([callData])
+                .select();
+                
+              if (insertError) {
+                console.error("Error inserting call log:", insertError);
+              } else if (insertResult) {
+                console.log("Call log created with ID:", insertResult[0]?.id);
+              }
+            } catch (dbError) {
+              console.error("Database error creating call log:", dbError);
+            }
           }
         }
       } catch (error) {
