@@ -38,24 +38,61 @@ export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setError(null);
         console.log('[ElevenLabsContext] Getting signed URL for agent:', agentId);
 
-        const { data, error: functionError } = await supabase.functions.invoke('elevenlabs-signed-url', {
-          body: { agent_id: agentId },
-        });
+        // Add retries for reliability
+        const maxRetries = 3;
+        let currentRetry = 0;
+        let lastError = null;
 
-        if (functionError) {
-          console.error('[ElevenLabsContext] Function error:', functionError);
-          setError(`Error from server: ${functionError.message}`);
-          return null;
+        while (currentRetry < maxRetries) {
+          try {
+            const { data, error: functionError } = await supabase.functions.invoke('elevenlabs-signed-url', {
+              body: { agent_id: agentId },
+            });
+
+            if (functionError) {
+              console.error(`[ElevenLabsContext] Function error (attempt ${currentRetry + 1}):`, functionError);
+              lastError = functionError;
+              currentRetry++;
+              if (currentRetry < maxRetries) {
+                // Wait with exponential backoff before retrying
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
+                continue;
+              }
+              break;
+            }
+
+            if (!data || !data.signed_url) {
+              console.error(`[ElevenLabsContext] Missing signed URL in response (attempt ${currentRetry + 1}):`, data);
+              lastError = new Error('Invalid response from server');
+              currentRetry++;
+              if (currentRetry < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
+                continue;
+              }
+              break;
+            }
+
+            console.log('[ElevenLabsContext] Successfully obtained signed URL');
+            return data.signed_url;
+          } catch (err) {
+            lastError = err;
+            currentRetry++;
+            if (currentRetry < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
+              continue;
+            }
+          }
         }
 
-        if (!data || !data.signed_url) {
-          console.error('[ElevenLabsContext] Missing signed URL in response:', data);
-          setError('Invalid response from server');
-          return null;
+        // If we've exhausted retries and still have an error
+        if (lastError) {
+          const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+          console.error('[ElevenLabsContext] Error getting signed URL after retries:', errorMessage);
+          setError(`Failed to get conversation URL after ${maxRetries} attempts: ${errorMessage}`);
+        } else {
+          setError(`Failed to get conversation URL after ${maxRetries} attempts`);
         }
-
-        console.log('[ElevenLabsContext] Successfully obtained signed URL');
-        return data.signed_url;
+        return null;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[ElevenLabsContext] Error getting signed URL:', errorMessage);

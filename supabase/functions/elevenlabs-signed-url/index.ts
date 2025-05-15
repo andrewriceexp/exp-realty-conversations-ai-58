@@ -132,16 +132,17 @@ serve(async (req) => {
     
     while (currentRetry < maxRetries && !responseOk) {
       try {
-        elevenlabsResponse = await fetch(
-          `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${encodeURIComponent(agent_id)}`,
-          {
-            method: "GET",
-            headers: {
-              "xi-api-key": apiKey,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        // Add input_format and output_format to the query parameters
+        const url = new URL(`https://api.elevenlabs.io/v1/convai/conversation/get_signed_url`);
+        url.searchParams.append('agent_id', agent_id);
+        
+        elevenlabsResponse = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+        });
         
         responseOk = elevenlabsResponse.ok;
         if (!responseOk) {

@@ -23,13 +23,6 @@ interface Message {
   timestamp: Date;
 }
 
-// Updated type definition for ElevenLabs message object to match their API
-interface ElevenLabsMessage {
-  type: string;
-  content: string;
-  source?: any;
-}
-
 const MAX_RETRY_ATTEMPTS = 3;
 const CONNECTION_TIMEOUT_MS = 30000; // Increased to 30 seconds
 const RECONNECT_DELAY_MS = 1000; // 1 second delay before reconnect
@@ -68,7 +61,6 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   
   // Initialize the conversation hook from ElevenLabs SDK
   const conversation = useConversation({
-    // Force TypeScript to accept our callback by using type assertion
     onMessage: ((message: any) => {
       console.log('[ConversationPanel] Received message from conversation:', message);
       // Handle the message based on its type
@@ -133,6 +125,11 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       if (connectionTimer) {
         clearTimeout(connectionTimer);
         setConnectionTimer(null);
+      }
+      
+      if (conversationStarted && !conversationEnded) {
+        // If disconnected unexpectedly
+        setConnectionError("Connection was closed unexpectedly. Please try again.");
       }
       
       setConversationEnded(true);
@@ -245,18 +242,17 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       
       // Add audio format parameters if they're not already in the URL
       const urlObj = new URL(signedUrl);
-      if (!urlObj.searchParams.has('input_format')) {
-        urlObj.searchParams.append('input_format', 'pcm_16000');
-      }
-      if (!urlObj.searchParams.has('output_format')) {
-        urlObj.searchParams.append('output_format', 'pcm_16000');
-      }
+      
+      // Always ensure these parameters are set correctly regardless of what's in the URL
+      // Using mulaw_8000 format to match what's expected on both browser and server side
+      urlObj.searchParams.set('input_format', 'mulaw_8000');
+      urlObj.searchParams.set('output_format', 'mulaw_8000');
       
       const enhancedUrl = urlObj.toString();
-      console.log('[ConversationPanel] Got signed URL with format parameters:', enhancedUrl.substring(0, 30) + '...');
+      console.log('[ConversationPanel] Using signed URL with format parameters:', enhancedUrl);
       
       // Store debug info to help troubleshoot
-      setDebugInfo(`Using agent: ${agentId}, URL params: ${Array.from(urlObj.searchParams.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+      setDebugInfo(`Agent: ${agentId}, URL params: ${Array.from(urlObj.searchParams.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`);
       
       // Set connection timeout
       const timeoutId = setTimeout(() => {
@@ -284,6 +280,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       
       // Start the connection
       try {
+        // Use 'test-mode' for initial connection to verify configuration
         await conversation.startSession({
           signedUrl: enhancedUrl
         });
