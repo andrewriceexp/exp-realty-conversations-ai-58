@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useConversation } from '@11labs/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,8 +30,9 @@ interface ElevenLabsMessage {
   source?: any;
 }
 
-const MAX_RETRY_ATTEMPTS = 2;
-const CONNECTION_TIMEOUT_MS = 20000; // 20 seconds timeout
+const MAX_RETRY_ATTEMPTS = 3;
+const CONNECTION_TIMEOUT_MS = 30000; // Increased to 30 seconds
+const RECONNECT_DELAY_MS = 1000; // 1 second delay before reconnect
 
 const ConversationPanel: React.FC<ConversationPanelProps> = ({
   agentId,
@@ -68,7 +70,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
   const conversation = useConversation({
     // Force TypeScript to accept our callback by using type assertion
     onMessage: ((message: any) => {
-      console.log('Received message from conversation:', message);
+      console.log('[ConversationPanel] Received message from conversation:', message);
       // Handle the message based on its type
       if (message.type === 'assistant_response') {
         setMessages(prev => [...prev, {
@@ -85,7 +87,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       }
     }) as any,
     onError: (error: any) => {
-      console.error('Conversation error:', error);
+      console.error('[ConversationPanel] Conversation error:', error);
       let errorMessage = typeof error === 'object' && error !== null && 'message' in error 
         ? error.message 
         : String(error);
@@ -106,7 +108,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       setIsMicEnabled(false);
     },
     onConnect: () => {
-      console.log('Conversation connected successfully');
+      console.log('[ConversationPanel] Conversation connected successfully');
       
       // Clear any connection timeout
       if (connectionTimer) {
@@ -125,7 +127,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       });
     },
     onDisconnect: () => {
-      console.log('Conversation disconnected');
+      console.log('[ConversationPanel] Conversation disconnected');
       
       // Clear any connection timeout
       if (connectionTimer) {
@@ -174,10 +176,10 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Retry logic for connection attempts
+  // Retry logic for connection attempts with exponential backoff
   const retryConnection = async () => {
     if (retryCount >= MAX_RETRY_ATTEMPTS) {
-      setConnectionError("Maximum connection attempts reached. Please try again later.");
+      setConnectionError(`Maximum connection attempts reached (${MAX_RETRY_ATTEMPTS}). Please try again later.`);
       setIsStarting(false);
       toast({
         title: "Connection Failed",
@@ -187,9 +189,16 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       return;
     }
     
-    console.log(`Retrying connection attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`);
-    setRetryCount(prev => prev + 1);
-    await handleStartConversation();
+    const currentRetry = retryCount + 1;
+    const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, retryCount), 10000); // Exponential backoff with 10s max
+    
+    console.log(`[ConversationPanel] Retrying connection attempt ${currentRetry}/${MAX_RETRY_ATTEMPTS} after ${delay}ms delay`);
+    setRetryCount(currentRetry);
+    
+    // Add a small delay before retrying to avoid rapid reconnection attempts
+    setTimeout(() => {
+      handleStartConversation();
+    }, delay);
   };
 
   // Start the conversation
@@ -223,10 +232,10 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error("Invalid agent ID. Please select a valid agent.");
       }
 
-      console.log('Starting conversation with agent ID:', agentId);
+      console.log('[ConversationPanel] Starting conversation with agent ID:', agentId);
       
       // Get the signed URL from our backend
-      console.log('Getting signed URL...');
+      console.log('[ConversationPanel] Getting signed URL...');
       const signedUrl = await getSignedUrl(agentId);
       
       if (!signedUrl) {
@@ -234,14 +243,24 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         throw new Error(errorMsg);
       }
       
-      console.log('Got signed URL, starting session...', signedUrl.substring(0, 30) + '...');
+      // Add audio format parameters if they're not already in the URL
+      const urlObj = new URL(signedUrl);
+      if (!urlObj.searchParams.has('input_format')) {
+        urlObj.searchParams.append('input_format', 'pcm_16000');
+      }
+      if (!urlObj.searchParams.has('output_format')) {
+        urlObj.searchParams.append('output_format', 'pcm_16000');
+      }
+      
+      const enhancedUrl = urlObj.toString();
+      console.log('[ConversationPanel] Got signed URL with format parameters:', enhancedUrl.substring(0, 30) + '...');
       
       // Store debug info to help troubleshoot
-      setDebugInfo(`Using agent: ${agentId}, URL: ${signedUrl.substring(0, 30)}...`);
+      setDebugInfo(`Using agent: ${agentId}, URL params: ${Array.from(urlObj.searchParams.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`);
       
       // Set connection timeout
       const timeoutId = setTimeout(() => {
-        console.error("Connection attempt timed out after", CONNECTION_TIMEOUT_MS, "ms");
+        console.error("[ConversationPanel] Connection attempt timed out after", CONNECTION_TIMEOUT_MS, "ms");
         setConnectionError(`Connection timed out after ${CONNECTION_TIMEOUT_MS/1000} seconds. Please try again.`);
         setIsStarting(false);
         
@@ -266,7 +285,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
       // Start the connection
       try {
         await conversation.startSession({
-          signedUrl: signedUrl
+          signedUrl: enhancedUrl
         });
         
         setIsMicEnabled(true);
@@ -276,11 +295,11 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         clearTimeout(timeoutId);
         setConnectionTimer(null);
         
-        console.error("Failed to start session:", startError);
+        console.error("[ConversationPanel] Failed to start session:", startError);
         throw new Error(`Failed to start session: ${startError instanceof Error ? startError.message : 'Unknown error'}`);
       }
     } catch (error) {
-      console.error("Error starting conversation:", error);
+      console.error("[ConversationPanel] Error starting conversation:", error);
       setConnectionError(error instanceof Error ? error.message : "An unknown error occurred");
       setIsStarting(false);
       setIsMicEnabled(false);
@@ -340,7 +359,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         description: "The conversation has been ended successfully"
       });
     } catch (error) {
-      console.error("Error ending conversation:", error);
+      console.error("[ConversationPanel] Error ending conversation:", error);
       toast({
         title: "Error Ending Conversation",
         description: error instanceof Error ? error.message : "An error occurred while ending the conversation",
@@ -387,7 +406,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
         description: volume === 0 ? "AI voice has been muted" : "AI voice has been unmuted"
       });
     } catch (error) {
-      console.error("Error setting volume:", error);
+      console.error("[ConversationPanel] Error setting volume:", error);
     }
   };
 
@@ -441,7 +460,7 @@ const ConversationPanel: React.FC<ConversationPanelProps> = ({
             <AlertDescription className="space-y-2">
               <p className="font-medium">{connectionError || authError}</p>
               {debugInfo && (
-                <p className="text-xs opacity-80 mt-1 font-mono">{debugInfo}</p>
+                <p className="text-xs opacity-80 mt-1 font-mono break-all">{debugInfo}</p>
               )}
               {!hasApiKey && (
                 <p className="text-sm">Please add your ElevenLabs API key in your profile settings.</p>

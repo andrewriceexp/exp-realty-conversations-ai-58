@@ -1,94 +1,84 @@
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { withTimeout } from '@/lib/utils';
-import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 
-interface ElevenLabsContextValue {
+interface ElevenLabsContextType {
+  getSignedUrl: (agentId: string) => Promise<string | null>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
-  getSignedUrl: (agentId: string) => Promise<string | null>;
 }
 
-const ElevenLabsContext = createContext<ElevenLabsContextValue | undefined>(undefined);
+const ElevenLabsContext = createContext<ElevenLabsContextType | undefined>(undefined);
 
-export function ElevenLabsProvider({ children }: { children: React.ReactNode }) {
+export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { session, user } = useAuth();
+  const { session } = useAuth();
 
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // Function to get a signed URL for conversation
   const getSignedUrl = useCallback(
     async (agentId: string): Promise<string | null> => {
-      setIsLoading(true);
-      setError(null);
+      if (!agentId) {
+        setError('Agent ID is required');
+        return null;
+      }
+
+      if (!session) {
+        setError('Authentication required');
+        return null;
+      }
+
       try {
-        console.log("[ElevenLabsContext] Getting signed URL for agent:", agentId);
-        
-        if (!session?.access_token) {
-          console.error("[ElevenLabsContext] No access token available");
-          throw new Error("Authentication required");
+        setIsLoading(true);
+        setError(null);
+        console.log('[ElevenLabsContext] Getting signed URL for agent:', agentId);
+
+        const { data, error: functionError } = await supabase.functions.invoke('elevenlabs-signed-url', {
+          body: { agent_id: agentId },
+        });
+
+        if (functionError) {
+          console.error('[ElevenLabsContext] Function error:', functionError);
+          setError(`Error from server: ${functionError.message}`);
+          return null;
         }
 
-        const { data, error: signedUrlError } = await supabase.functions.invoke(
-          "elevenlabs-signed-url",
-          {
-            body: { agent_id: agentId },
-          }
-        );
-
-        if (signedUrlError) {
-          console.error("[ElevenLabsContext] Error getting signed URL:", signedUrlError);
-          throw new Error(
-            `Failed to get conversation URL: ${signedUrlError.message}`
-          );
+        if (!data || !data.signed_url) {
+          console.error('[ElevenLabsContext] Missing signed URL in response:', data);
+          setError('Invalid response from server');
+          return null;
         }
 
-        if (!data?.signed_url) {
-          console.error("[ElevenLabsContext] No signed URL returned");
-          throw new Error("No conversation URL returned from server");
-        }
-
-        console.log("[ElevenLabsContext] Successfully obtained signed URL");
+        console.log('[ElevenLabsContext] Successfully obtained signed URL');
         return data.signed_url;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error("[ElevenLabsContext] Error in getSignedUrl:", errorMessage);
-        setError(errorMessage);
-        toast({
-          title: "Conversation Error",
-          description: errorMessage,
-          variant: "destructive"
-        });
+        console.error('[ElevenLabsContext] Error getting signed URL:', errorMessage);
+        setError(`Failed to get conversation URL: ${errorMessage}`);
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [session?.access_token]
+    [session]
   );
 
-  return (
-    <ElevenLabsContext.Provider
-      value={{
-        isLoading,
-        error,
-        clearError,
-        getSignedUrl,
-      }}
-    >
-      {children}
-    </ElevenLabsContext.Provider>
-  );
+  const value = {
+    getSignedUrl,
+    isLoading,
+    error,
+    clearError,
+  };
+
+  return <ElevenLabsContext.Provider value={value}>{children}</ElevenLabsContext.Provider>;
 };
 
-export const useElevenLabs = () => {
+export const useElevenLabs = (): ElevenLabsContextType => {
   const context = useContext(ElevenLabsContext);
   if (context === undefined) {
     throw new Error('useElevenLabs must be used within an ElevenLabsProvider');
