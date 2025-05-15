@@ -1,15 +1,24 @@
 
 // Import required packages
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/cors.ts";
 
-console.log(`Function "twilio-media-stream" up and running!`);
+console.log("Function 'twilio-media-stream' up and running!");
 
-// Define extended headers specifically for WebSocket
+// WebSocket headers for proper protocol switching
 const webSocketHeaders = {
-  ...corsHeaders,
   "Upgrade": "websocket",
-  "Connection": "Upgrade"
+  "Connection": "Upgrade",
+  "Sec-WebSocket-Accept": "", // Will be computed during handshake
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, elevenlabs-signature, x-elevenlabs-api-key, twilio-signature, X-Twilio-Signature, x-twilio-signature, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+};
+
+// CORS headers for standard HTTP responses
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, elevenlabs-signature, x-elevenlabs-api-key, twilio-signature, X-Twilio-Signature, x-twilio-signature, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 };
 
 // Helper function for consistent error handling
@@ -24,26 +33,13 @@ serve(async (req) => {
   try {
     // Handle OPTIONS preflight requests
     if (req.method === "OPTIONS") {
-      console.log("Handling WebSocket preflight request");
+      console.log("Handling preflight request with correct CORS headers");
       return new Response(null, {
         status: 204,
         headers: corsHeaders
       });
     }
-    
-    // Verify this is a WebSocket upgrade request
-    const upgradeHeader = req.headers.get("Upgrade") || "";
-    if (upgradeHeader.toLowerCase() !== "websocket") {
-      console.error("Expected WebSocket upgrade request, received regular HTTP request");
-      return new Response("Expected WebSocket upgrade request", { 
-        status: 426, // Upgrade Required status code
-        headers: {
-          ...corsHeaders,
-          "Upgrade": "websocket"
-        }
-      });
-    }
-    
+
     // Extract query parameters
     const url = new URL(req.url);
     const agentId = url.searchParams.get("agent_id");
@@ -51,33 +47,56 @@ serve(async (req) => {
     const userId = url.searchParams.get("user_id");
     const callLogId = url.searchParams.get("call_log_id");
     const debug = url.searchParams.get("debug") === "true";
-    
-    // Validate required parameters
-    if (!agentId) {
-      console.error("Missing required parameter: agent_id");
-      return new Response("Missing required parameter: agent_id", { 
-        status: 400, 
-        headers: corsHeaders 
-      });
-    }
-    
-    // Log connection details for debugging
-    console.log("WebSocket connection request received:", {
-      url: req.url,
+
+    console.log("WebSocket connection request received with parameters:", {
       agentId,
       voiceId: voiceId || "default",
       userId: userId || "none",
-      callLogId: callLogId || "none",
       debug: debug ? "enabled" : "disabled"
     });
-    
+
+    // Validate required parameters
+    if (!agentId) {
+      console.error("Missing required parameter: agent_id");
+      return new Response("Missing required parameter: agent_id", {
+        status: 400,
+        headers: corsHeaders
+      });
+    }
+
+    // Verify this is a WebSocket upgrade request
+    const upgradeHeader = req.headers.get("Upgrade") || "";
+    if (upgradeHeader.toLowerCase() !== "websocket") {
+      console.error("Expected WebSocket upgrade request, received regular HTTP request");
+      return new Response("Expected WebSocket upgrade request", {
+        status: 426, // Upgrade Required
+        headers: {
+          ...corsHeaders,
+          "Upgrade": "websocket"
+        }
+      });
+    }
+
+    // Check for WebSocket version
+    const wsVersion = req.headers.get("Sec-WebSocket-Version");
+    if (wsVersion !== "13") {
+      console.error(`Unsupported WebSocket version: ${wsVersion}`);
+      return new Response("Unsupported WebSocket version", {
+        status: 400,
+        headers: corsHeaders
+      });
+    }
+
     try {
-      // Create WebSocket parameters for ElevenLabs
+      console.log("Attempting WebSocket upgrade...");
+
+      // First, create ElevenLabs WebSocket connection parameters
       const elevenLabsParams = new URLSearchParams();
       elevenLabsParams.append("agent_id", agentId);
       
-      // Add optional parameters when available
-      if (voiceId) elevenLabsParams.append("voice_id", voiceId);
+      if (voiceId) {
+        elevenLabsParams.append("voice_id", voiceId);
+      }
       
       // CRITICAL: Always specify the audio format for telephony use cases
       elevenLabsParams.append("input_format", "mulaw_8000");
@@ -85,25 +104,39 @@ serve(async (req) => {
       
       // Construct the ElevenLabs WebSocket URL
       const elevenLabsWsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?${elevenLabsParams.toString()}`;
-      console.log(`ElevenLabs WebSocket URL: ${elevenLabsWsUrl}`);
+      console.log("Will connect to ElevenLabs at:", elevenLabsWsUrl);
       
+      // Perform the WebSocket upgrade with explicit protocol settings
+      let result;
+      try {
+        result = Deno.upgradeWebSocket(req);
+        console.log("Successfully upgraded WebSocket connection");
+      } catch (upgradeError) {
+        console.error("WebSocket upgrade failed:", upgradeError);
+        return new Response(`WebSocket upgrade failed: ${upgradeError instanceof Error ? upgradeError.message : String(upgradeError)}`, {
+          status: 500,
+          headers: corsHeaders
+        });
+      }
+
+      const twilioSocket = result.socket;
+      const response = result.response;
+
       // Track connection variables
       let streamSid: string | null = null;
       let callSid: string | null = null;
       let elevenLabsSocket: WebSocket | null = null;
       let pingTimeout: number | null = null;
-      
-      // Upgrade the connection with explicit WebSocket settings
-      const { socket: twilioSocket, response } = Deno.upgradeWebSocket(req);
-      console.log("Twilio WebSocket connection upgraded successfully");
-      
-      // Connect to ElevenLabs
+      let connectionEstablished = false;
+
+      // Connect to ElevenLabs after successful Twilio upgrade
+      console.log("Connecting to ElevenLabs WebSocket...");
       elevenLabsSocket = new WebSocket(elevenLabsWsUrl);
-      console.log("Connecting to ElevenLabs WebSocket");
       
       // Handle successful ElevenLabs connection
       elevenLabsSocket.onopen = () => {
         console.log("Successfully connected to ElevenLabs WebSocket");
+        connectionEstablished = true;
         
         // Authenticate with API key if available
         const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
@@ -117,10 +150,15 @@ serve(async (req) => {
       
       // Handle messages from ElevenLabs
       elevenLabsSocket.onmessage = (event) => {
+        if (!twilioSocket || twilioSocket.readyState !== WebSocket.OPEN) {
+          console.warn("Received message from ElevenLabs but Twilio socket is not open");
+          return;
+        }
+        
         try {
           const message = JSON.parse(event.data);
           
-          // Log message type (except audio and ping)
+          // Log message type (except for high-volume types)
           if (message.type !== "audio" && message.type !== "ping") {
             console.log(`Received ${message.type} message from ElevenLabs`);
           } else if (message.type === "ping") {
@@ -147,7 +185,11 @@ serve(async (req) => {
                     payload: message.audio_event.audio_base_64
                   }
                 };
-                twilioSocket.send(JSON.stringify(audioData));
+                try {
+                  twilioSocket.send(JSON.stringify(audioData));
+                } catch (sendError) {
+                  console.error("Error sending audio to Twilio:", sendError);
+                }
               }
               break;
               
@@ -155,10 +197,14 @@ serve(async (req) => {
               if (streamSid) {
                 // Clear Twilio's audio queue on interruption
                 console.log("Clearing Twilio audio queue due to interruption");
-                twilioSocket.send(JSON.stringify({
-                  event: "clear",
-                  streamSid
-                }));
+                try {
+                  twilioSocket.send(JSON.stringify({
+                    event: "clear",
+                    streamSid
+                  }));
+                } catch (sendError) {
+                  console.error("Error sending clear command to Twilio:", sendError);
+                }
               }
               break;
               
@@ -169,7 +215,12 @@ serve(async (req) => {
                   type: "pong",
                   event_id: message.ping_event.event_id
                 };
-                elevenLabsSocket?.send(JSON.stringify(pongResponse));
+                
+                try {
+                  elevenLabsSocket?.send(JSON.stringify(pongResponse));
+                } catch (sendError) {
+                  console.error("Error sending pong to ElevenLabs:", sendError);
+                }
                 
                 // Reset ping timeout
                 if (pingTimeout) {
@@ -191,8 +242,8 @@ serve(async (req) => {
               console.error("Error from ElevenLabs:", message.error || "Unknown error");
               break;
           }
-        } catch (error) {
-          console.error("Error processing message from ElevenLabs:", formatError(error));
+        } catch (parseError) {
+          console.error("Error processing message from ElevenLabs:", formatError(parseError));
         }
       };
       
@@ -204,14 +255,24 @@ serve(async (req) => {
       // Handle disconnection from ElevenLabs
       elevenLabsSocket.onclose = (event) => {
         console.log(`ElevenLabs WebSocket closed: Code ${event.code}, Reason: ${event.reason || "No reason provided"}`);
+        
         if (pingTimeout) {
           clearTimeout(pingTimeout);
           pingTimeout = null;
         }
+        
+        // Close Twilio connection if still open
+        if (twilioSocket && twilioSocket.readyState === WebSocket.OPEN) {
+          try {
+            twilioSocket.close();
+          } catch (closeError) {
+            console.error("Error closing Twilio socket:", closeError);
+          }
+        }
       };
       
       // Handle messages from Twilio
-      twilioSocket.onmessage = async (event) => {
+      twilioSocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           
@@ -234,7 +295,13 @@ serve(async (req) => {
                 const audioMessage = {
                   user_audio_chunk: data.media.payload
                 };
-                elevenLabsSocket.send(JSON.stringify(audioMessage));
+                try {
+                  elevenLabsSocket.send(JSON.stringify(audioMessage));
+                } catch (sendError) {
+                  console.error("Error sending audio to ElevenLabs:", sendError);
+                }
+              } else if (connectionEstablished) {
+                console.warn("Received media but ElevenLabs socket is not open");
               }
               break;
               
@@ -242,24 +309,38 @@ serve(async (req) => {
               // Handle stream end
               console.log(`Stream ${streamSid} ended`);
               if (elevenLabsSocket && elevenLabsSocket.readyState === WebSocket.OPEN) {
-                elevenLabsSocket.close();
+                try {
+                  elevenLabsSocket.close();
+                } catch (closeError) {
+                  console.error("Error closing ElevenLabs socket:", closeError);
+                }
               }
               streamSid = null;
               callSid = null;
               break;
+            
+            default:
+              console.log(`Unhandled Twilio event: ${data.event}`);
+              break;
           }
-        } catch (error) {
-          console.error("Error processing message from Twilio:", formatError(error));
+        } catch (parseError) {
+          console.error("Error processing message from Twilio:", formatError(parseError));
         }
       };
       
       // Handle disconnection from Twilio
-      twilioSocket.onclose = () => {
-        console.log("Twilio WebSocket closed");
+      twilioSocket.onclose = (event) => {
+        console.log(`Twilio WebSocket closed: Code ${event.code}, Reason: ${event.reason || "No reason provided"}`);
+        
         // Clean up resources
         if (elevenLabsSocket && elevenLabsSocket.readyState === WebSocket.OPEN) {
-          elevenLabsSocket.close();
+          try {
+            elevenLabsSocket.close();
+          } catch (closeError) {
+            console.error("Error closing ElevenLabs socket:", closeError);
+          }
         }
+        
         if (pingTimeout) {
           clearTimeout(pingTimeout);
           pingTimeout = null;
@@ -272,7 +353,7 @@ serve(async (req) => {
       };
       
       // Return the WebSocket response
-      console.log("WebSocket connection fully established");
+      console.log("WebSocket setup complete, returning response");
       return response;
       
     } catch (error) {
