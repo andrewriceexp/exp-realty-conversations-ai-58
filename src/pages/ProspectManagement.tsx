@@ -13,7 +13,7 @@ import { isAnonymizationEnabled, setAnonymizationEnabled } from "@/utils/anonymi
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const ProspectManagement = () => {
   const [selectedList, setSelectedList] = useState<ProspectList | null>(null);
@@ -22,6 +22,17 @@ const ProspectManagement = () => {
   const { toast } = useToast();
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Set active tab based on navigation state if provided
+  useEffect(() => {
+    if (location.state?.activeTab && ['lists', 'import', 'elevenlabs', 'details'].includes(location.state.activeTab)) {
+      setActiveTab(location.state.activeTab);
+      
+      // Clear the state so refreshing the page doesn't trigger this again
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Update localStorage when anonymization preference changes
   useEffect(() => {

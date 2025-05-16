@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -125,6 +124,11 @@ const Dashboard = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  // Function to navigate to prospects page with import tab selected
+  const navigateToProspectsImport = () => {
+    navigate('/prospects', { state: { activeTab: 'import' } });
+  };
+
   return (
     <div className="container mx-auto p-4 space-y-6">
       <div className="flex justify-between items-center mb-6">
@@ -238,7 +242,7 @@ const Dashboard = () => {
               title="Import Prospects" 
               description="Upload a CSV file with prospect information"
               buttonText="Import Now"
-              onClick={() => navigate('/prospects/import')}
+              onClick={navigateToProspectsImport}
             />
             <QuickActionCard 
               title="Configure AI Agent" 
