@@ -99,6 +99,7 @@ export default function ElevenLabsDirectConnect({
                   <p className="max-w-xs">
                     Use ElevenLabs native calling platform instead of your Twilio integration.
                     Requires an agent set up in ElevenLabs and a phone number connected to your account.
+                    The phone number must be the actual phone number in E.164 format (e.g., +12125551234), not a UUID.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -118,12 +119,15 @@ export default function ElevenLabsDirectConnect({
                   placeholder="Enter your ElevenLabs agent ID"
                   className="mt-1"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This should look like "phnum_01jvbq7pw0f36bx7gyzgt7m1j9"
+                </p>
               </div>
               
               <div>
                 <div className="flex justify-between items-center">
                   <Label htmlFor="elevenlabs-phone-number-id" className="text-sm">
-                    ElevenLabs Phone Number ID
+                    ElevenLabs Phone Number
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
@@ -132,8 +136,8 @@ export default function ElevenLabsDirectConnect({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="max-w-xs">
-                          Enter the Phone Number ID from your ElevenLabs account. 
-                          You can find this in your ElevenLabs dashboard under Phone Numbers.
+                          Enter your actual phone number in E.164 format (e.g., +12125551234).
+                          This must be a phone number registered in your ElevenLabs account.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -144,7 +148,7 @@ export default function ElevenLabsDirectConnect({
                     id="elevenlabs-phone-number-id"
                     value={elevenLabsPhoneNumberId}
                     onChange={(e) => setElevenLabsPhoneNumberId(e.target.value)}
-                    placeholder="Enter your ElevenLabs phone number ID"
+                    placeholder="Enter your phone number (e.g., +12125551234)"
                     className="flex-1"
                   />
                   <button
@@ -155,6 +159,9 @@ export default function ElevenLabsDirectConnect({
                     {isLoading ? "Saving..." : "Save"}
                   </button>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Must be in E.164 format (e.g., +12125551234) and registered in your ElevenLabs account
+                </p>
               </div>
             </div>
           )}

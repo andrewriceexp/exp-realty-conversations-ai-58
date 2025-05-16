@@ -129,7 +129,7 @@ export function CallDialog({
         }
 
         if (!elevenLabsPhoneNumberId) {
-          throw new Error("Please enter your ElevenLabs Phone Number ID");
+          throw new Error("Please enter your ElevenLabs Phone Number");
         }
 
         // Add ElevenLabs specific parameters
@@ -138,9 +138,16 @@ export function CallDialog({
         callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId;
         
         console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
-        console.log("Using ElevenLabs phone number ID:", elevenLabsPhoneNumberId);
+        console.log("Using ElevenLabs phone number:", elevenLabsPhoneNumberId);
         
-        callResponse = await twilioCall.makeCall(callParams);
+        // Make the ElevenLabs call with detailed logging
+        try {
+          callResponse = await twilioCall.makeCall(callParams);
+          console.log("ElevenLabs call response:", callResponse);
+        } catch (error) {
+          console.error("Error making ElevenLabs call:", error);
+          throw error;
+        }
       } else if (selectedConfigId) {
         // Only attempt regular call if a config is selected
         console.log("Using regular Twilio call with agent config ID:", selectedConfigId);
@@ -174,7 +181,7 @@ export function CallDialog({
         if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING") {
           toast({
             title: "Phone Number Missing",
-            description: "You need to configure your ElevenLabs phone number ID in your profile settings.",
+            description: "You need to configure your ElevenLabs phone number in your profile settings.",
             variant: "destructive",
             duration: 8000,
             action: (
@@ -186,15 +193,10 @@ export function CallDialog({
         } 
         else if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_INVALID") {
           toast({
-            title: "Invalid Phone Number ID",
-            description: "The ElevenLabs phone number ID you provided is invalid. Please check your ElevenLabs account for the correct ID.",
+            title: "Invalid Phone Number",
+            description: "The ElevenLabs phone number you provided is invalid. Please use the actual phone number in E.164 format (e.g., +12125551234).",
             variant: "destructive",
-            duration: 8000,
-            action: (
-              <ToastAction altText="Configure" onClick={() => {}}>
-                Learn More
-              </ToastAction>
-            )
+            duration: 8000
           });
         }
       }

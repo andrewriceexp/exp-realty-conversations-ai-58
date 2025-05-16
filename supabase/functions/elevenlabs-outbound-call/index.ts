@@ -107,7 +107,7 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseAdminKey);
     
-    // Get user's ElevenLabs API key and phone number ID
+    // Get user's ElevenLabs API key
     console.log(`Fetching user profile for ID: ${user_id}`);
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -145,11 +145,11 @@ serve(async (req) => {
     
     console.log(`Using phone number ID: ${phoneNumberId}`);
     
-    // Prepare the payload for ElevenLabs API
+    // Prepare the payload for ElevenLabs API - Use the phone number ID directly, not as UUID
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: phoneNumberId,
+      agent_phone_number_id: phoneNumberId, // Use the phone number itself, not a UUID
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
