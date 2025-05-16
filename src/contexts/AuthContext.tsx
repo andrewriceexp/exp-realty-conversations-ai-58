@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+
+import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
 import { supabase, authChannel } from '@/integrations/supabase/client';
 import { UserProfile, AuthContextType } from '@/types/auth-types';
 
@@ -52,6 +53,16 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
   resetPassword: async () => {},
 });
+
+// Custom hook to use the auth context - we're defining it directly in the AuthContext.tsx
+// but exporting it for backwards compatibility
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 // Authentication provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -477,5 +488,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Export the context
+// Export the context and types
 export { AuthContext };
+// Export the UserProfile type for backward compatibility
+export type { UserProfile };
