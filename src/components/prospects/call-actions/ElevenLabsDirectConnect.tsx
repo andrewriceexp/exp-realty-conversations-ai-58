@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -43,69 +42,19 @@ export default function ElevenLabsDirectConnect({
     // eslint-disable-next-line react-hooks/exhaustive-deps 
   }, [profile]); // Removed setElevenLabsPhoneNumberId from deps as it can cause loops if parent doesn't memoize it
   
-  // Validate phone number whenever it changes
-  useEffect(() => {
-    if (useElevenLabsAgent && elevenLabsPhoneNumberId) {
-      validatePhoneNumber(elevenLabsPhoneNumberId);
-    } else {
-      setHasPhoneNumberError(false);
-      setErrorMessage('');
-    }
-  }, [useElevenLabsAgent, elevenLabsPhoneNumberId]);
-
-  const validatePhoneNumber = (phoneNumber: string) => {
-    const trimmedNumber = phoneNumber.trim();
-    if (!trimmedNumber) {
-      setHasPhoneNumberError(true);
-      setErrorMessage("Phone number cannot be empty");
-      return false;
-    }
-
-    // Format phone number (make sure it has a + prefix)
-    let formattedNumber = trimmedNumber;
-    if (!formattedNumber.startsWith('+')) {
-      formattedNumber = `+${formattedNumber}`;
-    }
-
-    // Validate E.164 format
-    const phoneRegex = /^\+[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(formattedNumber)) {
-      setHasPhoneNumberError(true);
-      setErrorMessage("Phone number must be in E.164 format (e.g., +12125551234)");
-      return false;
-    }
-
-    setHasPhoneNumberError(false);
-    setErrorMessage('');
-    return true;
-  };
-  
   const handleSavePhoneNumberId = async () => {
-    // Format and validate the phone number
-    let currentId = elevenLabsPhoneNumberId.trim();
+    const currentId = elevenLabsPhoneNumberId.trim();
     if (!currentId) {
       toast({
         title: "Validation Error",
-        description: "ElevenLabs Phone Number ID cannot be empty",
+        description: "ElevenLabs Phone Number ID cannot be empty", // Message for ID
         variant: "destructive"
       });
       return;
     }
 
-    // Add + prefix if missing
-    if (!currentId.startsWith('+')) {
-      currentId = `+${currentId}`;
-    }
-
-    // Validate phone number format (must be E.164 format)
-    if (!validatePhoneNumber(currentId)) {
-      toast({
-        title: "Invalid Phone Number Format",
-        description: errorMessage || "Phone number must be in E.164 format (e.g., +12125551234)",
-        variant: "destructive"
-      });
-      return;
-    }
+    // Removed E.164 formatting and validation for the ID.
+    // The ID from ElevenLabs should be used as-is.
     
     setIsLoading(true);
     setIsSaved(false);
@@ -202,7 +151,7 @@ export default function ElevenLabsDirectConnect({
               <div>
                 <div className="flex justify-between items-center">
                   <Label htmlFor="elevenlabs-phone-number-id" className="text-sm">
-                    ElevenLabs Phone Number
+                    ElevenLabs Phone Number ID 
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
@@ -211,8 +160,8 @@ export default function ElevenLabsDirectConnect({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="max-w-xs">
-                          Enter the phone number that will be used for outbound calls via ElevenLabs.
-                          This should be in E.164 format (e.g., +12125551234) and must be registered with ElevenLabs.
+                          Enter the Phone Number ID from your ElevenLabs dashboard.
+                          This ID is for a phone number you have registered and verified with ElevenLabs for outbound calls.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -223,7 +172,7 @@ export default function ElevenLabsDirectConnect({
                     id="elevenlabs-phone-number-id"
                     value={elevenLabsPhoneNumberId}
                     onChange={(e) => setElevenLabsPhoneNumberId(e.target.value)}
-                    placeholder="Enter phone number (e.g., +12125551234)"
+                    placeholder="Enter ID from ElevenLabs dashboard" // Placeholder for ID
                     className={`flex-1 ${hasPhoneNumberError ? 'border-red-500' : ''}`}
                   />
                   <Button
@@ -247,14 +196,13 @@ export default function ElevenLabsDirectConnect({
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">
-                    This must be in E.164 format (e.g., +12125551234) and registered with ElevenLabs.
+                    This ID is provided by ElevenLabs for your registered outbound phone number.
                   </p>
                 )}
                 <Alert variant="info" className="mt-4 py-2 text-sm">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    You must first register this phone number with ElevenLabs to make calls. 
-                    The phone number format should be: +12125551234
+                    You must obtain this ID from your ElevenLabs dashboard after registering a phone number for outbound calls.
                   </AlertDescription>
                 </Alert>
               </div>

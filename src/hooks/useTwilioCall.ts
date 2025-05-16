@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -400,35 +399,23 @@ export function useTwilioCall() {
       configOverride.agent.input_format = "mulaw_8000";
       configOverride.agent.output_format = "mulaw_8000";
       
-      // Format and validate the phone number
-      let phoneNumberToUse = params.elevenLabsPhoneNumberId || '';
+      // Get the ElevenLabs Phone Number ID from params. This should be the ID from ElevenLabs, not an E.164 string.
+      const elevenLabsIdForPhoneNumber = params.elevenLabsPhoneNumberId || '';
       
-      if (!phoneNumberToUse) {
+      if (!elevenLabsIdForPhoneNumber) {
         console.error("[TwilioCall] No ElevenLabs Phone Number ID provided");
         return {
           success: false, 
-          message: "ElevenLabs Phone Number ID is required",
-          code: "ELEVENLABS_PHONE_NUMBER_MISSING"
+          message: "ElevenLabs Phone Number ID is required. This ID is provided by ElevenLabs for your registered outbound number.", // Clarified message
+          code: "ELEVENLABS_PHONE_NUMBER_ID_MISSING" // Clarified code
         };
       }
       
-      // Format the phone number (add + if missing)
-      phoneNumberToUse = phoneNumberToUse.trim();
-      if (!phoneNumberToUse.startsWith('+')) {
-        phoneNumberToUse = `+${phoneNumberToUse}`;
-      }
+      // Removed E.164 formatting and validation for the ID.
+      // The ID from ElevenLabs should be used as-is.
+      const finalElevenLabsPhoneNumberId = elevenLabsIdForPhoneNumber.trim();
       
-      const phoneRegex = /^\+[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(phoneNumberToUse)) {
-        console.error("[TwilioCall] Invalid phone number format:", phoneNumberToUse);
-        return {
-          success: false,
-          message: "Phone number must be in E.164 format (e.g., +12125551234)",
-          code: "ELEVENLABS_PHONE_NUMBER_INVALID"
-        };
-      }
-      
-      console.log("[TwilioCall] Using ElevenLabs Phone Number:", phoneNumberToUse);
+      console.log("[TwilioCall] Using ElevenLabs Phone Number ID:", finalElevenLabsPhoneNumberId);
       
       // Add more useful dynamic variables for the conversation
       const dynamicVariables = {
@@ -445,7 +432,7 @@ export function useTwilioCall() {
         body: {
           agent_id: params.elevenLabsAgentId,
           to_number: prospectData.phone_number,
-          agent_phone_number_id: phoneNumberToUse,
+          agent_phone_number_id: finalElevenLabsPhoneNumberId, // Use the ID as-is
           user_id: userId,
           prospect_id: params.prospectId,
           agent_config_id: params.agentConfigId,

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -135,7 +134,7 @@ serve(async (req) => {
       console.error("No ElevenLabs phone number ID provided in request or stored in profile");
       return new Response(JSON.stringify({
         success: false,
-        message: "ElevenLabs Phone Number ID is required for outbound calling. Please add it in your profile settings or ensure it's sent in the request.",
+        message: "ElevenLabs Phone Number ID is required for outbound calling. This ID is provided by ElevenLabs for your registered outbound number. Please add it in your profile settings or ensure it's sent in the request.",
         code: "ELEVENLABS_PHONE_NUMBER_ID_MISSING"
       }), {
         status: 400,
@@ -143,34 +142,17 @@ serve(async (req) => {
       });
     }
     
-    // Validate ElevenLabs phone number format
-    let formattedPhoneNumber = elPhoneNumberId.trim();
-    // If it doesn't start with a plus sign, add it
-    if (!formattedPhoneNumber.startsWith("+")) {
-      formattedPhoneNumber = "+" + formattedPhoneNumber;
-    }
-    
-    // Validate with E.164 format
-    const phoneRegex = /^\+[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(formattedPhoneNumber)) {
-      console.error(`Invalid phone number format: ${formattedPhoneNumber}`);
-      return new Response(JSON.stringify({
-        success: false,
-        message: "ElevenLabs phone number must be in E.164 format (e.g., +12125551234)",
-        code: "ELEVENLABS_PHONE_NUMBER_INVALID"
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    
-    console.log(`Using ElevenLabs Phone Number ID: ${formattedPhoneNumber}`);
+    // Removed E.164 formatting and validation for elPhoneNumberId. 
+    // It is an ID from ElevenLabs and should be used as-is.
+    const finalPhoneNumberId = elPhoneNumberId.trim();
+
+    console.log(`Using ElevenLabs Phone Number ID: ${finalPhoneNumberId}`);
     
     // Prepare the payload for ElevenLabs API
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: formattedPhoneNumber,
+      agent_phone_number_id: finalPhoneNumberId, // Use the ID as-is
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -188,7 +170,7 @@ serve(async (req) => {
     // Log configuration (without sensitive data)
     console.log("Call configuration:", {
       agent_id,
-      agent_phone_number_id: formattedPhoneNumber,
+      agent_phone_number_id: finalPhoneNumberId, // Log the ID as-is
       dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
       voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
       audio_format: "mulaw_8000 (optimized for telephony)"
@@ -237,10 +219,10 @@ serve(async (req) => {
           if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
             return new Response(JSON.stringify({
               success: false,
-              message: `The phone number ${formattedPhoneNumber} is not registered with your ElevenLabs account. Please register this number with ElevenLabs or use a different number.`,
+              message: `The ElevenLabs Phone Number ID "${finalPhoneNumberId}" was not found in your ElevenLabs account. Please verify this ID is correct, obtained from the ElevenLabs dashboard, and corresponds to a registered outbound number.`,
               code: "ELEVENLABS_PHONE_NUMBER_NOT_FOUND",
               details: {
-                phoneNumber: formattedPhoneNumber,
+                phoneNumberIdUsed: finalPhoneNumberId, // Use the actual ID variable
                 errorType: "phone_number_not_found"
               }
             }), {
@@ -296,7 +278,7 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         metadata: {
           agent_id,
-          agent_phone_number_id: formattedPhoneNumber,
+          agent_phone_number_id: finalPhoneNumberId, // Log the ID as-is
           dynamic_variables,
           conversation_config_override,
           audio_format: {
