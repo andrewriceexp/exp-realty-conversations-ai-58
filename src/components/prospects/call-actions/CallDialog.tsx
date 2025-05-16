@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Loader2, Phone, Settings } from 'lucide-react';
+import { AlertCircle, Loader2, Phone, Settings, Info } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { useTwilioCall } from '@/hooks/useTwilioCall';
@@ -328,6 +327,16 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
                     </Link>
                   </div>
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Add an informational alert about ElevenLabs Direct Connect */}
+          {useElevenLabsAgent && (
+            <Alert variant="info" className="mb-4">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Using ElevenLabs Direct Connect requires a phone number to be set up in your ElevenLabs account. Your account must have a valid phone number configured.
               </AlertDescription>
             </Alert>
           )}

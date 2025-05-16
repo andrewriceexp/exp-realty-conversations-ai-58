@@ -11,6 +11,7 @@ interface OutboundCallRequest {
   user_id: string;
   prospect_id?: string;
   agent_config_id?: string;
+  agent_phone_number_id?: string; // Added parameter
   dynamic_variables?: Record<string, any>;
   conversation_config_override?: {
     agent?: {
@@ -26,6 +27,9 @@ interface OutboundCallRequest {
   };
 }
 
+// Default phone number ID to use if none is provided
+const DEFAULT_PHONE_NUMBER_ID = "c6b3ee3e-4d1a-4bbd-bda0-507aa16dd108";
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -40,6 +44,7 @@ serve(async (req) => {
       user_id, 
       prospect_id, 
       agent_config_id,
+      agent_phone_number_id, // Get the agent_phone_number_id parameter if provided
       dynamic_variables, 
       conversation_config_override 
     } = requestBody as OutboundCallRequest;
@@ -51,6 +56,7 @@ serve(async (req) => {
       user_id,
       prospect_id,
       agent_config_id,
+      agent_phone_number_id: agent_phone_number_id || "not provided",
       has_dynamic_variables: !!dynamic_variables,
       has_config_override: !!conversation_config_override
     });
@@ -124,10 +130,15 @@ serve(async (req) => {
       });
     }
     
+    // Use the provided agent_phone_number_id or the default one
+    const phoneNumberId = agent_phone_number_id || DEFAULT_PHONE_NUMBER_ID;
+    console.log(`Using phone number ID: ${phoneNumberId}`);
+    
     // Prepare the payload for ElevenLabs API
     const payload = {
       agent_id,
       to_number,
+      agent_phone_number_id: phoneNumberId, // Include the phone number ID in the payload
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -145,6 +156,7 @@ serve(async (req) => {
     // Log configuration (without sensitive data)
     console.log("Call configuration:", {
       agent_id,
+      agent_phone_number_id: phoneNumberId,
       dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
       voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
       audio_format: "mulaw_8000 (optimized for telephony)"
@@ -228,6 +240,7 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         metadata: {
           agent_id,
+          agent_phone_number_id: phoneNumberId,
           dynamic_variables,
           conversation_config_override,
           audio_format: {
