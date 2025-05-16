@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -31,12 +32,11 @@ export type ProfileFormValues = z.infer<typeof profileSchema>;
 
 interface ProfileFormProps {
   profile: any;
-  updateProfile: (data: any) => Promise<void>;
-  onNavigate: () => void;
+  onSave: (data: any) => Promise<void>;
+  saving: boolean;
 }
 
-export default function ProfileForm({ profile, updateProfile, onNavigate }: ProfileFormProps) {
-  const [isLoading, setIsLoading] = useState(false);
+export default function ProfileForm({ profile, onSave, saving }: ProfileFormProps) {
   const [hasAuthToken, setHasAuthToken] = useState(!!profile?.twilio_auth_token);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -70,7 +70,6 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
 
   const onSubmit = async (values: ProfileFormValues) => {
     try {
-      setIsLoading(true);
       setUpdateSuccess(false);
       setErrorMessage(null);
       
@@ -90,7 +89,7 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
         twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined,
       });
       
-      await updateProfile(updateData);
+      await onSave(updateData);
       
       // Reset the auth token field
       form.setValue('twilio_auth_token', '');
@@ -116,8 +115,6 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
         description: error.message || 'Failed to update profile',
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -155,7 +152,7 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="John Smith" {...field} disabled={isLoading} />
+                    <Input placeholder="John Smith" {...field} disabled={saving} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -169,7 +166,7 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
                 <FormItem>
                   <FormLabel>eXp Realty ID (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your eXp ID" {...field} disabled={isLoading} />
+                    <Input placeholder="Your eXp ID" {...field} disabled={saving} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -179,19 +176,17 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
           
           <TwilioConfiguration 
             form={form} 
-            isLoading={isLoading} 
+            isLoading={saving} 
             hasAuthToken={hasAuthToken}
           />
-          
-          <ElevenLabsInfo />
           
           <div className="flex gap-4">
             <Button 
               type="submit" 
               className="flex-1 exp-gradient" 
-              disabled={isLoading}
+              disabled={saving}
             >
-              {isLoading ? (
+              {saving ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
                   Saving...
@@ -202,8 +197,8 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
             <Button 
               type="button" 
               variant="outline"
-              onClick={onNavigate} 
-              disabled={isLoading}
+              onClick={() => window.location.href = '/dashboard'} 
+              disabled={saving}
               className="flex-1"
             >
               Go to Dashboard
@@ -213,4 +208,4 @@ export default function ProfileForm({ profile, updateProfile, onNavigate }: Prof
       </Form>
     </>
   );
-};
+}

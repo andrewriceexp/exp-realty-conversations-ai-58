@@ -1,4 +1,5 @@
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,22 +9,32 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { UserProfile } from '@/contexts/AuthContext';
 
-export default function ElevenLabsInfo() {
+interface ElevenLabsInfoProps {
+  profile?: UserProfile;
+  onSave?: (data: any) => Promise<void>;
+  saving?: boolean;
+}
+
+export default function ElevenLabsInfo({ profile, onSave, saving }: ElevenLabsInfoProps = {}) {
   const { apiKey, isApiKeyValid, isLoading, validateApiKey } = useElevenLabs();
   const [inputApiKey, setInputApiKey] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const { toast } = useToast();
-  const { profile, refreshProfile } = useAuth();
+  const { profile: authProfile, refreshProfile } = useAuth();
+
+  // Use the profile prop if provided, otherwise use the one from auth context
+  const currentProfile = profile || authProfile;
 
   // Load the saved phone number ID when the component mounts
-  useState(() => {
-    if (profile?.elevenlabs_phone_number_id) {
-      setPhoneNumberId(profile.elevenlabs_phone_number_id);
+  useEffect(() => {
+    if (currentProfile?.elevenlabs_phone_number_id) {
+      setPhoneNumberId(currentProfile.elevenlabs_phone_number_id);
     }
-  });
+  }, [currentProfile]);
 
   const handleSaveApiKey = async () => {
     if (!inputApiKey) {
@@ -40,23 +51,28 @@ export default function ElevenLabsInfo() {
       const isValid = await validateApiKey(inputApiKey);
 
       if (isValid) {
-        // Save the API key to the user's profile
-        const { error } = await supabase
-          .from('profiles')
-          .update({ elevenlabs_api_key: inputApiKey })
-          .eq('id', profile?.id);
+        // If using onSave prop (from ProfileSetup)
+        if (onSave) {
+          await onSave({ elevenlabs_api_key: inputApiKey });
+        } else {
+          // Save the API key to the user's profile
+          const { error } = await supabase
+            .from('profiles')
+            .update({ elevenlabs_api_key: inputApiKey })
+            .eq('id', currentProfile?.id);
 
-        if (error) throw error;
+          if (error) throw error;
+
+          // Refresh the user profile to get the updated API key
+          if (refreshProfile) {
+            await refreshProfile();
+          }
+        }
 
         toast({
           title: 'Success',
           description: 'API key saved successfully',
         });
-        
-        // Refresh the user profile to get the updated API key
-        if (refreshProfile) {
-          await refreshProfile();
-        }
         
         setInputApiKey('');
       } else {
@@ -81,22 +97,27 @@ export default function ElevenLabsInfo() {
   const handleSavePhoneNumberId = async () => {
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ elevenlabs_phone_number_id: phoneNumberId })
-        .eq('id', profile?.id);
+      // If using onSave prop (from ProfileSetup)
+      if (onSave) {
+        await onSave({ elevenlabs_phone_number_id: phoneNumberId });
+      } else {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ elevenlabs_phone_number_id: phoneNumberId })
+          .eq('id', currentProfile?.id);
 
-      if (error) throw error;
+        if (error) throw error;
+
+        // Refresh the user profile
+        if (refreshProfile) {
+          await refreshProfile();
+        }
+      }
 
       toast({
         title: 'Success',
         description: 'Phone Number ID saved successfully',
       });
-      
-      // Refresh the user profile to get the updated phone number ID
-      if (refreshProfile) {
-        await refreshProfile();
-      }
     } catch (error) {
       console.error('Error saving phone number ID:', error);
       toast({
@@ -141,8 +162,11 @@ export default function ElevenLabsInfo() {
                   {showApiKey ? "Hide" : "Show"}
                 </button>
               </div>
-              <Button onClick={handleSaveApiKey} disabled={isSaving || isLoading}>
-                {isSaving || isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button 
+                onClick={handleSaveApiKey} 
+                disabled={isSaving || isLoading || (onSave && saving)}
+              >
+                {(isSaving || isLoading || (onSave && saving)) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save
               </Button>
             </div>
@@ -168,8 +192,11 @@ export default function ElevenLabsInfo() {
                 placeholder="Enter your ElevenLabs Phone Number ID"
                 className="flex-1"
               />
-              <Button onClick={handleSavePhoneNumberId} disabled={isSaving}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button 
+                onClick={handleSavePhoneNumberId} 
+                disabled={isSaving || (onSave && saving)}
+              >
+                {(isSaving || (onSave && saving)) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save
               </Button>
             </div>

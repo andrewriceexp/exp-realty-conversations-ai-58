@@ -43,6 +43,19 @@ const ProfileSetup = () => {
     );
   }
 
+  const handleSave = async (data: any) => {
+    try {
+      setSaving(true);
+      setError(null);
+      await updateProfile(data);
+      setSuccessMessage("Profile updated successfully");
+    } catch (error: any) {
+      setError(error.message || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -76,59 +89,46 @@ const ProfileSetup = () => {
           
           <TabsContent value="profile">
             <ProfileForm 
-              profile={profile} 
-              onSave={async (data) => {
-                try {
-                  setSaving(true);
-                  setError(null);
-                  await updateProfile(data);
-                  setSuccessMessage("Profile updated successfully");
-                } catch (error: any) {
-                  setError(error.message || "Failed to update profile");
-                } finally {
-                  setSaving(false);
-                }
-              }}
+              profile={profile}
+              onSave={handleSave}
               saving={saving}
             />
           </TabsContent>
           
           <TabsContent value="twilio">
-            <TwilioConfiguration 
-              profile={profile}
-              onSave={async (data) => {
-                try {
-                  setSaving(true);
-                  setError(null);
-                  await updateProfile(data);
-                  setSuccessMessage("Twilio configuration updated successfully");
-                } catch (error: any) {
-                  setError(error.message || "Failed to update Twilio configuration");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              saving={saving}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>Twilio Configuration</CardTitle>
+                <CardDescription>
+                  Configure your Twilio credentials for making outbound calls
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TwilioConfiguration 
+                  profile={profile}
+                  onSave={handleSave}
+                  saving={saving}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
           
           <TabsContent value="elevenlabs">
-            <ElevenLabsInfo 
-              profile={profile}
-              onSave={async (data) => {
-                try {
-                  setSaving(true);
-                  setError(null);
-                  await updateProfile(data);
-                  setSuccessMessage("ElevenLabs configuration updated successfully");
-                } catch (error: any) {
-                  setError(error.message || "Failed to update ElevenLabs configuration");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              saving={saving}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>ElevenLabs Configuration</CardTitle>
+                <CardDescription>
+                  Configure your ElevenLabs credentials for voice AI
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ElevenLabsInfo 
+                  profile={profile}
+                  onSave={handleSave}
+                  saving={saving}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
