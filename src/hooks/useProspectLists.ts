@@ -14,14 +14,6 @@ export const useProspectLists = () => {
   const fetchProspectLists = async () => {
     try {
       setLoading(true);
-      console.log("Fetching prospect lists, user ID:", user?.id);
-      
-      if (!user?.id) {
-        console.log("No user ID available for fetching prospect lists");
-        setLists([]);
-        setLoading(false);
-        return;
-      }
       
       const { data, error } = await supabase
         .from("prospect_lists")
@@ -36,13 +28,10 @@ export const useProspectLists = () => {
           updated_at,
           prospects:prospects(count)
         `)
-        .eq("user_id", user.id)
+        .eq("user_id", user?.id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Supabase error:", error);
-        throw error;
-      }
+      if (error) throw error;
 
       // Transform the data to include the prospect count
       const transformedData = data.map((list) => ({
@@ -51,9 +40,7 @@ export const useProspectLists = () => {
       })) as ProspectList[];
 
       setLists(transformedData);
-      console.log("Fetched prospect lists:", transformedData);
     } catch (error: any) {
-      console.error("Error fetching prospect lists:", error);
       toast({
         title: "Error fetching prospect lists",
         description: error.message,
@@ -115,13 +102,8 @@ export const useProspectLists = () => {
   };
 
   useEffect(() => {
-    console.log("useProspectLists useEffect triggered, user ID:", user?.id);
-    if (user?.id) {
-      fetchProspectLists();
-    } else {
-      setLoading(false); // End loading if no user is authenticated
-    }
-  }, [user?.id]);
+    fetchProspectLists();
+  }, []);
 
   return {
     lists,

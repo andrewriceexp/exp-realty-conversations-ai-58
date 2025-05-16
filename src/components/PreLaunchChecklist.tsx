@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle, Circle, Settings, Users, Bot, Phone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { Spinner } from '@/components/ui/spinner';
 
 interface ChecklistItem {
   id: string;
@@ -24,17 +23,11 @@ const PreLaunchChecklist = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user) {
-      console.log("No user available for checklist");
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
 
     const fetchData = async () => {
       setLoading(true);
       try {
-        console.log("Fetching checklist data for user:", user.id);
-        
         // Check profile setup
         const profileComplete = profile && 
           profile.full_name && 
@@ -43,30 +36,16 @@ const PreLaunchChecklist = () => {
           profile.twilio_phone_number;
           
         // Check if there's at least one prospect list
-        const { count: prospectCount, error: prospectError } = await supabase
+        const { count: prospectCount } = await supabase
           .from('prospects')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
           
-        if (prospectError) {
-          console.error("Error checking prospect count:", prospectError);
-        }
-          
         // Check if there's at least one agent config
-        const { count: agentCount, error: agentError } = await supabase
+        const { count: agentCount } = await supabase
           .from('agent_configs')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
-          
-        if (agentError) {
-          console.error("Error checking agent count:", agentError);
-        }
-
-        console.log("Checklist data:", { 
-          profileComplete, 
-          prospectCount, 
-          agentCount 
-        });
 
         // Build checklist
         const newChecklist: ChecklistItem[] = [
@@ -75,7 +54,7 @@ const PreLaunchChecklist = () => {
             title: 'Complete Profile Setup',
             description: 'Add your name and configure your Twilio credentials',
             completed: !!profileComplete,
-            route: '/profile-setup',
+            route: '/profile',
             icon: <Settings className="h-5 w-5" />
           },
           {
@@ -116,11 +95,8 @@ const PreLaunchChecklist = () => {
       <Card>
         <CardHeader>
           <CardTitle>Launch Checklist</CardTitle>
-          <CardDescription>Loading your checklist...</CardDescription>
+          <CardDescription>Loading checklist...</CardDescription>
         </CardHeader>
-        <CardContent className="flex justify-center py-8">
-          <Spinner className="h-8 w-8 text-primary" />
-        </CardContent>
       </Card>
     );
   }

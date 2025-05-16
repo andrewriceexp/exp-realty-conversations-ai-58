@@ -76,53 +76,45 @@ const ProspectListTable = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lists.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                  No prospect lists found. Create one to get started.
+            {lists.map((list) => (
+              <TableRow key={list.id}>
+                <TableCell className="font-medium">
+                  {anonymizeData && list.list_name 
+                    ? `${list.list_name.slice(0, 3)}...${list.list_name.slice(-3)}` 
+                    : list.list_name}
+                </TableCell>
+                <TableCell>
+                  {anonymizeData && list.description 
+                    ? `${list.description.slice(0, 5)}...` 
+                    : list.description || "—"}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center">
+                    <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+                    {formatDate(list.created_at)}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">{list.prospect_count}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onSelectList(list)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => onDeleteList(list.id, list.list_name)}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
-            ) : (
-              lists.map((list) => (
-                <TableRow key={list.id}>
-                  <TableCell className="font-medium">
-                    {anonymizeData && list.list_name 
-                      ? `${list.list_name.slice(0, 3)}...${list.list_name.slice(-3)}` 
-                      : list.list_name}
-                  </TableCell>
-                  <TableCell>
-                    {anonymizeData && list.description 
-                      ? `${list.description.slice(0, 5)}...` 
-                      : list.description || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
-                      {formatDate(list.created_at)}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">{list.prospect_count}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onSelectList(list)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => onDeleteList(list.id, list.list_name)}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>

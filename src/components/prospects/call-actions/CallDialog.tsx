@@ -21,11 +21,10 @@ import {
   ElevenLabsVoiceSelector 
 } from './call-dialog-components';
 import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
-// Import as named import, not default
-import { ElevenLabsDirectConnect } from './index';
+import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CallDialogProps {

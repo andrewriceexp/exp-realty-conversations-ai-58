@@ -6,45 +6,14 @@ import { Label } from '@/components/ui/label';
 import { ProfileCredentialTester } from '@/components/ProfileCredentialTester';
 import { UseFormReturn } from 'react-hook-form';
 import { ProfileFormValues } from './ProfileForm';
-import { UserProfile } from "@/contexts/AuthContext";
 
 interface TwilioConfigurationProps {
-  form?: UseFormReturn<ProfileFormValues>;
-  isLoading?: boolean;
-  hasAuthToken?: boolean;
-  profile?: UserProfile;
-  onSave?: (data: any) => Promise<void>;
-  saving?: boolean;
+  form: UseFormReturn<ProfileFormValues>;
+  isLoading: boolean;
+  hasAuthToken: boolean;
 }
 
-export default function TwilioConfiguration({ 
-  form, 
-  isLoading, 
-  hasAuthToken,
-  profile,
-  onSave,
-  saving
-}: TwilioConfigurationProps) {
-  // If being used in the standalone context (with onSave)
-  if (profile && onSave) {
-    return (
-      <div>
-        <h3 className="text-lg font-medium mb-2">Twilio Configuration</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Configure your Twilio account settings to make outbound calls.
-        </p>
-        
-        {/* Form content would go here for the standalone version */}
-        <p className="text-sm text-gray-600">
-          Please use the Profile tab to configure your Twilio settings.
-        </p>
-      </div>
-    );
-  }
-
-  // If being used within ProfileForm (with form)
-  if (!form) return null;
-  
+const TwilioConfiguration = ({ form, isLoading, hasAuthToken }: TwilioConfigurationProps) => {
   return (
     <div>
       <h3 className="text-lg font-medium mb-2">Twilio Configuration</h3>
@@ -162,4 +131,6 @@ export default function TwilioConfiguration({
       </div>
     </div>
   );
-}
+};
+
+export default TwilioConfiguration;

@@ -32,11 +32,12 @@ export type ProfileFormValues = z.infer<typeof profileSchema>;
 
 interface ProfileFormProps {
   profile: any;
-  onSave: (data: any) => Promise<void>;
-  saving: boolean;
+  updateProfile: (data: any) => Promise<void>;
+  onNavigate: () => void;
 }
 
-export default function ProfileForm({ profile, onSave, saving }: ProfileFormProps) {
+const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) => {
+  const [isLoading, setIsLoading] = useState(false);
   const [hasAuthToken, setHasAuthToken] = useState(!!profile?.twilio_auth_token);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
 
   const onSubmit = async (values: ProfileFormValues) => {
     try {
+      setIsLoading(true);
       setUpdateSuccess(false);
       setErrorMessage(null);
       
@@ -89,7 +91,7 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
         twilio_auth_token: updateData.twilio_auth_token ? '****' : undefined,
       });
       
-      await onSave(updateData);
+      await updateProfile(updateData);
       
       // Reset the auth token field
       form.setValue('twilio_auth_token', '');
@@ -115,6 +117,8 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
         description: error.message || 'Failed to update profile',
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -152,7 +156,7 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="John Smith" {...field} disabled={saving} />
+                    <Input placeholder="John Smith" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -166,7 +170,7 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
                 <FormItem>
                   <FormLabel>eXp Realty ID (Optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Your eXp ID" {...field} disabled={saving} />
+                    <Input placeholder="Your eXp ID" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -176,17 +180,19 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
           
           <TwilioConfiguration 
             form={form} 
-            isLoading={saving} 
+            isLoading={isLoading} 
             hasAuthToken={hasAuthToken}
           />
+          
+          <ElevenLabsInfo />
           
           <div className="flex gap-4">
             <Button 
               type="submit" 
               className="flex-1 exp-gradient" 
-              disabled={saving}
+              disabled={isLoading}
             >
-              {saving ? (
+              {isLoading ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
                   Saving...
@@ -197,8 +203,8 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
             <Button 
               type="button" 
               variant="outline"
-              onClick={() => window.location.href = '/dashboard'} 
-              disabled={saving}
+              onClick={onNavigate} 
+              disabled={isLoading}
               className="flex-1"
             >
               Go to Dashboard
@@ -208,4 +214,6 @@ export default function ProfileForm({ profile, onSave, saving }: ProfileFormProp
       </Form>
     </>
   );
-}
+};
+
+export default ProfileForm;

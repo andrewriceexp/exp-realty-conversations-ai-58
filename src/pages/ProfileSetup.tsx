@@ -1,136 +1,120 @@
 
-import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle } from "lucide-react";
-import MainLayout from "@/components/MainLayout";
-import { useAuth } from "@/contexts/AuthContext";
-// Fixed imports to use default exports
-import ProfileForm from "@/components/profile/ProfileForm";
-import TwilioConfiguration from "@/components/profile/TwilioConfiguration";
-import ElevenLabsInfo from "@/components/profile/ElevenLabsInfo";
-import { Spinner } from "@/components/ui/spinner";
+import { useEffect, useState, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Check, ArrowRight, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import MainLayout from '@/components/MainLayout';
+import ProfileForm from '@/components/profile/ProfileForm';
+import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
+import { toast } from '@/hooks/use-toast';
 
 const ProfileSetup = () => {
-  const { user, profile, isLoading, updateProfile } = useAuth();
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
-
-  // If profile data changes, refresh any success/error messages
-  useEffect(() => {
-    setError(null);
-    setSuccessMessage(null);
-  }, [profile]);
-
-  if (isLoading) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-64">
-          <Spinner className="h-8 w-8 text-primary" />
-          <span className="ml-2">Loading profile data...</span>
-        </div>
-      </MainLayout>
-    );
-  }
-
-  const handleSave = async (data: any) => {
-    try {
-      setSaving(true);
-      setError(null);
-      await updateProfile(data);
-      setSuccessMessage("Profile updated successfully");
-    } catch (error: any) {
-      setError(error.message || "Failed to update profile");
-    } finally {
-      setSaving(false);
+  const { 
+    isReady: isElevenLabsReady, 
+    hasApiKey, 
+    validateApiKey, 
+    isLoading,
+    apiKeyStatus,
+    lastValidated
+  } = useElevenLabsAuth();
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  
+  // Use a callback to avoid unnecessary effect reruns
+  const validateApiKeyIfNeeded = useCallback(async () => {
+    if (!hasApiKey) return;
+    
+    // Only validate if we haven't validated in this session
+    if (hasApiKey && apiKeyStatus !== 'valid' && !isLoading) {
+      const isValid = await validateApiKey();
+      if (isValid) {
+        setShowSuccessBanner(true);
+      }
+    } else if (apiKeyStatus === 'valid') {
+      setShowSuccessBanner(true);
     }
+  }, [hasApiKey, apiKeyStatus, isLoading, validateApiKey]);
+  
+  useEffect(() => {
+    if (profile) {
+      console.log("Profile loaded, has auth token:", !!profile.twilio_auth_token);
+      console.log("Profile has ElevenLabs API key:", !!profile.elevenlabs_api_key);
+      
+      validateApiKeyIfNeeded();
+    }
+  }, [profile, validateApiKeyIfNeeded]);
+
+  const handleNavigateToDashboard = () => {
+    navigate('/dashboard');
+  };
+
+  const handleNavigateToConversation = () => {
+    // Fix: Update this to use the correct route path defined in App.tsx
+    navigate('/conversation-testing');
   };
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Profile & Settings</h1>
-          <p className="text-muted-foreground">
-            Configure your account settings and integrations
-          </p>
-        </div>
-
-        {error && (
-          <Alert variant="destructive">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6">Profile Setup</h1>
+        
+        {isElevenLabsReady && showSuccessBanner && (
+          <Alert variant="default" className="border-green-500 mb-6">
+            <Check className="h-5 w-5 text-green-500" />
+            <AlertDescription className="flex justify-between items-center">
+              <div>
+                <p className="font-medium">ElevenLabs is configured successfully!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your ElevenLabs API key has been validated and saved. You can now test voice conversations.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => window.open('https://elevenlabs.io/docs/conversational-ai', '_blank')}
+                  size="sm" 
+                  className="flex items-center"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Documentation
+                </Button>
+                <Button 
+                  onClick={handleNavigateToConversation} 
+                  className="flex items-center"
+                >
+                  Test Now <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {hasApiKey && isLoading && (
+          <Alert className="mb-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertTitle>Validating API Key</AlertTitle>
+            <AlertDescription>
+              We're verifying your ElevenLabs API key to ensure it's working properly.
+            </AlertDescription>
           </Alert>
         )}
-
-        {successMessage && (
-          <Alert className="bg-green-50 border-green-200">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
-          </Alert>
-        )}
-
-        <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="twilio">Twilio Setup</TabsTrigger>
-            <TabsTrigger value="elevenlabs">ElevenLabs Setup</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="profile">
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Information</CardTitle>
+          </CardHeader>
+          <CardContent>
             <ProfileForm 
-              profile={profile}
-              onSave={handleSave}
-              saving={saving}
+              profile={profile} 
+              updateProfile={updateProfile}
+              onNavigate={handleNavigateToDashboard}
             />
-          </TabsContent>
-          
-          <TabsContent value="twilio">
-            <Card>
-              <CardHeader>
-                <CardTitle>Twilio Configuration</CardTitle>
-                <CardDescription>
-                  Configure your Twilio credentials for making outbound calls
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TwilioConfiguration 
-                  profile={profile}
-                  onSave={handleSave}
-                  saving={saving}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="elevenlabs">
-            <Card>
-              <CardHeader>
-                <CardTitle>ElevenLabs Configuration</CardTitle>
-                <CardDescription>
-                  Configure your ElevenLabs credentials for voice AI
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ElevenLabsInfo 
-                  profile={profile}
-                  onSave={handleSave}
-                  saving={saving}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </MainLayout>
   );

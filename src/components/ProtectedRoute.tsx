@@ -1,8 +1,6 @@
 
-import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/hooks/use-auth';
-import { Spinner } from '@/components/ui/spinner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,96 +8,22 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRouteProps) => {
-  const { user, isLoading, session } = useAuth();
+  const { user, isLoading } = useAuth();
   const location = useLocation();
-  const [showLoading, setShowLoading] = useState(true);
-  const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null);
-  
-  // Set a timeout to prevent infinite loading state
-  useEffect(() => {
-    // If still loading after 5 seconds, show a more informative message
-    const timeout = setTimeout(() => {
-      if (isLoading) {
-        console.warn("Loading timeout reached in ProtectedRoute");
-        setShowLoading(false);
-      }
-    }, 5000);
-    
-    setLoadingTimeout(timeout);
-    
-    // If not loading, clear timeout
-    if (!isLoading) {
-      setShowLoading(true);
-      if (loadingTimeout) {
-        clearTimeout(loadingTimeout);
-      }
-    }
-    
-    return () => {
-      if (loadingTimeout) {
-        clearTimeout(loadingTimeout);
-      }
-    };
-  }, [isLoading, loadingTimeout]);
 
-  // Debug logging
-  useEffect(() => {
-    console.log("ProtectedRoute state:", {
-      hasUser: !!user,
-      hasSession: !!session,
-      isLoading,
-      path: location.pathname
-    });
-  }, [user, isLoading, session, location.pathname]);
-
-  if (isLoading && showLoading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center space-y-4">
-        <Spinner className="h-12 w-12 text-primary" />
-        <div className="text-lg font-medium">Loading your account...</div>
-      </div>
-    );
-  }
-  
-  // If loading has taken too long, provide a fallback and link to try again
-  if (isLoading && !showLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center space-y-4">
-        <div className="text-lg font-medium text-red-500">
-          It's taking longer than expected to load your account.
-        </div>
-        <button 
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/80 transition-colors"
-        >
-          Reload Page
-        </button>
-        <button 
-          onClick={() => {
-            // Clear any stuck auth state before redirecting
-            localStorage.removeItem('supabase.auth.token');
-            Object.keys(localStorage).forEach((key) => {
-              if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-                localStorage.removeItem(key);
-              }
-            });
-            window.location.href = '/login';
-          }}
-          className="text-primary hover:underline"
-        >
-          Return to Login
-        </button>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse-light text-exp-blue">Loading...</div>
       </div>
     );
   }
 
-  if (!user || !session) {
-    console.log("User not authenticated, redirecting to", redirectPath);
+  if (!user) {
     // Redirect to login with a return URL
     return <Navigate to={redirectPath} state={{ from: location }} replace />;
   }
 
-  console.log("User authenticated, rendering protected content");
   return <>{children}</>;
 };
 

@@ -1,163 +1,215 @@
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { useNavigate, Link } from "react-router-dom";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { XCircle } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Spinner } from "@/components/ui/spinner";
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 
 const signupSchema = z.object({
-  email: z.string().email("Please enter a valid email"),
-  password: z.string().min(6, "Password should be at least 6 characters"),
-  fullName: z.string().min(2, "Please enter your name"),
+  fullName: z.string().min(2, 'Full name is required'),
+  email: z.string().email('Please enter a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(6, 'Confirm your password'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
+
+type SignupFormValues = z.infer<typeof signupSchema>;
 
 const Signup = () => {
   const { signUp, loading, error } = useAuth();
-  const [signupComplete, setSignupComplete] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [authError, setAuthError] = useState<string | null>(error);
+  const [success, setSuccess] = useState(false);
 
-  const form = useForm<z.infer<typeof signupSchema>>({
+  const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      email: "",
-      password: "",
-      fullName: "",
+      fullName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
     },
   });
 
-  const onSubmit = async (data: z.infer<typeof signupSchema>) => {
+  const onSubmit = async (values: SignupFormValues) => {
+    setAuthError(null);
     try {
-      // Clear any previous errors
-      setErrorMessage(null);
-      
-      // Call the signUp function with email, password, and fullName
-      await signUp(data.email, data.password, data.fullName);
-      
-      // Set signup complete state to show success message
-      setSignupComplete(true);
-      
-      // Automatically redirect to the dashboard after a delay
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 2000);
-    } catch (error: any) {
-      setErrorMessage(error.message || "Signup failed. Please try again.");
+      await signUp(values.email, values.password, values.fullName);
+      setSuccess(true);
+      // Navigate to login page after a delay to allow the user to read the success message
+      setTimeout(() => navigate('/login', { replace: true }), 3000);
+    } catch (err) {
+      // Error is handled by the AuthContext
     }
   };
 
-  if (signupComplete) {
+  if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-2xl">Account Created</CardTitle>
-            <CardDescription>
-              Your account has been successfully created.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-center text-green-600 p-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="text-center">Redirecting to the dashboard...</p>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md">
+          <Card>
+            <CardHeader>
+              <CardTitle>Registration Successful</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md bg-green-50 p-4 text-sm text-green-700">
+                <p>Your account has been created successfully!</p>
+                <p className="mt-2">Please check your email to verify your account.</p>
+                <p className="mt-2">You will be redirected to the login page shortly...</p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-center">
+              <Button
+                onClick={() => navigate('/login', { replace: true })}
+                variant="outline"
+              >
+                Go to Login
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Create an Account</CardTitle>
-          <CardDescription>
-            Sign up to start using eXp Realty Voice AI
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {(error || errorMessage) && (
-            <Alert variant="destructive" className="mb-4">
-              <XCircle className="h-4 w-4" />
-              <AlertDescription>
-                {error || errorMessage}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="John Doe" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="your@email.com" type="email" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input placeholder="••••••••" type="password" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="pt-2">
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? <Spinner className="mr-2 h-4 w-4" /> : null}
-                  Create Account
-                </Button>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">eXp Voice AI</h1>
+          <p className="mt-2 text-gray-600">Create your prospecting account</p>
+        </div>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle>Create a new account</CardTitle>
+            <CardDescription>
+              Join eXp Voice AI and start prospecting smarter
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            {authError && (
+              <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+                {authError}
               </div>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <div className="text-sm text-center">
-            Already have an account?{" "}
-            <Link to="/login" className="text-primary hover:underline">
+            )}
+            
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="John Smith"
+                          autoComplete="name"
+                          disabled={loading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email address</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="your@email.com"
+                          autoComplete="email"
+                          disabled={loading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          disabled={loading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          autoComplete="new-password"
+                          disabled={loading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <Button
+                  type="submit"
+                  className="w-full exp-gradient"
+                  disabled={loading}
+                >
+                  {loading ? 'Creating Account...' : 'Create Account'}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+          
+          <CardFooter className="text-center text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-exp-blue hover:underline">
               Sign in
             </Link>
-          </div>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 };

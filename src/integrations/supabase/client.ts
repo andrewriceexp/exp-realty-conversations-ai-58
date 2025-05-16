@@ -6,10 +6,8 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://uttebgyhijrdcjiczxrg.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0dGViZ3loaWpyZGNqaWN6eHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY0NzQ2MzEsImV4cCI6MjA2MjA1MDYzMX0.8jRBYW1bNmABnLP45sIGd6M_7WQpwfv8munys4NbCAA";
 
-// Broadcast channel for cross-tab communication
-export const authChannel = typeof window !== 'undefined' 
-  ? new BroadcastChannel('auth_channel') 
-  : null;
+// Import the supabase client like this:
+// import { supabase } from "@/integrations/supabase/client";
 
 // Use enhanced security configuration
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -18,74 +16,12 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: 'implicit',
-    debug: true // Enable debug logging for auth issues
   }
 });
 
-// Enhanced runtime protection
+// Add runtime protection
 (function() {
-  if (typeof window === 'undefined') return;
-
-  // Handle cross-tab authentication events with debouncing
-  let authEventTimeout: NodeJS.Timeout | null = null;
-  const handleAuthEvent = (event: StorageEvent) => {
-    const isAuthEvent = event.key?.startsWith('supabase.auth.') || event.key?.includes('sb-');
-    
-    if (isAuthEvent) {
-      console.log('Auth state changed in another tab:', event.key);
-      
-      // Debounce to prevent multiple rapid broadcasts
-      if (authEventTimeout) {
-        clearTimeout(authEventTimeout);
-      }
-      
-      // Notify all tabs about the auth state change after a short delay
-      authEventTimeout = setTimeout(() => {
-        if (authChannel) {
-          authChannel.postMessage({
-            type: 'AUTH_STATE_CHANGE',
-            key: event.key,
-            time: Date.now()
-          });
-        }
-      }, 50);
-    }
-  };
-  
-  window.addEventListener('storage', handleAuthEvent);
-  
-  // Enhanced cleanup function that preserves active sessions
-  const cleanupStaleAuth = () => {
-    // Find auth tokens
-    const authKeys = Object.keys(localStorage).filter(
-      key => key.startsWith('supabase.auth.') || key.includes('sb-')
-    );
-    
-    // Check for potential token conflicts
-    if (authKeys.length > 3) {
-      console.warn('Multiple auth tokens detected - possible conflict:', authKeys);
-      
-      // Log details but don't remove anything automatically
-      authKeys.forEach(key => {
-        try {
-          const value = localStorage.getItem(key);
-          if (value) {
-            const parsed = JSON.parse(value);
-            // Only log key type, not actual values
-            console.log(`Auth token found: ${key}, type: ${typeof parsed}, expires: ${parsed.expires_at || 'unknown'}`);
-          }
-        } catch (e) {
-          console.log(`Non-JSON auth token: ${key}`);
-        }
-      });
-    }
-  };
-  
-  // Run cleanup check
-  cleanupStaleAuth();
-  
-  // Enhanced security monitoring
+  // Monitor for XSS attempts targeting Supabase tokens
   const observer = new MutationObserver(() => {
     const storedItems = Object.keys(localStorage).filter(
       key => key.startsWith('supabase.auth.') || key.includes('sb-')
@@ -96,6 +32,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
       const value = localStorage.getItem(key);
       if (value && document.body.innerHTML.includes(value)) {
         console.error('Security alert: Authentication token detected in DOM!');
+        // In production, you might want to log this securely
       }
     });
   });
