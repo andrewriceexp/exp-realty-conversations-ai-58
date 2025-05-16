@@ -1,25 +1,7 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-
-// Define the user profile type
-export interface UserProfile {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  phone_number: string;
-  company_name: string;
-  role: string;
-  avatar_url: string;
-  openai_api_key: string;
-  elevenlabs_api_key: string;
-  elevenlabs_phone_number_id: string; // Added this field
-  twilio_account_sid: string;
-  twilio_auth_token: string;
-  twilio_phone_number: string;
-  created_at: string;
-  updated_at: string;
-}
+import { UserProfile } from '@/types';
 
 // Define the authentication context type
 export interface AuthContextType {
@@ -27,11 +9,15 @@ export interface AuthContextType {
   user: any | null;
   profile: UserProfile | null;
   isLoading: boolean;
-  signIn: (options: any) => Promise<any>;
+  signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
-  signUp: (options: any) => Promise<any>;
+  signUp: (email: string, password: string, fullName: string) => Promise<any>;
   updateUser: (data: any) => Promise<any>;
   refreshProfile: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  loading: boolean;
+  error: string | null;
+  updateProfile: (data: any) => Promise<any>;
 }
 
 // Create the authentication context
@@ -40,11 +26,15 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   isLoading: false,
-  signIn: async () => {},
+  loading: false,
+  error: null,
+  signIn: async () => ({}),
   signOut: async () => {},
-  signUp: async () => {},
-  updateUser: async () => {},
+  signUp: async () => ({}),
+  updateUser: async () => ({}),
   refreshProfile: async () => {},
+  resetPassword: async () => {},
+  updateProfile: async () => ({}),
 });
 
 // Authentication provider component
@@ -53,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -138,53 +130,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Sign in function
-  const signIn = async (options: any) => {
-    setIsLoading(true);
+  const signIn = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth(options);
-      if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in:', error);
+      setError(error.message || 'An error occurred while signing in');
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Sign out function
   const signOut = async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setProfile(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing out:', error);
+      setError(error.message || 'An error occurred while signing out');
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Sign up function
-  const signUp = async (options: any) => {
-    setIsLoading(true);
+  const signUp = async (email: string, password: string, fullName: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.auth.signUp(options);
-      if (error) throw error;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+      
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing up:', error);
+      setError(error.message || 'An error occurred while signing up');
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+  
+  // Reset password function
+  const resetPassword = async (email: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      setError(error.message || 'An error occurred while resetting password');
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   // Update user function (profile data)
   const updateUser = async (data: any) => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -201,13 +239,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Update the local profile state
       setProfile(profileData as UserProfile);
       return profileData;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating user:', error);
+      setError(error.message || 'An error occurred while updating user');
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
+  
+  // Alias for updateUser to match function name used elsewhere
+  const updateProfile = updateUser;
 
   return (
     <AuthContext.Provider
@@ -216,11 +258,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         isLoading,
+        loading,
+        error,
         signIn,
         signOut,
         signUp,
         updateUser,
         refreshProfile,
+        resetPassword,
+        updateProfile,
       }}
     >
       {children}

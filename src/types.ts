@@ -1,4 +1,3 @@
-
 // Import the Json type from the database types
 import { Json } from './types/database.types';
 
@@ -24,6 +23,30 @@ export interface Profile {
   twilio_verified?: boolean;
   twilio_verified_at?: string;
   settings?: Record<string, any>;
+}
+
+// Update the UserProfile type from Supabase profiles table
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url?: string | null;
+  created_at: string;
+  updated_at: string;
+  elevenlabs_api_key?: string | null;
+  elevenlabs_api_key_last_validated?: string | null;
+  elevenlabs_voice_id?: string | null;
+  elevenlabs_phone_number_id?: string | null;
+  elevenlabs_phone_number_verified?: boolean | null;
+  elevenlabs_phone_number_verified_at?: string | null;
+  openai_api_key?: string | null;
+  twilio_account_sid?: string | null;
+  twilio_auth_token?: string | null;
+  twilio_phone_number?: string | null;
+  twilio_verified?: boolean;
+  twilio_verified_at?: string;
+  a2p_10dlc_registered?: boolean;
+  exp_realty_id?: string | null;
 }
 
 // Export ProspectList type that matches the database structure

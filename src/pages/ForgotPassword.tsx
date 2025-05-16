@@ -18,7 +18,7 @@ const resetSchema = z.object({
 type ResetFormValues = z.infer<typeof resetSchema>;
 
 const ForgotPassword = () => {
-  const { resetPassword } = useAuth();
+  const { resetPassword, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
@@ -74,14 +74,14 @@ const ForgotPassword = () => {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input placeholder="you@example.com" {...field} disabled={isLoading} />
+                          <Input placeholder="you@example.com" {...field} disabled={isLoading || loading} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full exp-gradient" disabled={isLoading}>
-                    {isLoading ? 'Sending Reset Link...' : 'Send Reset Link'}
+                  <Button type="submit" className="w-full exp-gradient" disabled={isLoading || loading}>
+                    {isLoading || loading ? 'Sending Reset Link...' : 'Send Reset Link'}
                   </Button>
                 </form>
               </Form>
