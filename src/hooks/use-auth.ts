@@ -1,3 +1,4 @@
 
 // Import and re-export from the proper implementation
-export { useAuth, authChannel } from './use-auth.tsx';
+export { useAuth } from './use-auth.tsx';
+export { authChannel } from '@/integrations/supabase/client';
