@@ -1,10 +1,10 @@
 
-export { default as CallAgentSelector } from './CallAgentSelector';
-export { default as CallDialog } from './CallDialog';
-export { default as CallStatusIndicator } from './CallStatusIndicator';
-export { default as ConfigurationWarnings } from './ConfigurationWarnings';
-export { default as DevelopmentModeOptions } from './DevelopmentModeOptions';
-export { default as ElevenLabsVoiceSelector } from './ElevenLabsVoiceSelector';
+export { CallAgentSelector } from './call-dialog-components';
+export { CallDialog } from './CallDialog';
+export { CallStatusIndicator } from './call-dialog-components';
+export { ConfigurationWarnings } from './call-dialog-components';
+export { DevelopmentModeOptions } from './call-dialog-components';
+export { ElevenLabsVoiceSelector } from './call-dialog-components';
 export { default as ElevenLabsDirectConnect } from './ElevenLabsDirectConnect';
 export { default as ElevenLabsAgentSelector } from './ElevenLabsAgentSelector';
 export * from './types';

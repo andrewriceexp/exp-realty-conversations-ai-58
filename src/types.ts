@@ -1,6 +1,6 @@
 
 // Import the Json type from the database types
-import { Json } from './integrations/supabase/types';
+import { Json } from './types/database.types';
 
 // Profile type from Supabase profiles table
 export interface Profile {
@@ -13,6 +13,9 @@ export interface Profile {
   elevenlabs_api_key?: string;
   elevenlabs_api_key_last_validated?: string;
   elevenlabs_voice_id?: string;
+  elevenlabs_phone_number_id?: string;
+  elevenlabs_phone_number_verified?: boolean;
+  elevenlabs_phone_number_verified_at?: string | null;
   openai_api_key?: string;
   openai_api_key_last_validated?: string;
   twilio_account_sid?: string;

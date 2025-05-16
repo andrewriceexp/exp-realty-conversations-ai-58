@@ -34,7 +34,10 @@ const ElevenLabsDirectConnect = ({
   const isApiKeyValid = apiKeyStatus === 'valid';
   const navigate = useNavigate();
   
-  const [phoneNumberId, setPhoneNumberId] = useState(elevenLabsPhoneNumberId || profile?.elevenlabs_phone_number_id || '');
+  // Initialize with prop or profile value or empty string
+  const [phoneNumberId, setPhoneNumberId] = useState(
+    elevenLabsPhoneNumberId || profile?.elevenlabs_phone_number_id || ''
+  );
   
   // If API key becomes invalid, disable ElevenLabs direct connect
   useEffect(() => {
