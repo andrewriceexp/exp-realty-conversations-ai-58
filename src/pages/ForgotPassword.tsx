@@ -28,6 +28,7 @@ const ForgotPassword = () => {
 
   // Set up cleanup on component unmount
   useEffect(() => {
+    console.log("[ForgotPassword] Component mounted");
     return () => {
       mounted.current = false;
       console.log("[ForgotPassword] Component unmounting");

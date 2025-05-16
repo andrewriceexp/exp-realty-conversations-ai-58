@@ -32,7 +32,7 @@ export const supabase = supabaseClient;
           }
         }
       });
-    }, 30000); // Check every 30 seconds
+    }, 60000); // Check every minute
     
     // Cleanup function for single page apps
     window.addEventListener('beforeunload', () => {

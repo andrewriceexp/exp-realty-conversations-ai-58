@@ -22,7 +22,8 @@ export const supabase = (() => {
         autoRefreshToken: true,
         detectSessionInUrl: false,
         flowType: 'pkce',
-        debug: true, // Add debug mode for troubleshooting
+        // Increased debug logging to track auth issues
+        debug: import.meta.env.DEV,
       }
     });
     

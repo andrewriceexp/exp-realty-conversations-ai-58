@@ -35,9 +35,19 @@ const Login = () => {
   const [error, setError] = useState<string | null>(authError);
   const navigationAttempted = useRef(false);
   const mounted = useRef(true);
+  const loginAttemptTime = useRef<number | null>(null);
 
-  // Set up cleanup on component unmount
+  // Enhanced logging for debugging
   useEffect(() => {
+    console.log("[Login] Component mounted");
+    console.log("[Login] Initial state:", {
+      hasUser: !!user,
+      hasSession: !!session,
+      location: location.pathname,
+      from: location.state?.from?.pathname
+    });
+    
+    // Set up cleanup on component unmount
     return () => {
       mounted.current = false;
       console.log("[Login] Component unmounting, cleanup complete");
@@ -67,7 +77,7 @@ const Login = () => {
             console.log("[Login] Executing redirect to dashboard");
             navigate('/dashboard', { replace: true });
           }
-        }, 100);
+        }, 250); // Increased timeout to ensure state synchronization
       }
     };
     
@@ -95,6 +105,7 @@ const Login = () => {
     setSubmitting(true);
     console.log("[Login] Attempting login...");
     navigationAttempted.current = false;
+    loginAttemptTime.current = Date.now();
     
     try {
       const result = await signIn(values.email, values.password);
@@ -119,6 +130,10 @@ const Login = () => {
       } else {
         console.log("[Login] Successfully logged in!");
         
+        // Track redirect lag time for debugging
+        const lagTime = Date.now() - (loginAttemptTime.current || Date.now());
+        console.log(`[Login] Redirect lag time: ${lagTime}ms`);
+        
         // Show success toast
         toast({
           title: "Login successful",
@@ -128,14 +143,15 @@ const Login = () => {
         console.log("[Login] Redirecting to:", from);
         navigationAttempted.current = true;
         
-        // Use a timeout to ensure auth state is fully processed
+        // Use a longer timeout to ensure auth state is fully processed
         setTimeout(() => {
           if (mounted.current) {
+            console.log("[Login] Executing navigation after timeout");
             // Use replace to prevent back button from going back to login
             navigate(from, { replace: true });
             setSubmitting(false);
           }
-        }, 100);
+        }, 500); // Increased timeout for reliable redirection
       }
     } catch (err: any) {
       if (!mounted.current) return;

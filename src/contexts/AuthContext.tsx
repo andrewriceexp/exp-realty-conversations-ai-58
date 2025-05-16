@@ -73,10 +73,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authStateChangeCount, setAuthStateChangeCount] = useState(0);
+  const [lastSuccessfulAuth, setLastSuccessfulAuth] = useState<number | null>(null);
 
   // Debug function for logging auth state changes
   const logAuthState = (event: string, details?: any) => {
     console.log(`[Auth Debug] ${event}`, details ? details : '');
+  };
+
+  // Enhanced Session Validation
+  const isSessionValid = (checkSession: Session | null): boolean => {
+    if (!checkSession) return false;
+    
+    try {
+      const expiresAt = new Date(checkSession.expires_at * 1000);
+      const now = new Date();
+      const isValid = expiresAt > now && !!checkSession.access_token && !!checkSession.user;
+      
+      if (!isValid) {
+        logAuthState('Session invalid', { 
+          expiresAt: expiresAt.toISOString(), 
+          now: now.toISOString(),
+          hasAccessToken: !!checkSession.access_token,
+          hasUser: !!checkSession.user
+        });
+      }
+      
+      return isValid;
+    } catch (err) {
+      logAuthState('Error validating session', err);
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -90,15 +116,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // First, set up the auth state change listener
         const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
           setAuthStateChangeCount(prev => prev + 1);
-          logAuthState('Auth state changed:', { event, sessionExists: !!newSession, changeCount: authStateChangeCount + 1 });
+          logAuthState('Auth state changed:', { 
+            event, 
+            sessionExists: !!newSession, 
+            isSessionValid: newSession ? isSessionValid(newSession) : false,
+            changeCount: authStateChangeCount + 1 
+          });
           
           // Update session and user state immediately
-          setSession(newSession);
-          setUser(newSession?.user || null);
+          if (newSession && isSessionValid(newSession)) {
+            setSession(newSession);
+            setUser(newSession.user);
+            setLastSuccessfulAuth(Date.now());
+          } else if (event === 'SIGNED_OUT') {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+          }
           
           switch(event) {
             case 'SIGNED_IN':
-              if (newSession?.user) {
+              if (newSession?.user && isSessionValid(newSession)) {
                 logAuthState('User signed in, updating state', { userId: newSession.user.id });
                 // Defer profile fetching to prevent deadlocks
                 setTimeout(async () => {
@@ -108,7 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   } catch (err) {
                     logAuthState('Error fetching profile after sign in', err);
                   }
-                }, 0);
+                }, 100);
+              } else {
+                logAuthState('SIGNED_IN event but session is invalid');
               }
               break;
               
@@ -119,10 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               
             case 'TOKEN_REFRESHED':
               logAuthState('Token refreshed');
+              if (newSession && isSessionValid(newSession)) {
+                setSession(newSession);
+                setUser(newSession.user);
+              }
               break;
               
             case 'USER_UPDATED':
               logAuthState('User updated');
+              if (newSession?.user) {
+                setUser(newSession.user);
+              }
               break;
               
             case 'PASSWORD_RECOVERY':
@@ -141,11 +188,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw sessionError;
         }
         
-        logAuthState('Initial session check complete', { hasSession: !!initialSession });
-        setSession(initialSession);
-        setUser(initialSession?.user || null);
+        logAuthState('Initial session check complete', { 
+          hasSession: !!initialSession,
+          isSessionValid: initialSession ? isSessionValid(initialSession) : false
+        });
         
-        if (initialSession?.user) {
+        if (initialSession && isSessionValid(initialSession)) {
+          setSession(initialSession);
+          setUser(initialSession.user);
+          setLastSuccessfulAuth(Date.now());
+          
           // Fetch initial profile data
           logAuthState('Fetching initial profile');
           await fetchProfileData(initialSession.user.id);
@@ -162,12 +214,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     setupAuth();
     
+    // Set up a recurring check for session status
+    const sessionCheckInterval = setInterval(() => {
+      supabase.auth.getSession().then(({ data: { session: currentSession }, error }) => {
+        if (error) {
+          logAuthState('Error checking session', error);
+          return;
+        }
+        
+        if (currentSession && isSessionValid(currentSession)) {
+          if (!user || !session) {
+            logAuthState('Session check found valid session but no user state, updating');
+            setSession(currentSession);
+            setUser(currentSession.user);
+          }
+        } else if (user && session) {
+          logAuthState('Session check found invalid session but user state exists');
+          const timeSinceLastAuth = lastSuccessfulAuth ? Date.now() - lastSuccessfulAuth : null;
+          
+          // Only auto-sign-out if it's been more than a minute since last successful auth
+          // This prevents rapid oscillation between signed-in and signed-out states
+          if (!timeSinceLastAuth || timeSinceLastAuth > 60000) {
+            logAuthState('Auto signing out due to invalid session');
+            // We don't use signOut here to prevent loops
+            setUser(null);
+            setSession(null);
+            setProfile(null);
+          }
+        }
+      });
+    }, 30000); // Check every 30 seconds
+    
     // Cleanup function
     return () => {
       if (subscription) {
         logAuthState('Unsubscribing from auth events');
         subscription.unsubscribe();
       }
+      clearInterval(sessionCheckInterval);
     };
   }, []);
   
@@ -252,13 +336,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       logAuthState('Sign in successful', { userId: data?.user?.id });
       
+      // Record the successful authentication time
+      setLastSuccessfulAuth(Date.now());
+      
       // Force refresh auth state and profile data
-      if (data.user) {
+      if (data.user && data.session) {
         setUser(data.user);
         setSession(data.session);
         
         // Fetch user profile
-        await fetchProfileData(data.user.id);
+        setTimeout(async () => {
+          await fetchProfileData(data.user.id);
+        }, 100);
       }
       
       return data;

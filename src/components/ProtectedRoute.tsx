@@ -25,9 +25,35 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
       isLoading,
       path: location.pathname,
       retryCount,
-      readyToRender
+      readyToRender,
+      sessionExpiration: session ? new Date(session.expires_at * 1000).toISOString() : 'no session'
     });
   }, [user, session, isLoading, location.pathname, retryCount, readyToRender]);
+
+  // Initial load and session validation
+  useEffect(() => {
+    if (!isLoading) {
+      console.log("[ProtectedRoute] Initial auth check complete, session:", !!session, "user:", !!user);
+      
+      // If we already have user/session at this point, we're ready to render
+      if (user && session && isSessionValid(session)) {
+        console.log("[ProtectedRoute] User and valid session already available, ready to render protected content");
+        setReadyToRender(true);
+        setIsInitialLoad(false);
+        return;
+      }
+      
+      // Set loading to false after a short delay if it's the initial load
+      if (isInitialLoad) {
+        const timer = setTimeout(() => {
+          console.log("[ProtectedRoute] Initial load timer completed");
+          setIsInitialLoad(false);
+        }, 500);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoading, user, session, isInitialLoad]);
 
   // Try to recover the session if needed with exponential backoff
   useEffect(() => {
@@ -67,42 +93,21 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
       setReadyToRender(true);
     }
   }, [isLoading, user, session, isInitialLoad, retryCount, toast]);
-  
-  // Add a small initial loading delay to prevent flashing content
-  useEffect(() => {
-    console.log("[ProtectedRoute] Setting up initial load timer");
-    
-    const timer = setTimeout(() => {
-      console.log("[ProtectedRoute] Initial load timer completed");
-      setIsInitialLoad(false);
-      
-      // If we already have user/session at this point, we're ready to render
-      if (user && session) {
-        console.log("[ProtectedRoute] User and session already available, ready to render");
-        setReadyToRender(true);
-      }
-    }, 300); // Slightly longer delay to ensure auth state is stabilized
-    
-    return () => clearTimeout(timer);
-  }, [user, session]);
 
-  // Check session validity
-  const isSessionValid = !!session && !!user && !!session.access_token && 
-                         new Date(session.expires_at * 1000) > new Date();
-
-  // Log session validity
-  useEffect(() => {
-    if (session) {
-      const expiresAt = new Date(session.expires_at * 1000);
-      const now = new Date();
-      console.log("[ProtectedRoute] Session validity:", { 
-        isValid: isSessionValid,
-        expiresAt: expiresAt.toISOString(),
-        now: now.toISOString(),
-        timeRemaining: (expiresAt.getTime() - now.getTime()) / 1000 / 60 + " minutes"
+  // Check session validity helper function
+  const isSessionValid = (session: any) => {
+    if (!session || !session.expires_at) return false;
+    const expiresAt = new Date(session.expires_at * 1000);
+    const now = new Date();
+    const isValid = expiresAt > now;
+    if (!isValid) {
+      console.warn("[ProtectedRoute] Session expired:", { 
+        expiresAt: expiresAt.toISOString(), 
+        now: now.toISOString() 
       });
     }
-  }, [session, isSessionValid]);
+    return isValid;
+  };
 
   if (isInitialLoad || isLoading || !readyToRender) {
     console.log("[ProtectedRoute] Still in loading state");
@@ -115,16 +120,18 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
     );
   }
 
-  if (!user || !session || !isSessionValid) {
+  // Exit early with very clear logging if not authenticated
+  if (!user || !session || !isSessionValid(session)) {
     console.log("[ProtectedRoute] Not authenticated or invalid session, redirecting to login", {
       hasUser: !!user,
       hasSession: !!session,
-      isSessionValid,
-      retryCount
+      isSessionValid: session ? isSessionValid(session) : false,
+      retryCount,
+      from: location.pathname
     });
     
     // Redirect to login with a return URL
-    return <Navigate to={redirectPath} state={{ from: location }} replace />;
+    return <Navigate to={redirectPath} state={{ from: location.pathname }} replace />;
   }
 
   console.log("[ProtectedRoute] Authentication confirmed, rendering protected content");
