@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
-import { Info } from 'lucide-react';
+import { Info, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
@@ -28,6 +28,7 @@ export default function ElevenLabsDirectConnect({
   setElevenLabsPhoneNumberId
 }: ElevenLabsDirectConnectProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const { profile, user } = useAuth();
   const { toast } = useToast();
   
@@ -62,6 +63,7 @@ export default function ElevenLabsDirectConnect({
     }
     
     setIsLoading(true);
+    setIsSaved(false);
     
     try {
       if (!user) {
@@ -82,6 +84,13 @@ export default function ElevenLabsDirectConnect({
         title: "Settings Saved",
         description: "Your ElevenLabs phone number has been saved.",
       });
+      setIsSaved(true);
+      
+      // Auto-hide success indicator after 3 seconds
+      setTimeout(() => {
+        setIsSaved(false);
+      }, 3000);
+      
     } catch (error) {
       console.error("Error saving phone number ID:", error);
       toast({
@@ -173,10 +182,15 @@ export default function ElevenLabsDirectConnect({
                     onClick={handleSavePhoneNumberId}
                     disabled={isLoading}
                     variant="accent"
-                    size="xs"
+                    size="sm"
                     type="button"
+                    className="flex gap-1 items-center whitespace-nowrap"
                   >
-                    {isLoading ? "Saving..." : "Save"}
+                    {isLoading ? "Saving..." : isSaved ? (
+                      <>
+                        <Check className="h-4 w-4" /> Saved
+                      </>
+                    ) : "Save"}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">

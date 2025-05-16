@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, AlertCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   CallAgentSelector, 
@@ -26,6 +26,7 @@ import { ToastAction } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
 import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface CallDialogProps {
   prospectId: string;
@@ -58,6 +59,7 @@ export function CallDialog({
   const [elevenLabsPhoneNumberId, setElevenLabsPhoneNumberId] = useState('');
   const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
   const [isVerifyingCall, setIsVerifyingCall] = useState(false);
+  const [hasPhoneNumberError, setHasPhoneNumberError] = useState(false);
   
   const twilioCall = useTwilioCall();
   const { toast } = useToast();
@@ -67,8 +69,19 @@ export function CallDialog({
   useEffect(() => {
     if (profile?.elevenlabs_phone_number_id) {
       setElevenLabsPhoneNumberId(profile.elevenlabs_phone_number_id);
+      setHasPhoneNumberError(false);
     }
   }, [profile]);
+
+  // Validate the phone number format
+  useEffect(() => {
+    if (useElevenLabsAgent && elevenLabsPhoneNumberId) {
+      const phoneRegex = /^\+[1-9]\d{1,14}$/;
+      setHasPhoneNumberError(!phoneRegex.test(elevenLabsPhoneNumberId.trim()));
+    } else {
+      setHasPhoneNumberError(false);
+    }
+  }, [useElevenLabsAgent, elevenLabsPhoneNumberId]);
 
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
@@ -134,14 +147,14 @@ export function CallDialog({
 
         // Validate phone number format
         const phoneRegex = /^\+[1-9]\d{1,14}$/;
-        if (!phoneRegex.test(elevenLabsPhoneNumberId)) {
+        if (!phoneRegex.test(elevenLabsPhoneNumberId.trim())) {
           throw new Error("Phone number must be in E.164 format (e.g., +12125551234)");
         }
 
         // Add ElevenLabs specific parameters
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
-        callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId;
+        callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId.trim();
         
         console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
         console.log("Using ElevenLabs phone number:", elevenLabsPhoneNumberId);
@@ -184,7 +197,15 @@ export function CallDialog({
         setCallInProgress(false);
         
         // Provide specific guidance based on error codes
-        if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING") {
+        if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_NOT_FOUND") {
+          toast({
+            title: "Phone Number Not Found",
+            description: "The phone number you provided is not recognized by ElevenLabs. Please verify that the number is correctly registered with ElevenLabs.",
+            variant: "destructive",
+            duration: 8000,
+          });
+        }
+        else if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING") {
           toast({
             title: "Phone Number Missing",
             description: "You need to configure your ElevenLabs phone number in your profile settings.",
@@ -223,7 +244,7 @@ export function CallDialog({
   // Determine if Start Call button should be disabled
   const isStartCallDisabled = 
     (!selectedConfigId && !useElevenLabsAgent) || 
-    (useElevenLabsAgent && (!elevenLabsAgentId || !elevenLabsPhoneNumberId));
+    (useElevenLabsAgent && (!elevenLabsAgentId || !elevenLabsPhoneNumberId || hasPhoneNumberError));
   
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -263,6 +284,15 @@ export function CallDialog({
             elevenLabsPhoneNumberId={elevenLabsPhoneNumberId}
             setElevenLabsPhoneNumberId={setElevenLabsPhoneNumberId}
           />
+          
+          {hasPhoneNumberError && useElevenLabsAgent && (
+            <Alert variant="destructive" className="py-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                Phone number must be in E.164 format (e.g., +12125551234)
+              </AlertDescription>
+            </Alert>
+          )}
           
           {/* Only show Voice section if not using ElevenLabs direct */}
           {!useElevenLabsAgent && (

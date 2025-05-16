@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -14,7 +15,7 @@ export interface MakeCallParams {
   voiceId?: string;
   useElevenLabsAgent?: boolean;
   elevenLabsAgentId?: string;
-  elevenLabsPhoneNumberId?: string;  // Added parameter for phone number ID
+  elevenLabsPhoneNumberId?: string;
   echoMode?: boolean;
 }
 
@@ -136,8 +137,9 @@ export function useTwilioCall() {
         throw new Error("Prospect ID is required");
       }
       
-      if (!params.agentConfigId) {
-        throw new Error("Agent configuration ID is required");
+      // If using ElevenLabs, we don't necessarily need an agent config
+      if (!params.useElevenLabsAgent && !params.agentConfigId) {
+        throw new Error("Agent configuration ID is required for regular Twilio calls");
       }
 
       // Determine whether to use ElevenLabs agent or regular Twilio call
@@ -398,17 +400,36 @@ export function useTwilioCall() {
       configOverride.agent.input_format = "mulaw_8000";
       configOverride.agent.output_format = "mulaw_8000";
       
-      // Get the ElevenLabs phone number ID from params
-      const elevenLabsIdForPhoneNumber = params.elevenLabsPhoneNumberId;
+      // Validate the phone number format (must be E.164)
+      const phoneNumberToUse = params.elevenLabsPhoneNumberId;
       
-      console.log("[TwilioCall] Using ElevenLabs Phone Number ID:", elevenLabsIdForPhoneNumber);
+      if (!phoneNumberToUse) {
+        console.error("[TwilioCall] No ElevenLabs Phone Number ID provided");
+        return {
+          success: false, 
+          message: "ElevenLabs Phone Number ID is required",
+          code: "ELEVENLABS_PHONE_NUMBER_MISSING"
+        };
+      }
+      
+      const phoneRegex = /^\+[1-9]\d{1,14}$/;
+      if (!phoneRegex.test(phoneNumberToUse)) {
+        console.error("[TwilioCall] Invalid phone number format:", phoneNumberToUse);
+        return {
+          success: false,
+          message: "Phone number must be in E.164 format (e.g., +12125551234)",
+          code: "ELEVENLABS_PHONE_NUMBER_INVALID"
+        };
+      }
+      
+      console.log("[TwilioCall] Using ElevenLabs Phone Number:", phoneNumberToUse);
       
       // Call the elevenlabs-outbound-call edge function
       const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
         body: {
           agent_id: params.elevenLabsAgentId,
           to_number: prospectData.phone_number,
-          agent_phone_number_id: elevenLabsIdForPhoneNumber, // CORRECTED: Send as agent_phone_number_id
+          agent_phone_number_id: phoneNumberToUse,
           user_id: userId,
           prospect_id: params.prospectId,
           agent_config_id: params.agentConfigId,
@@ -448,11 +469,11 @@ export function useTwilioCall() {
           callLogId: data.callLogId
         };
       } else {
-        console.error("[TwilioCall] ElevenLabs call failed:", data?.message);
+        console.error("[TwilioCall] ElevenLabs call failed:", data?.message, data?.code);
         return {
           success: false,
           message: data?.message || "Failed to initiate ElevenLabs call",
-          code: data?.code
+          code: data?.code || "ELEVENLABS_CALL_FAILED"
         };
       }
     } catch (err) {
