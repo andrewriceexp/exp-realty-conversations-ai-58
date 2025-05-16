@@ -398,20 +398,20 @@ export function useTwilioCall() {
       configOverride.agent.input_format = "mulaw_8000";
       configOverride.agent.output_format = "mulaw_8000";
       
-      // Call the elevenlabs-outbound-call edge function with the agent_phone_number_id parameter
-      // Use a default phone number ID if not specified elsewhere
-      const agent_phone_number_id = "c6b3ee3e-4d1a-4bbd-bda0-507aa16dd108"; // Default phone number ID
+      // Get the ElevenLabs phone number from params or profile
+      const phoneNumber = params.elevenLabsPhoneNumberId;
       
-      console.log("[TwilioCall] Using agent_phone_number_id:", agent_phone_number_id);
+      console.log("[TwilioCall] Using phone number:", phoneNumber);
       
+      // Call the elevenlabs-outbound-call edge function with the phone number directly
       const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
         body: {
           agent_id: params.elevenLabsAgentId,
           to_number: prospectData.phone_number,
-          agent_phone_number_id: agent_phone_number_id, // Include the phone number ID
-          user_id: userId, // Use the resolved userId
-          prospect_id: params.prospectId, // Add for call_logs
-          agent_config_id: params.agentConfigId, // Add for call_logs
+          agent_phone_number: phoneNumber, // Changed: use the phone number directly
+          user_id: userId,
+          prospect_id: params.prospectId,
+          agent_config_id: params.agentConfigId,
           dynamic_variables: {
             prospect_name: prospectData.first_name || 'Prospect',
             prospect_id: params.prospectId

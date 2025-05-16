@@ -41,7 +41,18 @@ export default function ElevenLabsDirectConnect({
     if (!elevenLabsPhoneNumberId.trim()) {
       toast({
         title: "Validation Error",
-        description: "Phone number ID cannot be empty",
+        description: "Phone number cannot be empty",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Basic validation for E.164 format (starts with + and contains only digits)
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(elevenLabsPhoneNumberId)) {
+      toast({
+        title: "Validation Error",
+        description: "Phone number must be in E.164 format (e.g., +12125551234)",
         variant: "destructive"
       });
       return;
@@ -62,13 +73,13 @@ export default function ElevenLabsDirectConnect({
       
       toast({
         title: "Settings Saved",
-        description: "Your ElevenLabs phone number ID has been saved.",
+        description: "Your ElevenLabs phone number has been saved.",
       });
     } catch (error) {
       console.error("Error saving phone number ID:", error);
       toast({
         title: "Settings Error",
-        description: "Failed to save your phone number ID. Please try again.",
+        description: "Failed to save your phone number. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -99,7 +110,7 @@ export default function ElevenLabsDirectConnect({
                   <p className="max-w-xs">
                     Use ElevenLabs native calling platform instead of your Twilio integration.
                     Requires an agent set up in ElevenLabs and a phone number connected to your account.
-                    The phone number must be the actual phone number in E.164 format (e.g., +12125551234), not a UUID.
+                    The phone number must be in E.164 format (e.g., +12125551234).
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -120,7 +131,7 @@ export default function ElevenLabsDirectConnect({
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  This should look like "phnum_01jvbq7pw0f36bx7gyzgt7m1j9"
+                  Should look like "phnum_01jvbq7pw0f36bx7gyzgt7m1j9"
                 </p>
               </div>
               

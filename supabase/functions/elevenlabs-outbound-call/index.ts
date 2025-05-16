@@ -11,7 +11,7 @@ interface OutboundCallRequest {
   user_id: string;
   prospect_id?: string;
   agent_config_id?: string;
-  agent_phone_number_id?: string;
+  agent_phone_number?: string; // Changed from agent_phone_number_id to agent_phone_number
   dynamic_variables?: Record<string, any>;
   conversation_config_override?: {
     agent?: {
@@ -41,7 +41,7 @@ serve(async (req) => {
       user_id, 
       prospect_id, 
       agent_config_id,
-      agent_phone_number_id, 
+      agent_phone_number, // Changed from agent_phone_number_id
       dynamic_variables, 
       conversation_config_override 
     } = requestBody as OutboundCallRequest;
@@ -53,7 +53,7 @@ serve(async (req) => {
       user_id,
       prospect_id,
       agent_config_id,
-      agent_phone_number_id: agent_phone_number_id || "not provided",
+      agent_phone_number: agent_phone_number || "not provided", // Changed from agent_phone_number_id
       has_dynamic_variables: !!dynamic_variables,
       has_config_override: !!conversation_config_override
     });
@@ -127,15 +127,16 @@ serve(async (req) => {
       });
     }
     
-    // Check for phone number ID - prioritize request parameter, then profile value
-    const phoneNumberId = agent_phone_number_id || profile.elevenlabs_phone_number_id;
+    // Check for phone number - prioritize request parameter, then profile value
+    // Note: This should be an actual E.164 phone number (e.g., +12125551234)
+    const phoneNumber = agent_phone_number || profile.elevenlabs_phone_number_id;
     
-    // If no phone number ID is available, return a helpful error
-    if (!phoneNumberId) {
-      console.error("No ElevenLabs phone number ID provided in request or stored in profile");
+    // If no phone number is available, return a helpful error
+    if (!phoneNumber) {
+      console.error("No ElevenLabs phone number provided in request or stored in profile");
       return new Response(JSON.stringify({
         success: false,
-        message: "ElevenLabs phone number ID is required. Please add your phone number ID in your profile settings.",
+        message: "ElevenLabs phone number is required. Please add your phone number in your profile settings.",
         code: "ELEVENLABS_PHONE_NUMBER_MISSING"
       }), {
         status: 400,
@@ -143,13 +144,27 @@ serve(async (req) => {
       });
     }
     
-    console.log(`Using phone number ID: ${phoneNumberId}`);
+    // Validate phone number format (basic E.164 validation)
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+      console.error("Invalid phone number format:", phoneNumber);
+      return new Response(JSON.stringify({
+        success: false,
+        message: "Phone number must be in E.164 format (e.g., +12125551234)",
+        code: "INVALID_PHONE_NUMBER_FORMAT"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     
-    // Prepare the payload for ElevenLabs API - Use the phone number ID directly, not as UUID
+    console.log(`Using phone number: ${phoneNumber.substring(0, 3)}xxxxxxxxx`);
+    
+    // Prepare the payload for ElevenLabs API - Use the actual phone number 
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: phoneNumberId, // Use the phone number itself, not a UUID
+      agent_phone_number: phoneNumber, // Use the actual phone number
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -167,7 +182,7 @@ serve(async (req) => {
     // Log configuration (without sensitive data)
     console.log("Call configuration:", {
       agent_id,
-      agent_phone_number_id: phoneNumberId,
+      agent_phone_number: phoneNumber.substring(0, 3) + "xxxxxxxxx", // Mask number in logs
       dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
       voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
       audio_format: "mulaw_8000 (optimized for telephony)"
@@ -189,6 +204,9 @@ serve(async (req) => {
           },
           body: JSON.stringify(payload)
         });
+        
+        // Log response status
+        console.log(`ElevenLabs API response status: ${response.status}`);
         
         // If successful, break out of retry loop
         if (response.ok) break;
@@ -215,7 +233,7 @@ serve(async (req) => {
         
         // Handle specific error types with clear messages
         if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
-          throw new Error(`The phone number ID "${phoneNumberId}" was not found in your ElevenLabs account. Please verify your phone number ID is correct.`);
+          throw new Error(`The phone number "${phoneNumber.substring(0, 3)}xxxxxxxxx" was not found in your ElevenLabs account. Please verify your phone number is correct and registered in ElevenLabs.`);
         }
         
         // For other errors, throw and capture below
@@ -243,6 +261,11 @@ serve(async (req) => {
     }
     
     const data = await response.json();
+    console.log("Successful response from ElevenLabs:", {
+      success: data.success,
+      callSid: data.callSid ? `${data.callSid.substring(0, 8)}...` : "None",
+      conversationId: data.conversationId ? `${data.conversationId.substring(0, 8)}...` : "None"
+    });
     
     // Create comprehensive call log with more details
     const { data: callLog, error: callLogError } = await supabase
@@ -256,7 +279,7 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         metadata: {
           agent_id,
-          agent_phone_number_id: phoneNumberId,
+          agent_phone_number: phoneNumber.substring(0, 3) + "xxxxxxxxx", // Mask number in logs
           dynamic_variables,
           conversation_config_override,
           audio_format: {
@@ -271,6 +294,8 @@ serve(async (req) => {
       
     if (callLogError) {
       console.error("Error creating call log:", callLogError);
+    } else {
+      console.log("Call log created with ID:", callLog?.[0]?.id);
     }
 
     return new Response(
@@ -298,8 +323,8 @@ serve(async (req) => {
     // Classify specific error types
     if (error.message?.includes("ElevenLabs API key")) {
       errorCode = "ELEVENLABS_API_KEY_MISSING";
-    } else if (error.message?.includes("phone number ID") && error.message?.includes("not found")) {
-      errorCode = "ELEVENLABS_PHONE_NUMBER_INVALID";
+    } else if (error.message?.includes("phone number") && error.message?.includes("not found")) {
+      errorCode = "ELEVENLABS_PHONE_NUMBER_NOT_FOUND";
     } else if (error.message?.includes("timed out")) {
       errorCode = "REQUEST_TIMEOUT";
     } else if (error.message?.includes("rate limit")) {
