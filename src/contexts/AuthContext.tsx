@@ -1,23 +1,39 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, authChannel } from '@/integrations/supabase/client';
 
-// Clean up auth tokens to prevent authentication limbo states
-export const cleanupAuthState = () => {
-  // Remove standard auth tokens
-  localStorage.removeItem('supabase.auth.token');
-  // Remove all Supabase auth keys from localStorage
-  Object.keys(localStorage).forEach((key) => {
-    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-      localStorage.removeItem(key);
+// Improved clean up auth tokens function to prevent authentication limbo states
+export const cleanupAuthState = (forceFullCleanup = false) => {
+  // Only perform aggressive cleanup when forced (on logout or explicit cleanup)
+  if (forceFullCleanup) {
+    // Log the cleanup for debugging
+    console.log('Performing full auth state cleanup');
+    
+    // Remove all Supabase auth keys from localStorage - directly
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    // Clean sessionStorage as well if used
+    if (typeof sessionStorage !== 'undefined') {
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+          sessionStorage.removeItem(key);
+        }
+      });
     }
-  });
-  // Remove from sessionStorage if in use
-  Object.keys(sessionStorage || {}).forEach((key) => {
-    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-      sessionStorage.removeItem(key);
+  } else {
+    // For non-forced cleanups, just do a sanity check without removing valid tokens
+    const authKeyCount = Object.keys(localStorage).filter(key => 
+      key.startsWith('supabase.auth.') || key.includes('sb-')
+    ).length;
+    
+    if (authKeyCount > 3) {
+      console.warn(`Found ${authKeyCount} auth keys - possible token conflict`);
     }
-  });
+  }
 };
 
 // Define the user profile type based on the actual database schema
@@ -82,6 +98,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false); // For login/signup operations
   const [error, setError] = useState<string | null>(null);
   const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
+
+  // Handle cross-tab authentication events
+  useEffect(() => {
+    if (!authChannel) return;
+    
+    const handleAuthEvent = (event: MessageEvent) => {
+      if (event.data?.type === 'AUTH_STATE_CHANGE') {
+        console.log('Received auth state change from another tab, refreshing session');
+        // Refresh the session from storage
+        supabase.auth.getSession().then(({ data }) => {
+          const currentSession = data.session;
+          setSession(currentSession);
+          setUser(currentSession?.user || null);
+          
+          if (currentSession?.user) {
+            // Fetch profile for the user
+            fetchProfile(currentSession.user.id).then(profileData => {
+              setProfile(profileData);
+            });
+          } else {
+            setProfile(null);
+          }
+        });
+      }
+    };
+    
+    authChannel.addEventListener('message', handleAuthEvent);
+    
+    return () => {
+      authChannel.removeEventListener('message', handleAuthEvent);
+    };
+  }, []);
 
   // Cleanup function for setting a loading timeout
   const setupLoadingTimeout = () => {
@@ -99,31 +149,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoadingTimeout(timeout);
   };
 
-  // Function to fetch profile safely
-  const fetchProfile = async (userId: string) => {
-    try {
-      console.log("Fetching user profile for ID:", userId);
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+  // Function to fetch profile safely with retry capability
+  const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+    let retries = 0;
+    const maxRetries = 2; // Try up to 3 times (initial + 2 retries)
+    
+    while (retries <= maxRetries) {
+      try {
+        console.log(`Fetching user profile for ID: ${userId} (attempt ${retries + 1})`);
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-      if (profileError) {
-        console.error('Error fetching user profile:', profileError);
-        return null;
-      } else {
-        console.log("Profile data retrieved:", profileData ? "Found" : "Not found");
-        return profileData as UserProfile;
+        if (profileError) {
+          console.error(`Error fetching user profile (attempt ${retries + 1}):`, profileError);
+          retries++;
+          
+          if (retries <= maxRetries) {
+            // Exponential backoff
+            const delay = 200 * Math.pow(2, retries);
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            return null;
+          }
+        } else {
+          console.log("Profile data retrieved:", profileData ? "Found" : "Not found");
+          return profileData as UserProfile;
+        }
+      } catch (error) {
+        console.error(`Error in fetchProfile (attempt ${retries + 1}):`, error);
+        retries++;
+        
+        if (retries <= maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 200 * Math.pow(2, retries)));
+        } else {
+          return null;
+        }
       }
-    } catch (error) {
-      console.error('Error in fetchProfile:', error);
-      return null;
     }
+    
+    return null;
   };
 
   useEffect(() => {
-    const fetchSession = async () => {
+    // Function to get and set session and profile
+    const initializeSession = async () => {
       setIsLoading(true);
       setupLoadingTimeout();
 
@@ -132,13 +205,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: userSession } = await supabase.auth.getSession();
         console.log("Session fetched:", userSession.session ? "Valid session" : "No session");
 
+        // Only update session if component is still mounted
         setSession(userSession.session);
         setUser(userSession.session?.user || null);
 
+        // If we have a session, fetch the profile
         if (userSession.session?.user) {
-          // Fetch user profile data
           const profileData = await fetchProfile(userSession.session.user.id);
-          setProfile(profileData);
+          if (profileData) {
+            setProfile(profileData);
+          } else {
+            console.warn("Could not fetch profile data for authenticated user");
+          }
         } else {
           setProfile(null);
         }
@@ -152,12 +230,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    fetchSession();
+    // Initialize session
+    initializeSession();
 
     // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log("Auth state changed:", event);
+        
+        // Broadcast the change to other tabs
+        if (authChannel) {
+          authChannel.postMessage({
+            type: 'AUTH_STATE_CHANGE',
+            event,
+            time: Date.now()
+          });
+        }
         
         // Update synchronously first
         setSession(session);
@@ -201,16 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      // Clean up existing state
-      cleanupAuthState();
-      
-      // Attempt global sign out first
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-        console.log("Global sign out failed, continuing:", err);
-      }
+      // Clean up existing state - but do not perform aggressive cleanup on login
+      cleanupAuthState(false);
       
       console.log("Signing in user...");
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -221,6 +301,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         setError(error.message);
         throw error;
+      }
+      
+      // Successfully signed in - fetch profile with retries
+      if (data?.user) {
+        // We'll let the onAuthStateChange handler fetch the profile
+        console.log("Sign-in successful, user ID:", data.user.id);
       }
       
       return data;
@@ -237,8 +323,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setLoading(true);
     try {
-      // Clean up auth state first
-      cleanupAuthState();
+      // Force full cleanup with aggressive token removal
+      cleanupAuthState(true);
       
       // Attempt global sign out
       const { error } = await supabase.auth.signOut({ scope: 'global' });
@@ -247,6 +333,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setUser(null);
       setSession(null);
+      
+      // Broadcast to other tabs
+      if (authChannel) {
+        authChannel.postMessage({
+          type: 'SIGNED_OUT',
+          time: Date.now()
+        });
+      }
       
       // Force page reload to clear all state
       window.location.href = '/login';
@@ -264,7 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       // Clean up existing state
-      cleanupAuthState();
+      cleanupAuthState(false);
       
       console.log("Signing up new user:", email);
       const { data, error } = await supabase.auth.signUp({

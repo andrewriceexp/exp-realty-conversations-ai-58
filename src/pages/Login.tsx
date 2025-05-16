@@ -27,14 +27,18 @@ const Login = () => {
   // Get return URL from location state
   const from = (location.state as any)?.from?.pathname || "/dashboard";
 
-  // Clean up auth state on component mount
+  // Clean up auth state on component mount - but non-aggressively
   useEffect(() => {
-    cleanupAuthState();
+    // Non-aggressive cleanup that preserves valid sessions
+    cleanupAuthState(false);
+    
+    console.log("Login component mounted, auth state cleaned");
   }, []);
 
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
+      console.log("User already logged in, redirecting to:", from);
       navigate(from, { replace: true });
     }
   }, [user, navigate, from]);
@@ -53,6 +57,7 @@ const Login = () => {
       setErrorMessage(null);
       
       // Call the signIn function with email and password
+      console.log("Attempting sign in for:", data.email);
       await signIn(data.email, data.password);
       
       // Redirect will happen automatically via the useEffect above

@@ -9,6 +9,11 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Broadcast channel for cross-tab communication
+export const authChannel = typeof window !== 'undefined' 
+  ? new BroadcastChannel('auth_channel') 
+  : null;
+
 // Use enhanced security configuration
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
@@ -22,7 +27,26 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 
 // Add runtime protection
 (function() {
-  // Remove any stale authentication data on page load
+  if (typeof window === 'undefined') return;
+
+  // Handle cross-tab authentication events
+  window.addEventListener('storage', (event) => {
+    const isAuthEvent = event.key?.startsWith('supabase.auth.') || event.key?.includes('sb-');
+    
+    if (isAuthEvent) {
+      console.log('Auth state changed in another tab');
+      
+      // Notify all tabs about the auth state change
+      if (authChannel) {
+        authChannel.postMessage({
+          type: 'AUTH_STATE_CHANGE',
+          time: Date.now()
+        });
+      }
+    }
+  });
+  
+  // Cleaner function that preserves active sessions
   const cleanupStaleAuth = () => {
     // Find conflicting or stale auth tokens
     const authKeys = Object.keys(localStorage).filter(
@@ -30,8 +54,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     );
     
     // Check for potential token conflicts
-    if (authKeys.length > 2) {
-      console.warn('Multiple auth tokens detected - cleanup may be needed');
+    if (authKeys.length > 3) {
+      console.warn('Multiple auth tokens detected - possible conflict');
     }
   };
   

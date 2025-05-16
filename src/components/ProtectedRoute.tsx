@@ -10,9 +10,10 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRouteProps) => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, session } = useAuth();
   const location = useLocation();
   const [showLoading, setShowLoading] = useState(true);
+  const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null);
   
   // Set a timeout to prevent infinite loading state
   useEffect(() => {
@@ -24,13 +25,32 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
       }
     }, 5000);
     
+    setLoadingTimeout(timeout);
+    
     // If not loading, clear timeout
     if (!isLoading) {
       setShowLoading(true);
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
     }
     
-    return () => clearTimeout(timeout);
+    return () => {
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
+    };
   }, [isLoading]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log("ProtectedRoute state:", {
+      hasUser: !!user,
+      hasSession: !!session,
+      isLoading,
+      path: location.pathname
+    });
+  }, [user, isLoading, session, location.pathname]);
 
   if (isLoading && showLoading) {
     return (
@@ -64,7 +84,7 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
     );
   }
 
-  if (!user) {
+  if (!user || !session) {
     console.log("User not authenticated, redirecting to", redirectPath);
     // Redirect to login with a return URL
     return <Navigate to={redirectPath} state={{ from: location }} replace />;
