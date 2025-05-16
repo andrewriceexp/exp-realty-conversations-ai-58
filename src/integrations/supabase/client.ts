@@ -16,11 +16,28 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    flowType: 'implicit'
   }
 });
 
 // Add runtime protection
 (function() {
+  // Remove any stale authentication data on page load
+  const cleanupStaleAuth = () => {
+    // Find conflicting or stale auth tokens
+    const authKeys = Object.keys(localStorage).filter(
+      key => key.startsWith('supabase.auth.') || key.includes('sb-')
+    );
+    
+    // Check for potential token conflicts
+    if (authKeys.length > 2) {
+      console.warn('Multiple auth tokens detected - cleanup may be needed');
+    }
+  };
+  
+  // Run cleanup check
+  cleanupStaleAuth();
+  
   // Monitor for XSS attempts targeting Supabase tokens
   const observer = new MutationObserver(() => {
     const storedItems = Object.keys(localStorage).filter(

@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { XCircle } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, cleanupAuthState } from "@/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 
 const loginSchema = z.object({
@@ -19,13 +19,25 @@ const loginSchema = z.object({
 });
 
 const Login = () => {
-  const { signIn, loading, error } = useAuth();
+  const { signIn, loading, error, user } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   
   // Get return URL from location state
   const from = (location.state as any)?.from?.pathname || "/dashboard";
+
+  // Clean up auth state on component mount
+  useEffect(() => {
+    cleanupAuthState();
+  }, []);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate(from, { replace: true });
+    }
+  }, [user, navigate, from]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -43,8 +55,7 @@ const Login = () => {
       // Call the signIn function with email and password
       await signIn(data.email, data.password);
       
-      // Redirect to the return URL or dashboard
-      navigate(from, { replace: true });
+      // Redirect will happen automatically via the useEffect above
     } catch (error: any) {
       setErrorMessage(error.message || "Login failed. Please try again.");
     }
