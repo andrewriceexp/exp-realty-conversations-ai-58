@@ -3,17 +3,22 @@ import { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, HelpCircle } from 'lucide-react';
 import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import ElevenLabsAgentSelector from './ElevenLabsAgentSelector';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ElevenLabsDirectConnectProps {
   useElevenLabsAgent: boolean;
   setUseElevenLabsAgent: (value: boolean) => void;
   elevenLabsAgentId: string;
   setElevenLabsAgentId: (id: string) => void;
+  elevenLabsPhoneNumberId?: string;
+  setElevenLabsPhoneNumberId?: (id: string) => void;
 }
 
 const ElevenLabsDirectConnect = ({
@@ -21,10 +26,15 @@ const ElevenLabsDirectConnect = ({
   setUseElevenLabsAgent,
   elevenLabsAgentId,
   setElevenLabsAgentId,
+  elevenLabsPhoneNumberId,
+  setElevenLabsPhoneNumberId,
 }: ElevenLabsDirectConnectProps) => {
   const { apiKeyStatus } = useElevenLabsAuth();
+  const { profile } = useAuth();
   const isApiKeyValid = apiKeyStatus === 'valid';
   const navigate = useNavigate();
+  
+  const [phoneNumberId, setPhoneNumberId] = useState(elevenLabsPhoneNumberId || profile?.elevenlabs_phone_number_id || '');
   
   // If API key becomes invalid, disable ElevenLabs direct connect
   useEffect(() => {
@@ -33,8 +43,26 @@ const ElevenLabsDirectConnect = ({
     }
   }, [isApiKeyValid, useElevenLabsAgent, setUseElevenLabsAgent]);
 
+  // Update state when profile changes
+  useEffect(() => {
+    if (profile?.elevenlabs_phone_number_id) {
+      setPhoneNumberId(profile.elevenlabs_phone_number_id);
+      if (setElevenLabsPhoneNumberId) {
+        setElevenLabsPhoneNumberId(profile.elevenlabs_phone_number_id);
+      }
+    }
+  }, [profile, setElevenLabsPhoneNumberId]);
+
   const handleNavigateToProfile = () => {
     navigate('/profile-setup');
+  };
+
+  // Update the phone number ID in the parent component
+  const handlePhoneNumberIdChange = (value: string) => {
+    setPhoneNumberId(value);
+    if (setElevenLabsPhoneNumberId) {
+      setElevenLabsPhoneNumberId(value);
+    }
   };
 
   return (
@@ -83,12 +111,41 @@ const ElevenLabsDirectConnect = ({
             </AlertDescription>
           </Alert>
           
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="elevenlabs-phone-number-id" className="text-sm">
+                ElevenLabs Phone Number ID
+              </Label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6">
+                      <HelpCircle className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>You need to register a phone number in your ElevenLabs account and enter the ID here. This ID is different for each user.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Input
+              id="elevenlabs-phone-number-id"
+              placeholder="Enter your ElevenLabs phone number ID"
+              value={phoneNumberId}
+              onChange={(e) => handlePhoneNumberIdChange(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              You must register a phone number in your ElevenLabs account and provide the ID here.
+            </p>
+          </div>
+          
           <ElevenLabsAgentSelector
             selectedAgentId={elevenLabsAgentId}
             setSelectedAgentId={setElevenLabsAgentId}
           />
           
-          <div className="mt-2 flex items-center">
+          <div className="flex flex-col space-y-2">
             <a 
               href="https://elevenlabs.io/app/conversational-ai"
               target="_blank" 
@@ -97,6 +154,15 @@ const ElevenLabsDirectConnect = ({
             >
               <ExternalLink className="h-3 w-3 mr-1" />
               Manage your agents in ElevenLabs Dashboard
+            </a>
+            <a 
+              href="https://elevenlabs.io/app/voice-settings/phone-numbers"
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Register & manage phone numbers in ElevenLabs Dashboard
             </a>
           </div>
         </div>

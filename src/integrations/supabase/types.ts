@@ -244,6 +244,10 @@ export type Database = {
           a2p_10dlc_registered: boolean
           created_at: string
           elevenlabs_api_key: string | null
+          elevenlabs_api_key_last_validated: string | null
+          elevenlabs_phone_number_id: string | null
+          elevenlabs_phone_number_verified: boolean | null
+          elevenlabs_phone_number_verified_at: string | null
           email: string
           exp_realty_id: string | null
           full_name: string | null
@@ -257,6 +261,10 @@ export type Database = {
           a2p_10dlc_registered?: boolean
           created_at?: string
           elevenlabs_api_key?: string | null
+          elevenlabs_api_key_last_validated?: string | null
+          elevenlabs_phone_number_id?: string | null
+          elevenlabs_phone_number_verified?: boolean | null
+          elevenlabs_phone_number_verified_at?: string | null
           email: string
           exp_realty_id?: string | null
           full_name?: string | null
@@ -270,6 +278,10 @@ export type Database = {
           a2p_10dlc_registered?: boolean
           created_at?: string
           elevenlabs_api_key?: string | null
+          elevenlabs_api_key_last_validated?: string | null
+          elevenlabs_phone_number_id?: string | null
+          elevenlabs_phone_number_verified?: boolean | null
+          elevenlabs_phone_number_verified_at?: string | null
           email?: string
           exp_realty_id?: string | null
           full_name?: string | null

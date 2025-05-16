@@ -7,17 +7,21 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { AlertCircle, Check, ExternalLink, Key, Loader2, BookOpen } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Key, Loader2, BookOpen, HelpCircle, FileBox } from 'lucide-react';
 import { withTimeout } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Separator } from '@/components/ui/separator';
 
 const ElevenLabsInfo = () => {
   const [apiKey, setApiKey] = useState('');
+  const [phoneNumberId, setPhoneNumberId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const { user, profile, refreshProfile } = useAuth();
   
   const hasApiKey = profile?.elevenlabs_api_key !== null && profile?.elevenlabs_api_key !== undefined;
+  const hasPhoneNumberId = profile?.elevenlabs_phone_number_id !== null && profile?.elevenlabs_phone_number_id !== undefined;
 
   const handleSaveApiKey = async () => {
     try {
@@ -97,7 +101,10 @@ const ElevenLabsInfo = () => {
       // Update the profile with the new API key
       const { error } = await supabase
         .from('profiles')
-        .update({ elevenlabs_api_key: apiKey })
+        .update({ 
+          elevenlabs_api_key: apiKey,
+          elevenlabs_api_key_last_validated: new Date().toISOString() 
+        })
         .eq('id', user.id);
         
       if (error) {
@@ -235,6 +242,69 @@ const ElevenLabsInfo = () => {
       });
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleSavePhoneNumberId = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      if (!user) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in to update your phone number ID",
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+      
+      if (!phoneNumberId) {
+        toast({
+          title: "Missing Phone Number ID",
+          description: "Please enter an ElevenLabs phone number ID",
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+
+      console.log("Updating phone number ID for user:", user.id);
+      
+      // Update the profile with the new phone number ID
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          elevenlabs_phone_number_id: phoneNumberId,
+        })
+        .eq('id', user.id);
+        
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
+      
+      console.log("Phone number ID updated successfully");
+      
+      toast({
+        title: "Phone Number ID Saved",
+        description: "Your ElevenLabs phone number ID has been successfully saved.",
+        duration: 3000,
+      });
+      
+      // Refresh the user profile to get the updated data
+      await refreshProfile();
+      
+    } catch (error: any) {
+      console.error("Error saving phone number ID:", error);
+      toast({
+        title: "Error Saving Phone Number ID",
+        description: error.message || "An unknown error occurred",
+        variant: "destructive",
+        duration: 5000,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -400,6 +470,108 @@ const ElevenLabsInfo = () => {
                 <BookOpen className="h-3 w-3 mr-1" />
                 ElevenLabs Conversational AI Documentation
               </a>
+            </div>
+            
+            {/* Phone Number ID Section */}
+            <Separator className="my-6" />
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">ElevenLabs Phone Number</h3>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                        <HelpCircle className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">
+                      <p>You need to register a phone number in ElevenLabs to make outbound calls. Each user needs their own registered phone number.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <Alert variant={hasPhoneNumberId ? "success" : "warning"} className="mb-4">
+                {hasPhoneNumberId ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  {hasPhoneNumberId ? (
+                    <p>ElevenLabs phone number ID has been configured.</p>
+                  ) : (
+                    <div>
+                      <p className="mb-2">You need to register a phone number in ElevenLabs and add the ID here to make outbound calls.</p>
+                      <ol className="list-decimal pl-5 space-y-1 text-sm">
+                        <li>Go to your <a 
+                            href="https://elevenlabs.io/app/voice-settings/phone-numbers" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-primary underline"
+                          >ElevenLabs Phone Numbers</a> page
+                        </li>
+                        <li>Register a new phone number or use an existing one</li>
+                        <li>Copy the ID of your phone number</li>
+                        <li>Paste your phone number ID below and click "Save"</li>
+                      </ol>
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="phone-number-id">ElevenLabs Phone Number ID</Label>
+                  <a 
+                    href="https://elevenlabs.io/app/voice-settings/phone-numbers" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary flex items-center"
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Manage phone numbers
+                  </a>
+                </div>
+                <div className="flex space-x-2">
+                  <Input
+                    id="phone-number-id"
+                    placeholder="Enter your ElevenLabs phone number ID"
+                    value={phoneNumberId}
+                    onChange={(e) => setPhoneNumberId(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button 
+                    onClick={handleSavePhoneNumberId} 
+                    disabled={isSubmitting || !phoneNumberId}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> 
+                        Saving...
+                      </>
+                    ) : "Save"}
+                  </Button>
+                </div>
+                {profile?.elevenlabs_phone_number_id && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center">
+                    <Check className="h-3 w-3 mr-1" />
+                    Current phone number ID: {profile.elevenlabs_phone_number_id}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  This ID is required for making outbound calls through ElevenLabs.
+                </p>
+                <a 
+                  href="https://elevenlabs.io/docs/conversational-ai/phone-numbers" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary flex items-center mt-2"
+                >
+                  <FileBox className="h-3 w-3 mr-1" />
+                  Learn more about ElevenLabs phone numbers
+                </a>
+              </div>
             </div>
           </>
         )}

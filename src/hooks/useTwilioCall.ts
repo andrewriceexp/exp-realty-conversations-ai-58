@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/use-auth';
@@ -15,7 +14,8 @@ export interface MakeCallParams {
   voiceId?: string;
   useElevenLabsAgent?: boolean;
   elevenLabsAgentId?: string;
-  echoMode?: boolean;  // Added echo mode for testing
+  elevenLabsPhoneNumberId?: string;  // Added parameter for phone number ID
+  echoMode?: boolean;
 }
 
 export interface CallResponse {

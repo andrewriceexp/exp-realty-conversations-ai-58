@@ -11,7 +11,7 @@ interface OutboundCallRequest {
   user_id: string;
   prospect_id?: string;
   agent_config_id?: string;
-  agent_phone_number_id?: string; // Added parameter
+  agent_phone_number_id?: string;
   dynamic_variables?: Record<string, any>;
   conversation_config_override?: {
     agent?: {
@@ -27,9 +27,6 @@ interface OutboundCallRequest {
   };
 }
 
-// Default phone number ID to use if none is provided
-const DEFAULT_PHONE_NUMBER_ID = "c6b3ee3e-4d1a-4bbd-bda0-507aa16dd108";
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -44,7 +41,7 @@ serve(async (req) => {
       user_id, 
       prospect_id, 
       agent_config_id,
-      agent_phone_number_id, // Get the agent_phone_number_id parameter if provided
+      agent_phone_number_id, 
       dynamic_variables, 
       conversation_config_override 
     } = requestBody as OutboundCallRequest;
@@ -110,11 +107,11 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseAdminKey);
     
-    // Get user's ElevenLabs API key
+    // Get user's ElevenLabs API key and phone number ID
     console.log(`Fetching user profile for ID: ${user_id}`);
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('elevenlabs_api_key')
+      .select('elevenlabs_api_key, elevenlabs_phone_number_id')
       .eq('id', user_id)
       .single();
       
@@ -130,15 +127,29 @@ serve(async (req) => {
       });
     }
     
-    // Use the provided agent_phone_number_id or the default one
-    const phoneNumberId = agent_phone_number_id || DEFAULT_PHONE_NUMBER_ID;
+    // Check for phone number ID - prioritize request parameter, then profile value
+    const phoneNumberId = agent_phone_number_id || profile.elevenlabs_phone_number_id;
+    
+    // If no phone number ID is available, return a helpful error
+    if (!phoneNumberId) {
+      console.error("No ElevenLabs phone number ID provided in request or stored in profile");
+      return new Response(JSON.stringify({
+        success: false,
+        message: "ElevenLabs phone number ID is required. Please add your phone number ID in your profile settings.",
+        code: "ELEVENLABS_PHONE_NUMBER_MISSING"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     console.log(`Using phone number ID: ${phoneNumberId}`);
     
     // Prepare the payload for ElevenLabs API
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: phoneNumberId, // Include the phone number ID in the payload
+      agent_phone_number_id: phoneNumberId,
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -200,6 +211,11 @@ serve(async (req) => {
         } catch (parseError) {
           console.error("Could not parse error response", parseError);
           errorDetails = { message: await response.text() };
+        }
+        
+        // Handle specific error types with clear messages
+        if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
+          throw new Error(`The phone number ID "${phoneNumberId}" was not found in your ElevenLabs account. Please verify your phone number ID is correct.`);
         }
         
         // For other errors, throw and capture below
@@ -277,9 +293,13 @@ serve(async (req) => {
     // Enhanced error classification
     let errorCode = "GENERAL_ERROR";
     let status = 400; // Use 400 for client errors
+    let errorMessage = error.message || "An error occurred while making the outbound call";
     
+    // Classify specific error types
     if (error.message?.includes("ElevenLabs API key")) {
       errorCode = "ELEVENLABS_API_KEY_MISSING";
+    } else if (error.message?.includes("phone number ID")) {
+      errorCode = "ELEVENLABS_PHONE_NUMBER_INVALID";
     } else if (error.message?.includes("timed out")) {
       errorCode = "REQUEST_TIMEOUT";
     } else if (error.message?.includes("rate limit")) {
@@ -289,7 +309,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        message: error.message || "An error occurred while making the outbound call",
+        message: errorMessage,
         code: errorCode
       }),
       {

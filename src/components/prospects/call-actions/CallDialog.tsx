@@ -1,414 +1,285 @@
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Loader2, Phone, Settings, Info } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '@/hooks/use-auth';
-import { useTwilioCall } from '@/hooks/useTwilioCall';
-import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
-import { isProfileError, getStatusDescription } from './utils';
-import { CallOptions, ConfigurationStatus } from './types';
-import { isAnonymizationEnabled } from '@/utils/anonymizationUtils';
-
-// Import components
-import CallAgentSelector from './CallAgentSelector';
-import CallStatusIndicator from './CallStatusIndicator';
-import ConfigurationWarnings from './ConfigurationWarnings';
-import DevelopmentModeOptions from './DevelopmentModeOptions';
-import ElevenLabsVoiceSelector from './ElevenLabsVoiceSelector';
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { HelpCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  CallAgentSelector,
+  ElevenLabsVoiceSelector,
+  CallStatusIndicator,
+  DevelopmentModeOptions,
+  ConfigurationWarnings
+} from './call-dialog-components';
+import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
+import { AgentConfig } from '@/types';
+import { toast } from '@/hooks/use-toast';
+import { ToastAction } from "@/components/ui/toast"
+import { cn } from "@/lib/utils";
 import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 
 interface CallDialogProps {
   prospectId: string;
-  prospectName: string;
   isOpen: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
+  onCallComplete: () => void;
+  reload: () => void;
 }
 
-const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogProps) => {
-  const [selectedConfigId, setSelectedConfigId] = useState<string>('');
-  const [callError, setCallError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [bypassValidation, setBypassValidation] = useState(false);
-  const [debugMode, setDebugMode] = useState(false);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
-  const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
-  const [callSid, setCallSid] = useState<string | null>(null);
-  const [isVerifyingCall, setIsVerifyingCall] = useState(false);
+export function CallDialog({
+  prospectId, 
+  isOpen, 
+  onOpenChange, 
+  onCallComplete,
+  reload,
+}: CallDialogProps) {
+  const [selectedConfig, setSelectedConfig] = useState<AgentConfig | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [callInProgress, setCallInProgress] = useState(false);
   const [callStatus, setCallStatus] = useState<string | null>(null);
-  const [useEchoMode, setUseEchoMode] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [developmentMode, setDevelopmentMode] = useState(false);
+  const [echoMode, setEchoMode] = useState(false); 
+  const [showDevOptions, setShowDevOptions] = useState(false);
   const [useElevenLabsAgent, setUseElevenLabsAgent] = useState(false);
-  const [elevenLabsAgentId, setElevenLabsAgentId] = useState<string>('');
-
-  const { makeCall, makeDevelopmentCall, verifyCallStatus, isLoading: isCallingLoading } = useTwilioCall();
-  const { apiKeyStatus } = useElevenLabsAuth();
-  const { user, profile } = useAuth();
-  const { toast } = useToast();
-
-  // Check for necessary configurations before allowing calls
-  const [configurationStatus, setConfigurationStatus] = useState<ConfigurationStatus>({
-    twilioSetup: false,
-    elevenLabsSetup: false,
-    message: null
-  });
-
-  // Verify configuration on component mount
-  useEffect(() => {
-    const checkConfiguration = async () => {
-      try {
-        // Check if user has Twilio credentials
-        const hasTwilioSetup = !!(profile?.twilio_account_sid && 
-                              profile?.twilio_auth_token && 
-                              profile?.twilio_phone_number);
-        
-        // Check if ElevenLabs API key is valid
-        const hasElevenLabsSetup = apiKeyStatus === 'valid';
-
-        setConfigurationStatus({
-          twilioSetup: hasTwilioSetup,
-          elevenLabsSetup: hasElevenLabsSetup,
-          message: !hasTwilioSetup && !useElevenLabsAgent
-            ? "Twilio credentials are not configured"
-            : !hasElevenLabsSetup && (useElevenLabsVoice || useElevenLabsAgent)
-            ? "ElevenLabs API key is not configured or invalid"
-            : null
-        });
-      } catch (error) {
-        console.error("Error checking configuration:", error);
-      }
-    };
-
-    checkConfiguration();
-  }, [profile, apiKeyStatus, useElevenLabsVoice, useElevenLabsAgent]);
-
-  // Add effect to periodically check call status
-  useEffect(() => {
-    let statusCheckInterval: number | null = null;
-    
-    if (callSid) {
-      // Check immediately
-      checkCallStatus();
-      
-      // Then check every 5 seconds
-      statusCheckInterval = window.setInterval(checkCallStatus, 5000);
-    }
-    
-    return () => {
-      if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-      }
-    };
-  }, [callSid]);
+  const [elevenLabsAgentId, setElevenLabsAgentId] = useState('');
+  const [elevenLabsPhoneNumberId, setElevenLabsPhoneNumberId] = useState('');
   
-  const checkCallStatus = async () => {
-    if (!callSid) return;
-    
-    setIsVerifyingCall(true);
+  const twilioCall = useTwilioCall();
+
+  const handleEndCall = async () => {
+    setCallStatus('Ending call...');
     try {
-      const result = await verifyCallStatus(callSid);
-      if (result.success && result.data) {
-        const newStatus = result.data.call_status;
-        setCallStatus(newStatus);
-        
-        // Show toast for status updates
-        if (newStatus !== callStatus) {
-          toast({
-            title: `Call status: ${newStatus}`,
-            description: getStatusDescription(newStatus),
-            variant: "default",
-          });
-        }
-        
-        // Clear interval once call is completed
-        if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(newStatus?.toLowerCase() || '')) {
-          setCallSid(null);
-        }
-      }
-    } catch (error) {
-      console.error("Error checking call status:", error);
-    } finally {
-      setIsVerifyingCall(false);
-    }
-  };
-
-  const handleMakeCall = async () => {
-    setCallError(null);
-    setErrorCode(null);
-    setCallSid(null);
-    setCallStatus(null);
-    
-    if (!selectedConfigId || !user?.id) {
-      toast({
-        title: 'Missing information',
-        description: 'Please select an agent configuration',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Check configuration status before proceeding
-    if (!useElevenLabsAgent && !configurationStatus.twilioSetup && !bypassValidation) {
-      setCallError("Twilio credentials are not configured. Please update your profile settings.");
-      setErrorCode("TWILIO_CONFIG_INCOMPLETE");
-      return;
-    }
-
-    if ((useElevenLabsVoice || useElevenLabsAgent) && !configurationStatus.elevenLabsSetup && !bypassValidation) {
-      setCallError("ElevenLabs API key is not configured or invalid. Please update your profile settings.");
-      setErrorCode("ELEVENLABS_API_KEY_MISSING");
-      return;
-    }
-    
-    if (useElevenLabsAgent && !elevenLabsAgentId) {
-      setCallError("Please select an ElevenLabs agent.");
-      setErrorCode("ELEVENLABS_AGENT_MISSING");
-      return;
-    }
-    
-    try {
-      console.log('Making call with:', {
-        prospectId,
-        agentConfigId: selectedConfigId,
-        userId: user.id,
-        bypassValidation,
-        debugMode,
-        echoMode: useEchoMode,
-        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
-        useElevenLabsAgent,
-        elevenLabsAgentId: useElevenLabsAgent ? elevenLabsAgentId : undefined
-      });
-      
-      // Get prospect phone number for additional logging
-      const { data: prospectData } = await supabase
-        .from('prospects')
-        .select('phone_number')
-        .eq('id', prospectId)
-        .single();
-      
-      if (prospectData?.phone_number) {
-        console.log(`Attempting to call prospect with phone: ${isAnonymizationEnabled() ? '[REDACTED]' : prospectData.phone_number}`);
-      }
-      
-      // Create options object for the call
-      const callOptions: CallOptions = {
-        prospectId,
-        agentConfigId: selectedConfigId,
-        userId: user.id,
-        bypassValidation,
-        debugMode,
-        echoMode: useEchoMode,
-        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
-        useElevenLabsAgent,
-        elevenLabsAgentId: useElevenLabsAgent ? elevenLabsAgentId : undefined
-      };
-      
-      // Use either regular or development call method based on bypass setting
-      const callMethod = bypassValidation ? makeDevelopmentCall : makeCall;
-      const response = await callMethod(callOptions);
-      
-      console.log('Call response:', response);
-      
-      if (response.success) {
-        onClose();
-        
-        // Store the call SID for status checking
-        if (response.callSid) {
-          setCallSid(response.callSid);
-          setCallStatus('initiated');
-          
-          // Show a special toast message when in echo mode
-          if (useEchoMode) {
-            toast({
-              title: 'Echo Mode Active',
-              description: 'Call initiated in echo mode. This will only test the WebSocket connection.',
-              variant: 'default',
-            });
-          } else if (useElevenLabsAgent) {
-            toast({
-              title: 'ElevenLabs Direct Connection Active',
-              description: `Direct connection to ElevenLabs agent initiated. ${bypassValidation ? '(Development Mode)' : ''}`,
-              variant: 'default',
-            });
-          } else {
-            toast({
-              title: 'Call initiated',
-              description: `Call to ${prospectName} initiated successfully. ${bypassValidation ? '(Development Mode)' : ''}`,
-            });
-          }
-        }
+      const endCallResponse = await twilioCall.endCurrentCall(currentCallId);
+      if (endCallResponse.success) {
+        setCallStatus('Call ended');
+        setCallInProgress(false);
+        setCurrentCallId(null);
+        toast({
+          title: "Call Ended",
+          description: "The call has been successfully ended.",
+        });
+        onCallComplete();
+        reload();
       } else {
-        // Store the error code if available
-        setErrorCode(response.code || null);
-        throw new Error(response.message || 'Unknown error initiating call');
+        setCallStatus(`Failed to end call: ${endCallResponse.message}`);
+        toast({
+          title: "Failed to End Call",
+          description: endCallResponse.message || "Failed to end the call.",
+          variant: "destructive",
+        });
       }
     } catch (error: any) {
-      console.error("Error making call:", error);
-      setCallError(error.message || 'An error occurred while trying to make the call');
-      
-      // Handle specific error cases
-      if (error.message?.includes('Profile setup') || 
-          error.message?.includes('Twilio configuration') ||
-          error.code === 'PROFILE_NOT_FOUND' ||
-          error.code === 'TWILIO_CONFIG_INCOMPLETE') {
-        toast({
-          title: "Profile setup required",
-          description: "Please complete your profile setup with Twilio credentials before making calls.",
-          variant: "destructive",
-          action: (
-            <Link to="/profile-setup" className="underline bg-background text-foreground px-2 py-1 rounded hover:bg-muted">
-              Update Profile
-            </Link>
-          )
-        });
-      }
-      
-      // If this is a trial account error, show a special message
-      if (error.message?.includes('trial account') || 
-          error.message?.includes('Trial account') ||
-          error.code === 'TWILIO_TRIAL_ACCOUNT') {
-        toast({
-          title: "Twilio Trial Account",
-          description: "Your Twilio trial account has limitations. For full functionality, please upgrade to a paid account.",
-          variant: "warning"
-        });
-      }
-      
-      // If this is an ElevenLabs API key error, show a special message
-      if (error.message?.includes('ElevenLabs API key') || 
-          error.code === 'ELEVENLABS_API_KEY_MISSING') {
-        toast({
-          title: "ElevenLabs API Key Required",
-          description: "To use custom voices or direct connection, please add your ElevenLabs API key in your profile settings.",
-          variant: "warning",
-          action: (
-            <Link to="/profile-setup" className="underline bg-background text-foreground px-2 py-1 rounded hover:bg-muted">
-              Update Profile
-            </Link>
-          )
-        });
-      }
-      
-      // If this is a WebSocket error, provide more specific guidance
-      if (error.message?.includes('WebSocket') || 
-          error.message?.includes('socket') ||
-          error.code === 'WEBSOCKET_ERROR') {
-        toast({
-          title: "WebSocket Connection Error",
-          description: "Unable to establish the audio connection. Try using ElevenLabs Direct Connect instead.",
-          variant: "destructive"
-        });
-      }
+      console.error("Error ending call:", error);
+      setCallStatus(`Error ending call: ${error.message}`);
+      toast({
+        title: "Error",
+        description: error.message || "An unexpected error occurred while ending the call.",
+        variant: "destructive",
+      });
+    } finally {
+      setCallInProgress(false);
     }
   };
 
+  const handleStartCall = async () => {
+    setCallStatus('Initiating call...');
+    setCallInProgress(true);
+    let callResponse;
+
+    try {
+      // Set up the call parameters
+      const callParams: MakeCallParams = {
+        prospectId,
+        agentConfigId: selectedConfig?.id,
+        bypassValidation: developmentMode,
+        debugMode: developmentMode,
+        voiceId: selectedVoiceId || undefined,
+        echoMode
+      };
+
+      // Add ElevenLabs specific parameters if using ElevenLabs
+      if (useElevenLabsAgent && elevenLabsAgentId) {
+        callParams.useElevenLabsAgent = true;
+        callParams.elevenLabsAgentId = elevenLabsAgentId;
+        callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId;
+      }
+      
+      if (developmentMode) {
+        callResponse = await twilioCall.makeDevelopmentCall(callParams);
+      } else {
+        callResponse = await twilioCall.makeCall(callParams);
+      }
+
+      if (callResponse.success) {
+        setCallStatus('Call connected');
+        setCurrentCallId(callResponse.callSid || null);
+        toast({
+          title: "Call Initiated",
+          description: "Your call has been successfully initiated.",
+        });
+      } else {
+        setCallStatus(`Call failed: ${callResponse.message}`);
+        toast({
+          title: "Call Failed",
+          description: callResponse.message || "Failed to initiate call",
+          variant: "destructive",
+        });
+        setCallInProgress(false);
+        
+        // Check for specific error codes
+        if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING" || 
+            callResponse.code === "ELEVENLABS_PHONE_NUMBER_INVALID") {
+          toast({
+            title: "Phone Number Missing",
+            description: "You need to configure your ElevenLabs phone number ID in your profile settings.",
+            variant: "destructive",
+            duration: 8000,
+            action: (
+              <ToastAction altText="Go to profile" onClick={() => window.location.href = '/profile-setup'}>
+                Configure
+              </ToastAction>
+            )
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error starting call:", error);
+      setCallStatus(`Error: ${error.message}`);
+      toast({
+        title: "Error",
+        description: error.message || "An unexpected error occurred",
+        variant: "destructive",
+      });
+      setCallInProgress(false);
+    }
+  };
+  
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
-          <DialogTitle>Call {prospectName || 'Prospect'}</DialogTitle>
+          <DialogTitle>Call Prospect</DialogTitle>
           <DialogDescription>
-            Select an agent configuration to use for this call
+            Configure AI agent settings and initiate a call to the prospect
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          {callError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {callError}
-                {isProfileError(errorCode, callError) && (
-                  <div className="mt-2">
-                    <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
-                      <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
-                    </Link>
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-          
-          {/* Add an informational alert about ElevenLabs Direct Connect */}
-          {useElevenLabsAgent && (
-            <Alert variant="info" className="mb-4">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Using ElevenLabs Direct Connect requires a phone number to be set up in your ElevenLabs account. Your account must have a valid phone number configured.
-              </AlertDescription>
-            </Alert>
-          )}
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="agent-config" className="text-right">
+              Agent
+            </Label>
+            <CallAgentSelector 
+              selectedConfig={selectedConfig} 
+              setSelectedConfig={setSelectedConfig} 
+              className="col-span-3"
+            />
+          </div>
           
           <ConfigurationWarnings 
-            configurationStatus={configurationStatus}
-            bypassValidation={bypassValidation}
-            useElevenLabsVoice={useElevenLabsVoice}
-            useEchoMode={useEchoMode}
+            agentConfig={selectedConfig} 
+            developmentMode={developmentMode}
+            useElevenLabsAgent={useElevenLabsAgent}
           />
           
-          <CallStatusIndicator 
-            callStatus={callStatus}
-            callSid={callSid}
-            isVerifyingCall={isVerifyingCall}
-            bypassValidation={bypassValidation}
-            useEchoMode={useEchoMode}
-          />
+          <Separator className="my-2" />
           
-          <CallAgentSelector 
-            selectedConfigId={selectedConfigId}
-            setSelectedConfigId={setSelectedConfigId}
-          />
-
+          {/* ElevenLabs Direct Connect Option */}
           <ElevenLabsDirectConnect 
             useElevenLabsAgent={useElevenLabsAgent}
             setUseElevenLabsAgent={setUseElevenLabsAgent}
             elevenLabsAgentId={elevenLabsAgentId}
-            setElevenLabsAgentId={setElevenLabsAgentId}
+            setElevenLabsAgentId={setElevenLabsAgentId} 
+            elevenLabsPhoneNumberId={elevenLabsPhoneNumberId}
+            setElevenLabsPhoneNumberId={setElevenLabsPhoneNumberId}
           />
-
+          
+          {/* Only show Voice section if not using ElevenLabs direct */}
           {!useElevenLabsAgent && (
-            <ElevenLabsVoiceSelector 
-              useElevenLabsVoice={useElevenLabsVoice}
-              setUseElevenLabsVoice={setUseElevenLabsVoice}
-              selectedVoiceId={selectedVoiceId}
-              setSelectedVoiceId={setSelectedVoiceId}
+            <>
+              <Separator className="my-2" />
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="voice-selection" className="text-right">
+                  Voice
+                </Label>
+                <div className="col-span-3">
+                  <ElevenLabsVoiceSelector 
+                    selectedVoiceId={selectedVoiceId}
+                    setSelectedVoiceId={setSelectedVoiceId} 
+                  />
+                </div>
+              </div>
+            </>
+          )}
+          
+          <div className="flex justify-between items-center mt-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowDevOptions(!showDevOptions)}
+              className="text-xs"
+            >
+              {showDevOptions ? "Hide Advanced Options" : "Show Advanced Options"}
+            </Button>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Advanced options for developers</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          
+          {showDevOptions && (
+            <DevelopmentModeOptions 
+              developmentMode={developmentMode}
+              setDevelopmentMode={setDevelopmentMode}
+              echoMode={echoMode}
+              setEchoMode={setEchoMode}
             />
           )}
-
-          <DevelopmentModeOptions 
-            bypassValidation={bypassValidation}
-            setBypassValidation={setBypassValidation}
-            debugMode={debugMode}
-            setDebugMode={setDebugMode}
-            useEchoMode={useEchoMode}
-            setUseEchoMode={setUseEchoMode}
-          />
+          
         </div>
         
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleMakeCall} 
-            disabled={isCallingLoading || !selectedConfigId || (useElevenLabsAgent && !elevenLabsAgentId)}
-          >
-            {isCallingLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Calling...
-              </>
-            ) : (
-              <>
-                <Phone className="mr-2 h-4 w-4" /> Make Call
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+        {callInProgress ? (
+          <div className="flex flex-col gap-4">
+            <CallStatusIndicator status={callStatus} />
+            <Button 
+              variant="destructive" 
+              onClick={handleEndCall} 
+              className="mt-2"
+              disabled={!currentCallId}
+            >
+              End Call
+            </Button>
+          </div>
+        ) : (
+          <DialogFooter>
+            <Button 
+              onClick={handleStartCall} 
+              disabled={!selectedConfig && !useElevenLabsAgent}
+              className={cn(useElevenLabsAgent ? "exp-gradient" : "")}
+            >
+              Start Call
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-export default CallDialog;
