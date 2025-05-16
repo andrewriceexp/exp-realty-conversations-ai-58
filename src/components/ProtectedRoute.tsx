@@ -15,10 +15,23 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const { toast } = useToast();
+  const [readyToRender, setReadyToRender] = useState(false);
 
-  // Try to recover the session if needed
+  // Debug logging for authentication state
   useEffect(() => {
-    if (!isLoading && !user && !isInitialLoad && retryCount < 3) {
+    console.log("[ProtectedRoute] Auth state updated:", {
+      hasUser: !!user,
+      hasSession: !!session,
+      isLoading,
+      path: location.pathname,
+      retryCount,
+      readyToRender
+    });
+  }, [user, session, isLoading, location.pathname, retryCount, readyToRender]);
+
+  // Try to recover the session if needed with exponential backoff
+  useEffect(() => {
+    if (!isLoading && !user && !session && !isInitialLoad && retryCount < 3) {
       // If we don't have a user after the initial load, try to recover the session
       const attemptRecovery = async () => {
         console.log(`[ProtectedRoute] Attempting to recover session (attempt ${retryCount + 1})`);
@@ -34,65 +47,87 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
               title: "Authentication Error",
               description: "Your session has expired. Please log in again."
             });
+            // Ready to render the redirect to login
+            setReadyToRender(true);
           }
         } catch (err) {
           console.error("[ProtectedRoute] Recovery error:", err);
+          setReadyToRender(true);
         }
       };
       
-      const timer = setTimeout(attemptRecovery, 800);
+      // Exponential backoff for recovery attempts
+      const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 3000);
+      console.log(`[ProtectedRoute] Setting recovery timeout for ${backoffTime}ms`);
+      
+      const timer = setTimeout(attemptRecovery, backoffTime);
       return () => clearTimeout(timer);
+    } else if (!isLoading && (user || retryCount >= 3)) {
+      // We have a user or have exhausted retries, ready to render final state
+      setReadyToRender(true);
     }
-  }, [isLoading, user, isInitialLoad, retryCount, toast]);
+  }, [isLoading, user, session, isInitialLoad, retryCount, toast]);
   
   // Add a small initial loading delay to prevent flashing content
   useEffect(() => {
-    console.log("[ProtectedRoute] Checking auth state:", {
-      isLoading,
-      hasUser: !!user, 
-      hasSession: !!session,
-      path: location.pathname,
-      retryCount
-    });
+    console.log("[ProtectedRoute] Setting up initial load timer");
     
     const timer = setTimeout(() => {
+      console.log("[ProtectedRoute] Initial load timer completed");
       setIsInitialLoad(false);
-    }, 200); // Slightly longer delay to ensure auth state is stabilized
+      
+      // If we already have user/session at this point, we're ready to render
+      if (user && session) {
+        console.log("[ProtectedRoute] User and session already available, ready to render");
+        setReadyToRender(true);
+      }
+    }, 300); // Slightly longer delay to ensure auth state is stabilized
     
     return () => clearTimeout(timer);
-  }, [isLoading, user, session, location.pathname, retryCount]);
+  }, [user, session]);
 
-  if (isLoading || isInitialLoad) {
-    console.log("[ProtectedRoute] Still loading...");
+  // Check session validity
+  const isSessionValid = !!session && !!user && !!session.access_token && 
+                         new Date(session.expires_at * 1000) > new Date();
+
+  // Log session validity
+  useEffect(() => {
+    if (session) {
+      const expiresAt = new Date(session.expires_at * 1000);
+      const now = new Date();
+      console.log("[ProtectedRoute] Session validity:", { 
+        isValid: isSessionValid,
+        expiresAt: expiresAt.toISOString(),
+        now: now.toISOString(),
+        timeRemaining: (expiresAt.getTime() - now.getTime()) / 1000 / 60 + " minutes"
+      });
+    }
+  }, [session, isSessionValid]);
+
+  if (isInitialLoad || isLoading || !readyToRender) {
+    console.log("[ProtectedRoute] Still in loading state");
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse-light text-exp-blue">Loading...</div>
+        <div className="animate-pulse-light text-exp-blue">
+          {retryCount > 0 ? "Verifying authentication..." : "Loading..."}
+        </div>
       </div>
     );
   }
 
-  if (!user || !session) {
-    console.log("[ProtectedRoute] Not authenticated, redirecting to login", {
+  if (!user || !session || !isSessionValid) {
+    console.log("[ProtectedRoute] Not authenticated or invalid session, redirecting to login", {
       hasUser: !!user,
       hasSession: !!session,
+      isSessionValid,
       retryCount
     });
     
-    // Only redirect if we've tried to recover a few times
-    if (retryCount >= 2) {
-      // Redirect to login with a return URL
-      return <Navigate to={redirectPath} state={{ from: location }} replace />;
-    } else if (!isInitialLoad) {
-      // If still in retry phase but past initial load, show intermediate loading
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-pulse-light text-exp-blue">Verifying authentication...</div>
-        </div>
-      );
-    }
+    // Redirect to login with a return URL
+    return <Navigate to={redirectPath} state={{ from: location }} replace />;
   }
 
-  console.log("[ProtectedRoute] Authenticated, rendering protected content");
+  console.log("[ProtectedRoute] Authentication confirmed, rendering protected content");
   return <>{children}</>;
 };
 

@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { z } from 'zod';
@@ -33,22 +33,46 @@ const Login = () => {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(authError);
+  const navigationAttempted = useRef(false);
+  const mounted = useRef(true);
 
+  // Set up cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+      console.log("[Login] Component unmounting, cleanup complete");
+    };
+  }, []);
+  
   // Log key state for debugging
   useEffect(() => {
-    console.log("[Login] Component mounted");
-    console.log("[Login] Auth State:", { user: !!user, session: !!session });
+    console.log("[Login] Component state updated:", {
+      user: !!user,
+      session: !!session,
+      submitting,
+      error,
+      navigationAttempted: navigationAttempted.current,
+      currentPath: location.pathname
+    });
     
-    // Redirect if already logged in
-    if (user && session) {
-      console.log("[Login] User already logged in, redirecting to dashboard");
-      navigate('/dashboard', { replace: true });
-    }
-    
-    return () => {
-      console.log("[Login] Component unmounting");
+    // Handle redirect for already logged-in users
+    const handleRedirect = () => {
+      if (user && session && mounted.current && !navigationAttempted.current) {
+        console.log("[Login] User already logged in, preparing to redirect");
+        navigationAttempted.current = true;
+        
+        // Short timeout to ensure state is fully propagated
+        setTimeout(() => {
+          if (mounted.current) {
+            console.log("[Login] Executing redirect to dashboard");
+            navigate('/dashboard', { replace: true });
+          }
+        }, 100);
+      }
     };
-  }, [user, session, navigate]);
+    
+    handleRedirect();
+  }, [user, session, navigate, location.pathname]);
   
   // Get the return URL from location state or default to '/dashboard'
   const from = location.state?.from?.pathname || '/dashboard';
@@ -61,13 +85,24 @@ const Login = () => {
     },
   });
 
-  const onSubmit = async (values: LoginFormValues) => {
+  const onSubmit = useCallback(async (values: LoginFormValues) => {
+    if (submitting) {
+      console.log("[Login] Submission already in progress, skipping");
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
     console.log("[Login] Attempting login...");
+    navigationAttempted.current = false;
     
     try {
       const result = await signIn(values.email, values.password);
+      
+      if (!mounted.current) {
+        console.log("[Login] Component unmounted during login, aborting");
+        return;
+      }
       
       if (result?.error) {
         setError(result.error.message);
@@ -79,6 +114,8 @@ const Login = () => {
           title: "Login failed",
           description: result.error.message || "Failed to login. Please try again."
         });
+        
+        setSubmitting(false);
       } else {
         console.log("[Login] Successfully logged in!");
         
@@ -89,10 +126,20 @@ const Login = () => {
         });
         
         console.log("[Login] Redirecting to:", from);
-        // Use replace to prevent back button from going back to login
-        navigate(from, { replace: true });
+        navigationAttempted.current = true;
+        
+        // Use a timeout to ensure auth state is fully processed
+        setTimeout(() => {
+          if (mounted.current) {
+            // Use replace to prevent back button from going back to login
+            navigate(from, { replace: true });
+            setSubmitting(false);
+          }
+        }, 100);
       }
     } catch (err: any) {
+      if (!mounted.current) return;
+      
       const errorMessage = err.message || "Failed to login";
       console.error("[Login] Exception:", errorMessage);
       setError(errorMessage);
@@ -102,10 +149,10 @@ const Login = () => {
         title: "Login failed",
         description: errorMessage
       });
-    } finally {
+      
       setSubmitting(false);
     }
-  };
+  }, [signIn, toast, from, navigate, submitting]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">

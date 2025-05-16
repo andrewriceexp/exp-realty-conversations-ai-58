@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
@@ -24,6 +24,15 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(true);
+
+  // Set up cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+      console.log("[ForgotPassword] Component unmounting");
+    };
+  }, []);
 
   const form = useForm<ResetFormValues>({
     resolver: zodResolver(resetSchema),
@@ -39,6 +48,9 @@ const ForgotPassword = () => {
       console.log("[ForgotPassword] Requesting password reset for:", values.email);
       
       await resetPassword(values.email);
+      
+      if (!mounted.current) return;
+      
       setResetSent(true);
       
       // Show success toast
@@ -48,7 +60,9 @@ const ForgotPassword = () => {
       });
       
     } catch (error: any) {
-      console.error('Password reset error:', error);
+      if (!mounted.current) return;
+      
+      console.error('[ForgotPassword] Password reset error:', error);
       setError(error.message || "Failed to send reset email. Please try again.");
       
       // Show error toast
@@ -58,7 +72,9 @@ const ForgotPassword = () => {
         description: error.message || "Failed to send reset email. Please try again."
       });
     } finally {
-      setIsLoading(false);
+      if (mounted.current) {
+        setIsLoading(false);
+      }
     }
   };
 

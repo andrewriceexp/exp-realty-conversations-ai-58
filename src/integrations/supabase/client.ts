@@ -12,17 +12,26 @@ let supabaseInstance: ReturnType<typeof createClient<Database>> | null = null;
 export const supabase = (() => {
   if (supabaseInstance) return supabaseInstance;
   
-  supabaseInstance = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false, // Changed to avoid URL fragment issues
-      flowType: 'pkce', // Changed to PKCE for better security
-    }
-  });
+  console.log("[Supabase Client] Creating new Supabase client instance");
   
-  return supabaseInstance;
+  try {
+    supabaseInstance = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        storage: localStorage,
+        persistSession: true, 
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        flowType: 'pkce',
+        debug: true, // Add debug mode for troubleshooting
+      }
+    });
+    
+    console.log("[Supabase Client] Supabase client initialized successfully");
+    return supabaseInstance;
+  } catch (error) {
+    console.error("[Supabase Client] Failed to initialize Supabase client:", error);
+    throw error;
+  }
 })();
 
 // Add runtime protection

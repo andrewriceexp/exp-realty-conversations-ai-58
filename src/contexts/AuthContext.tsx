@@ -41,8 +41,10 @@ const AuthContext = createContext<AuthContextType>({
 // Helper function to clean up auth state before operations
 const cleanupAuthState = () => {
   console.log('[Auth] Cleaning up auth state');
+  
   // Remove standard auth tokens
   localStorage.removeItem('supabase.auth.token');
+  sessionStorage?.removeItem('supabase.auth.token');
   
   // Remove all Supabase auth keys from localStorage 
   Object.keys(localStorage).forEach((key) => {
@@ -70,10 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [authStateChangeCount, setAuthStateChangeCount] = useState(0);
 
   // Debug function for logging auth state changes
   const logAuthState = (event: string, details?: any) => {
-    console.log(`[Auth Debug] ${event}`, details || '');
+    console.log(`[Auth Debug] ${event}`, details ? details : '');
   };
 
   useEffect(() => {
@@ -86,7 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // First, set up the auth state change listener
         const { data } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-          logAuthState('Auth state changed:', { event, session: !!newSession });
+          setAuthStateChangeCount(prev => prev + 1);
+          logAuthState('Auth state changed:', { event, sessionExists: !!newSession, changeCount: authStateChangeCount + 1 });
           
           // Update session and user state immediately
           setSession(newSession);
@@ -95,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           switch(event) {
             case 'SIGNED_IN':
               if (newSession?.user) {
+                logAuthState('User signed in, updating state', { userId: newSession.user.id });
                 // Defer profile fetching to prevent deadlocks
                 setTimeout(async () => {
                   try {
@@ -108,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               break;
               
             case 'SIGNED_OUT':
+              logAuthState('User signed out, clearing profile');
               setProfile(null);
               break;
               
@@ -118,6 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             case 'USER_UPDATED':
               logAuthState('User updated');
               break;
+              
+            case 'PASSWORD_RECOVERY':
+              logAuthState('Password recovery initiated');
+              break;
           }
         });
         
@@ -125,7 +135,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Then check for an existing session
         logAuthState('Checking for existing session');
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw sessionError;
+        }
         
         logAuthState('Initial session check complete', { hasSession: !!initialSession });
         setSession(initialSession);
@@ -169,8 +183,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
       
       if (profileError) {
-        logAuthState('Error fetching profile:', profileError);
-        console.error('Error fetching user profile:', profileError);
+        if (profileError.code === 'PGRST116') {
+          // No results error - might be a new signup without a profile yet
+          logAuthState('No profile exists for user, profile might need to be created', { userId });
+        } else {
+          logAuthState('Error fetching profile:', profileError);
+          console.error('Error fetching user profile:', profileError);
+        }
         return null;
       }
       
