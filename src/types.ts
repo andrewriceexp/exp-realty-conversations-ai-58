@@ -1,3 +1,4 @@
+
 // Import the Json type from the database types
 import { Json } from './types/database.types';
 
@@ -25,7 +26,7 @@ export interface Profile {
   settings?: Record<string, any>;
 }
 
-// Update the UserProfile type from Supabase profiles table
+// Update the UserProfile type to match what's coming from Supabase profiles table
 export interface UserProfile {
   id: string;
   email: string;
