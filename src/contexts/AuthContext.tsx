@@ -37,6 +37,24 @@ const AuthContext = createContext<AuthContextType>({
   updateProfile: async () => ({}),
 });
 
+// Helper function to clean up auth state before operations
+const cleanupAuthState = () => {
+  // Remove standard auth tokens
+  localStorage.removeItem('supabase.auth.token');
+  // Remove all Supabase auth keys from localStorage
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      localStorage.removeItem(key);
+    }
+  });
+  // Remove from sessionStorage if in use
+  Object.keys(sessionStorage || {}).forEach((key) => {
+    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      sessionStorage.removeItem(key);
+    }
+  });
+};
+
 // Authentication provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<any | null>(null);
@@ -85,18 +103,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userSession?.user || null);
 
         if (userSession?.user) {
-          // Fetch user profile data
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userSession.user.id)
-            .single();
+          // Defer profile fetching to prevent potential deadlocks
+          setTimeout(async () => {
+            // Fetch user profile data
+            const { data: profileData, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userSession.user!.id)
+              .single();
 
-          if (profileError) {
-            console.error('Error fetching user profile:', profileError);
-          } else {
-            setProfile(profileData as UserProfile);
-          }
+            if (profileError) {
+              console.error('Error fetching user profile:', profileError);
+            } else {
+              setProfile(profileData as UserProfile);
+            }
+          }, 0);
         } else {
           setProfile(null);
         }
@@ -129,11 +150,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign in function
+  // Sign in function with better error handling and auth cleanup
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
+      // Clean up existing auth state
+      cleanupAuthState();
+      
+      // Attempt global sign out first to ensure clean state
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
+        console.log('Pre-signin signout failed (non-critical):', err);
+      }
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -143,6 +175,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(error.message);
         throw error;
       }
+      
+      // Force refresh auth state and profile data
+      if (data.user) {
+        setUser(data.user);
+        setSession(data.session);
+        
+        // Fetch user profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+          
+        if (profileError) {
+          console.error('Error fetching profile after login:', profileError);
+        } else {
+          setProfile(profileData as UserProfile);
+        }
+      }
+      
       return data;
     } catch (error: any) {
       console.error('Error signing in:', error);
@@ -153,13 +205,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign out function
+  // Sign out function with improved cleanup
   const signOut = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signOut();
+      // Clean up auth state first
+      cleanupAuthState();
+      
+      // Attempt global sign out
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) throw error;
+      
+      // Clear all state
       setProfile(null);
+      setUser(null);
+      setSession(null);
     } catch (error: any) {
       console.error('Error signing out:', error);
       setError(error.message || 'An error occurred while signing out');
@@ -169,11 +229,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Sign up function
+  // Sign up function with better error handling
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     setError(null);
     try {
+      // Clean up existing auth state
+      cleanupAuthState();
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,

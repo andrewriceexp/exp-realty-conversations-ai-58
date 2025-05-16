@@ -48,8 +48,9 @@ const Login = () => {
       await signIn(values.email, values.password);
       // After successful login, navigate to the from page
       navigate(from, { replace: true });
-    } catch (err) {
-      // Error is handled by the AuthContext
+    } catch (err: any) {
+      // Error is handled by the AuthContext, but we still set local state
+      setAuthError(err.message || "Failed to login");
     }
   };
 
@@ -70,9 +71,9 @@ const Login = () => {
           </CardHeader>
           
           <CardContent>
-            {authError && (
+            {(authError || error) && (
               <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-                {authError}
+                {authError || error}
               </div>
             )}
             

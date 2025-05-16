@@ -1,4 +1,3 @@
-
 // Import the Json type from the database types
 import { Json } from './types/database.types';
 
@@ -7,26 +6,28 @@ export interface Profile {
   id: string;
   created_at: string;
   updated_at: string;
-  full_name: string;
+  full_name: string | null;
   email: string;
-  avatar_url: string | null;
-  elevenlabs_api_key?: string;
-  elevenlabs_api_key_last_validated?: string;
-  elevenlabs_voice_id?: string;
-  elevenlabs_phone_number_id?: string;
-  elevenlabs_phone_number_verified?: boolean;
+  avatar_url?: string | null;
+  elevenlabs_api_key?: string | null;
+  elevenlabs_api_key_last_validated?: string | null;
+  elevenlabs_voice_id?: string | null;
+  elevenlabs_phone_number_id?: string | null;
+  elevenlabs_phone_number_verified?: boolean | null;
   elevenlabs_phone_number_verified_at?: string | null;
-  openai_api_key?: string;
-  openai_api_key_last_validated?: string;
-  twilio_account_sid?: string;
-  twilio_auth_token?: string;
-  twilio_phone_number?: string;
-  twilio_verified?: boolean;
-  twilio_verified_at?: string;
-  settings?: Record<string, any>;
+  openai_api_key?: string | null;
+  openai_api_key_last_validated?: string | null;
+  twilio_account_sid?: string | null;
+  twilio_auth_token?: string | null;
+  twilio_phone_number?: string | null;
+  twilio_verified?: boolean | null;
+  twilio_verified_at?: string | null;
+  settings?: Record<string, any> | null;
+  exp_realty_id?: string | null;
+  a2p_10dlc_registered?: boolean;
 }
 
-// Update the UserProfile type to match what's coming from Supabase profiles table
+// User profile from Supabase profiles table
 export interface UserProfile {
   id: string;
   email: string;
@@ -41,13 +42,14 @@ export interface UserProfile {
   elevenlabs_phone_number_verified?: boolean | null;
   elevenlabs_phone_number_verified_at?: string | null;
   openai_api_key?: string | null;
+  openai_api_key_last_validated?: string | null;
   twilio_account_sid?: string | null;
   twilio_auth_token?: string | null;
   twilio_phone_number?: string | null;
-  twilio_verified?: boolean;
-  twilio_verified_at?: string;
-  a2p_10dlc_registered?: boolean;
+  twilio_verified?: boolean | null;
+  twilio_verified_at?: string | null;
   exp_realty_id?: string | null;
+  a2p_10dlc_registered?: boolean;
 }
 
 // Export ProspectList type that matches the database structure
