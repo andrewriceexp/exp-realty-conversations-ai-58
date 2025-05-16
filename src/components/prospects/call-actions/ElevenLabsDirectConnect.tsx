@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -35,28 +34,22 @@ export default function ElevenLabsDirectConnect({
     if (profile?.elevenlabs_phone_number_id) {
       setElevenLabsPhoneNumberId(profile.elevenlabs_phone_number_id);
     }
-  }, [profile, setElevenLabsPhoneNumberId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [profile]); // Removed setElevenLabsPhoneNumberId from deps as it can cause loops if parent doesn't memoize it
   
   const handleSavePhoneNumberId = async () => {
-    if (!elevenLabsPhoneNumberId.trim()) {
+    const currentId = elevenLabsPhoneNumberId.trim();
+    if (!currentId) {
       toast({
         title: "Validation Error",
-        description: "Phone number cannot be empty",
+        description: "ElevenLabs Phone Number ID cannot be empty",
         variant: "destructive"
       });
       return;
     }
     
-    // Basic validation for E.164 format (starts with + and contains only digits)
-    const phoneRegex = /^\+[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(elevenLabsPhoneNumberId)) {
-      toast({
-        title: "Validation Error",
-        description: "Phone number must be in E.164 format (e.g., +12125551234)",
-        variant: "destructive"
-      });
-      return;
-    }
+    // Removed E.164 validation as we expect an ID from ElevenLabs, not an E.164 string.
+    // The ID format is determined by ElevenLabs.
     
     setIsLoading(true);
     
@@ -109,8 +102,8 @@ export default function ElevenLabsDirectConnect({
                 <TooltipContent>
                   <p className="max-w-xs">
                     Use ElevenLabs native calling platform instead of your Twilio integration.
-                    Requires an agent set up in ElevenLabs and a phone number connected to your account.
-                    The phone number must be in E.164 format (e.g., +12125551234).
+                    Requires an agent set up in ElevenLabs and your registered ElevenLabs Phone Number ID.
+                    This ID is provided by ElevenLabs for a phone number you have registered with them.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -138,7 +131,7 @@ export default function ElevenLabsDirectConnect({
               <div>
                 <div className="flex justify-between items-center">
                   <Label htmlFor="elevenlabs-phone-number-id" className="text-sm">
-                    ElevenLabs Phone Number
+                    ElevenLabs Phone Number ID
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
@@ -147,8 +140,8 @@ export default function ElevenLabsDirectConnect({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="max-w-xs">
-                          Enter your actual phone number in E.164 format (e.g., +12125551234).
-                          This must be a phone number registered in your ElevenLabs account.
+                          Enter the Phone Number ID from your ElevenLabs dashboard.
+                          This ID is for a phone number you have registered and verified with ElevenLabs for outbound calls.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -159,7 +152,7 @@ export default function ElevenLabsDirectConnect({
                     id="elevenlabs-phone-number-id"
                     value={elevenLabsPhoneNumberId}
                     onChange={(e) => setElevenLabsPhoneNumberId(e.target.value)}
-                    placeholder="Enter your phone number (e.g., +12125551234)"
+                    placeholder="Enter ID from ElevenLabs dashboard"
                     className="flex-1"
                   />
                   <button
@@ -171,7 +164,7 @@ export default function ElevenLabsDirectConnect({
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Must be in E.164 format (e.g., +12125551234) and registered in your ElevenLabs account
+                  This ID is provided by ElevenLabs for your registered outbound phone number.
                 </p>
               </div>
             </div>

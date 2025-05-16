@@ -398,17 +398,17 @@ export function useTwilioCall() {
       configOverride.agent.input_format = "mulaw_8000";
       configOverride.agent.output_format = "mulaw_8000";
       
-      // Get the ElevenLabs phone number from params or profile
-      const phoneNumber = params.elevenLabsPhoneNumberId;
+      // Get the ElevenLabs phone number ID from params
+      const elevenLabsIdForPhoneNumber = params.elevenLabsPhoneNumberId;
       
-      console.log("[TwilioCall] Using phone number:", phoneNumber);
+      console.log("[TwilioCall] Using ElevenLabs Phone Number ID:", elevenLabsIdForPhoneNumber);
       
-      // Call the elevenlabs-outbound-call edge function with the phone number directly
+      // Call the elevenlabs-outbound-call edge function
       const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
         body: {
           agent_id: params.elevenLabsAgentId,
           to_number: prospectData.phone_number,
-          agent_phone_number: phoneNumber, // Changed: use the phone number directly
+          agent_phone_number_id: elevenLabsIdForPhoneNumber, // CORRECTED: Send as agent_phone_number_id
           user_id: userId,
           prospect_id: params.prospectId,
           agent_config_id: params.agentConfigId,
