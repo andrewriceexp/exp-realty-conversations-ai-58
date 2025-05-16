@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -17,32 +16,39 @@ serve(async (req) => {
     const url = new URL(req.url);
     const agentId = url.searchParams.get("agent_id");
     const voiceId = url.searchParams.get("voice_id");
-    const userId = url.searchParams.get("user_id");
+    const userId = url.searchParams.get("user_id") || null;
     const callLogId = url.searchParams.get("call_log_id");
     const debug = url.searchParams.get("debug") === "true";
     const echoMode = url.searchParams.get("echo") === "true"; // Add echo mode parameter
     
-    // CRITICAL FIX: Supply default ElevenLabs agent ID if missing
-    const finalAgentId = agentId || Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+    console.log(`Received request for: ${req.url}`); // Log the full incoming URL
     
-    if (!finalAgentId) {
-      console.error("No agent_id parameter provided and no default agent available");
-      throw new Error("Agent ID is required for calling. Please specify an agent_id parameter.");
-    } else if (!agentId) {
-      console.warn(`No agent_id parameter provided, using default: ${finalAgentId}`);
+    // CRITICAL FIX: Supply default ElevenLabs agent ID if missing or empty
+    let finalAgentId = agentId;
+    if (!finalAgentId || finalAgentId.trim() === "") {
+      console.warn(`agent_id was missing or empty ('${agentId}'), attempting to use default.`);
+      finalAgentId = Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
+      console.log(`Using effective agent_id: ${finalAgentId}`);
+    }
+    
+    // Use provided userId or a placeholder if missing
+    let finalUserId = userId;
+    if (!finalUserId || finalUserId.trim() === "") {
+      console.warn(`user_id was missing or empty ('${userId}'), using placeholder 'unknown_user'.`);
+      finalUserId = "unknown_user"; // Placeholder if user_id is missing
     }
     
     console.log("Webhook triggered with params:", {
       agentId: finalAgentId,
       voiceId: voiceId || "default",
-      userId: userId || "none",
+      userId: finalUserId,
       callLogId: callLogId || "none",
       debug: debug || false,
       echoMode: echoMode || false
     });
     
     // Get Twilio form data or query parameters
-    let twilioParams = {};
+    let twilioParams: Record<string, any> = {};
     
     // Try to parse the request body if it exists
     try {
@@ -82,16 +88,21 @@ serve(async (req) => {
     const params = new URLSearchParams();
     
     // CRITICAL: Always use the final agent ID (original or default)
-    params.append("agent_id", finalAgentId);
+    // Ensure finalAgentId is a string before appending
+    if (finalAgentId) { // Check if finalAgentId is truthy (i.e., not null or empty string after logic above)
+        params.append("agent_id", finalAgentId);
+    } else {
+        // This case should ideally not be reached due to the fallback UO1QDRUZh2ti2suBR4cq
+        console.error("CRITICAL: finalAgentId is unexpectedly null or empty even after fallback. Appending a failsafe default.");
+        params.append("agent_id", "UO1QDRUZh2ti2suBR4cq"); 
+    }
     
     if (voiceId) {
       params.append("voice_id", voiceId);
     }
     
-    // Always pass userId if available
-    if (userId) {
-      params.append("user_id", userId);
-    }
+    // Always pass userId (either original or placeholder)
+    params.append("user_id", finalUserId);
     
     if (callLogId) {
       params.append("call_log_id", callLogId);
@@ -113,7 +124,7 @@ serve(async (req) => {
     const twiml = generateTwiMLResponse(mediaStreamUrlWithParams, debug);
     
     // Create a call log entry if we have a user ID
-    if (userId && !callLogId) {
+    if (finalUserId && !callLogId) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -122,15 +133,15 @@ serve(async (req) => {
           const supabase = createClient(supabaseUrl, supabaseKey);
           
           // Extract call information from Twilio parameters
-          const callSid = twilioParams.CallSid;
-          const from = twilioParams.From;
+          const callSid = twilioParams.CallSid as string | undefined;
+          const from = twilioParams.From as string | undefined;
           
           if (callSid && from) {
             console.log(`Creating call log for inbound call: ${callSid} from ${from}`);
             
             // Prepare the call log data - REMOVE fields that might cause errors
             const callData: Record<string, any> = {
-              user_id: userId,
+              user_id: finalUserId,
               twilio_call_sid: callSid,
               from_number: from,
               status: 'Initiated',
