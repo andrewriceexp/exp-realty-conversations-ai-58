@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import { useElevenLabsAuth } from '@/hooks/useElevenLabsAuth';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 import ElevenLabsAgentSelector from './ElevenLabsAgentSelector';
 
 interface ElevenLabsDirectConnectProps {
@@ -22,6 +24,7 @@ const ElevenLabsDirectConnect = ({
 }: ElevenLabsDirectConnectProps) => {
   const { apiKeyStatus } = useElevenLabsAuth();
   const isApiKeyValid = apiKeyStatus === 'valid';
+  const navigate = useNavigate();
   
   // If API key becomes invalid, disable ElevenLabs direct connect
   useEffect(() => {
@@ -29,6 +32,10 @@ const ElevenLabsDirectConnect = ({
       setUseElevenLabsAgent(false);
     }
   }, [isApiKeyValid, useElevenLabsAgent, setUseElevenLabsAgent]);
+
+  const handleNavigateToProfile = () => {
+    navigate('/profile-setup');
+  };
 
   return (
     <div className="space-y-4">
@@ -53,15 +60,23 @@ const ElevenLabsDirectConnect = ({
       {!isApiKeyValid && (
         <Alert variant="destructive" className="mt-2">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            ElevenLabs API key is missing or invalid. Add your API key in profile settings to use direct connect.
+          <AlertDescription className="flex flex-col space-y-2">
+            <p>ElevenLabs API key is missing or invalid. Add your API key in profile settings to use direct connect.</p>
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={handleNavigateToProfile}
+              className="self-start"
+            >
+              Configure API Key
+            </Button>
           </AlertDescription>
         </Alert>
       )}
       
       {isApiKeyValid && useElevenLabsAgent && (
         <div className="space-y-4">
-          <Alert className="mt-2 border-green-500 bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
+          <Alert variant="success" className="mt-2">
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
               Direct connection will bypass Twilio and use your ElevenLabs API key directly. This is recommended for more reliable voice interactions.
@@ -72,6 +87,18 @@ const ElevenLabsDirectConnect = ({
             selectedAgentId={elevenLabsAgentId}
             setSelectedAgentId={setElevenLabsAgentId}
           />
+          
+          <div className="mt-2 flex items-center">
+            <a 
+              href="https://elevenlabs.io/app/conversational-ai"
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Manage your agents in ElevenLabs Dashboard
+            </a>
+          </div>
         </div>
       )}
     </div>
