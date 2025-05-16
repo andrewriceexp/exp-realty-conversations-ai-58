@@ -1,83 +1,25 @@
 
-import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
+import React, { useState, useEffect, ReactNode, useCallback } from 'react';
+import { User, Session } from '@supabase/supabase-js';
 import { supabase, authChannel } from '@/integrations/supabase/client';
-import { UserProfile, AuthContextType } from '@/types/auth-types';
 import { toast } from '@/hooks/use-toast';
+import { AuthContext } from './useAuthContext';
+import { UserProfile } from './types';
+import { cleanupAuthState } from '@/utils/authUtils';
 
-// Improved clean up auth tokens function to prevent authentication limbo states
-export const cleanupAuthState = (forceFullCleanup = false) => {
-  // Only perform aggressive cleanup when forced (on logout or explicit cleanup)
-  if (forceFullCleanup) {
-    // Log the cleanup for debugging
-    console.log('Performing full auth state cleanup');
-    
-    // Remove all Supabase auth keys from localStorage - directly
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-        console.log(`Removing auth key: ${key}`);
-        localStorage.removeItem(key);
-      }
-    });
-    
-    // Clean sessionStorage as well if used
-    if (typeof sessionStorage !== 'undefined') {
-      Object.keys(sessionStorage).forEach((key) => {
-        if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-          sessionStorage.removeItem(key);
-        }
-      });
-    }
-  } else {
-    // For non-forced cleanups, just do a sanity check without removing valid tokens
-    const authKeyCount = Object.keys(localStorage).filter(key => 
-      key.startsWith('supabase.auth.') || key.includes('sb-')
-    ).length;
-    
-    if (authKeyCount > 3) {
-      console.warn(`Found ${authKeyCount} auth keys - possible token conflict`);
-    }
-  }
-};
+interface AuthProviderProps {
+  children: ReactNode;
+}
 
-// Create the authentication context
-const AuthContext = createContext<AuthContextType>({
-  session: null,
-  user: null,
-  profile: null,
-  isLoading: false,
-  loading: false,
-  error: null,
-  signIn: async () => ({}),
-  signOut: async () => {},
-  signUp: async () => ({}),
-  updateUser: async () => ({}),
-  updateProfile: async () => ({}),
-  refreshProfile: async () => {},
-  resetPassword: async () => {},
-});
-
-// Custom hook to use the auth context - we're defining it directly in the AuthContext.tsx
-// but exporting it for backwards compatibility
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-// Authentication provider component
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<any | null>(null);
-  const [user, setUser] = useState<any | null>(null);
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loading, setLoading] = useState(false); // For login/signup operations
   const [error, setError] = useState<string | null>(null);
   const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
   const [initComplete, setInitComplete] = useState(false);
-  const MAX_RETRIES = 3;
 
   // Function to fetch profile safely with retry capability
   const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
@@ -297,6 +239,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchProfile]);
 
+  // Auth methods implementation - moved to a separate hook file
+  // But importing here for convenience
+  const { signIn, signOut, signUp, updateUser, updateProfile, resetPassword } = useAuthMethods({
+    user,
+    setUser,
+    setSession,
+    setProfile,
+    setError,
+    setLoading,
+    fetchProfile
+  });
+
+  // Create the context value
+  const contextValue = {
+    session,
+    user,
+    profile,
+    isLoading,
+    loading,
+    error,
+    signIn,
+    signOut,
+    signUp,
+    updateUser,
+    updateProfile,
+    refreshProfile,
+    resetPassword,
+  };
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Helper types for auth methods hook
+interface UseAuthMethodsProps {
+  user: User | null;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  setSession: React.Dispatch<React.SetStateAction<Session | null>>;
+  setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  fetchProfile: (userId: string) => Promise<UserProfile | null>;
+}
+
+// This is imported from the separate hook file
+const useAuthMethods = ({
+  user,
+  setUser,
+  setSession,
+  setProfile,
+  setError,
+  setLoading,
+  fetchProfile
+}: UseAuthMethodsProps) => {
   // Sign in function with improved error handling and cleanup
   const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true);
@@ -345,7 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, setError, setLoading, setProfile, setSession, setUser]);
 
   // Sign out function with improved cleanup
   const signOut = useCallback(async () => {
@@ -395,7 +394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading, setProfile, setSession, setUser]);
 
   // Sign up function
   const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
@@ -448,17 +447,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setError, setLoading, setSession, setUser]);
 
   // Update user function (profile data)
   const updateUser = useCallback(async (data: any) => {
     setLoading(true);
     try {
+      if (!user?.id) {
+        throw new Error('User is not authenticated');
+      }
+      
       console.log("Updating user profile:", data);
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .update(data)
-        .eq('id', user?.id)
+        .eq('id', user.id)
         .select()
         .single();
 
@@ -489,7 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, setLoading, setProfile]);
   
   // Alias for updateUser to support ProfileSetup component
   const updateProfile = updateUser;
@@ -522,32 +525,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setError, setLoading]);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user,
-        profile,
-        isLoading,
-        loading,
-        error,
-        signIn,
-        signOut,
-        signUp,
-        updateUser,
-        updateProfile,
-        refreshProfile,
-        resetPassword,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-// Export the context and types
-export { AuthContext };
-// Export the UserProfile type for backward compatibility
-export type { UserProfile };
+  return {
+    signIn,
+    signOut,
+    signUp,
+    updateUser,
+    updateProfile,
+    resetPassword
+  };
+};
