@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile } from '@/types';
@@ -311,16 +310,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       // Clean up existing auth state
-      cleanupAuthState();
+      // cleanupAuthState();
       
       // Attempt global sign out first to ensure clean state
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-        logAuthState('Pre-signin signout complete');
-      } catch (err) {
-        // Continue even if this fails
-        logAuthState('Pre-signin signout failed (non-critical)', err);
-      }
+      // try {
+      //   await supabase.auth.signOut({ scope: 'global' });
+      //   logAuthState('Pre-signin signout complete');
+      // } catch (err) {
+      //   // Continue even if this fails
+      //   logAuthState('Pre-signin signout failed (non-critical)', err);
+      // }
       
       // Sign in with email and password
       const { data, error } = await supabase.auth.signInWithPassword({
