@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import CallStatusIndicator from './CallStatusIndicator';
 import ConfigurationWarnings from './ConfigurationWarnings';
 import DevelopmentModeOptions from './DevelopmentModeOptions';
 import ElevenLabsVoiceSelector from './ElevenLabsVoiceSelector';
+import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 
 interface CallDialogProps {
   prospectId: string;
@@ -39,6 +41,8 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
   const [isVerifyingCall, setIsVerifyingCall] = useState(false);
   const [callStatus, setCallStatus] = useState<string | null>(null);
   const [useEchoMode, setUseEchoMode] = useState(false);
+  const [useElevenLabsAgent, setUseElevenLabsAgent] = useState(false);
+  const [elevenLabsAgentId, setElevenLabsAgentId] = useState<string>('');
 
   const { makeCall, makeDevelopmentCall, verifyCallStatus, isLoading: isCallingLoading } = useTwilioCall();
   const { apiKeyStatus } = useElevenLabsAuth();
@@ -67,9 +71,9 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
         setConfigurationStatus({
           twilioSetup: hasTwilioSetup,
           elevenLabsSetup: hasElevenLabsSetup,
-          message: !hasTwilioSetup 
+          message: !hasTwilioSetup && !useElevenLabsAgent
             ? "Twilio credentials are not configured"
-            : !hasElevenLabsSetup && useElevenLabsVoice
+            : !hasElevenLabsSetup && (useElevenLabsVoice || useElevenLabsAgent)
             ? "ElevenLabs API key is not configured or invalid"
             : null
         });
@@ -79,7 +83,7 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
     };
 
     checkConfiguration();
-  }, [profile, apiKeyStatus, useElevenLabsVoice]);
+  }, [profile, apiKeyStatus, useElevenLabsVoice, useElevenLabsAgent]);
 
   // Add effect to periodically check call status
   useEffect(() => {
@@ -147,15 +151,21 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
     }
 
     // Check configuration status before proceeding
-    if (!configurationStatus.twilioSetup && !bypassValidation) {
+    if (!useElevenLabsAgent && !configurationStatus.twilioSetup && !bypassValidation) {
       setCallError("Twilio credentials are not configured. Please update your profile settings.");
       setErrorCode("TWILIO_CONFIG_INCOMPLETE");
       return;
     }
 
-    if (useElevenLabsVoice && !configurationStatus.elevenLabsSetup && !bypassValidation) {
+    if ((useElevenLabsVoice || useElevenLabsAgent) && !configurationStatus.elevenLabsSetup && !bypassValidation) {
       setCallError("ElevenLabs API key is not configured or invalid. Please update your profile settings.");
       setErrorCode("ELEVENLABS_API_KEY_MISSING");
+      return;
+    }
+    
+    if (useElevenLabsAgent && !elevenLabsAgentId) {
+      setCallError("Please select an ElevenLabs agent.");
+      setErrorCode("ELEVENLABS_AGENT_MISSING");
       return;
     }
     
@@ -167,7 +177,9 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
         bypassValidation,
         debugMode,
         echoMode: useEchoMode,
-        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
+        voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
+        useElevenLabsAgent,
+        elevenLabsAgentId: useElevenLabsAgent ? elevenLabsAgentId : undefined
       });
       
       // Get prospect phone number for additional logging
@@ -190,7 +202,8 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
         debugMode,
         echoMode: useEchoMode,
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
-        useElevenLabsAgent: false
+        useElevenLabsAgent,
+        elevenLabsAgentId: useElevenLabsAgent ? elevenLabsAgentId : undefined
       };
       
       // Use either regular or development call method based on bypass setting
@@ -212,6 +225,12 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
             toast({
               title: 'Echo Mode Active',
               description: 'Call initiated in echo mode. This will only test the WebSocket connection.',
+              variant: 'default',
+            });
+          } else if (useElevenLabsAgent) {
+            toast({
+              title: 'ElevenLabs Direct Connection Active',
+              description: `Direct connection to ElevenLabs agent initiated. ${bypassValidation ? '(Development Mode)' : ''}`,
               variant: 'default',
             });
           } else {
@@ -263,7 +282,7 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
           error.code === 'ELEVENLABS_API_KEY_MISSING') {
         toast({
           title: "ElevenLabs API Key Required",
-          description: "To use custom voices, please add your ElevenLabs API key in your profile settings.",
+          description: "To use custom voices or direct connection, please add your ElevenLabs API key in your profile settings.",
           variant: "warning",
           action: (
             <Link to="/profile-setup" className="underline bg-background text-foreground px-2 py-1 rounded hover:bg-muted">
@@ -279,7 +298,7 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
           error.code === 'WEBSOCKET_ERROR') {
         toast({
           title: "WebSocket Connection Error",
-          description: "Unable to establish the audio connection. Try again using Echo Mode to test connectivity.",
+          description: "Unable to establish the audio connection. Try using ElevenLabs Direct Connect instead.",
           variant: "destructive"
         });
       }
@@ -333,12 +352,21 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
             setSelectedConfigId={setSelectedConfigId}
           />
 
-          <ElevenLabsVoiceSelector 
-            useElevenLabsVoice={useElevenLabsVoice}
-            setUseElevenLabsVoice={setUseElevenLabsVoice}
-            selectedVoiceId={selectedVoiceId}
-            setSelectedVoiceId={setSelectedVoiceId}
+          <ElevenLabsDirectConnect 
+            useElevenLabsAgent={useElevenLabsAgent}
+            setUseElevenLabsAgent={setUseElevenLabsAgent}
+            elevenLabsAgentId={elevenLabsAgentId}
+            setElevenLabsAgentId={setElevenLabsAgentId}
           />
+
+          {!useElevenLabsAgent && (
+            <ElevenLabsVoiceSelector 
+              useElevenLabsVoice={useElevenLabsVoice}
+              setUseElevenLabsVoice={setUseElevenLabsVoice}
+              selectedVoiceId={selectedVoiceId}
+              setSelectedVoiceId={setSelectedVoiceId}
+            />
+          )}
 
           <DevelopmentModeOptions 
             bypassValidation={bypassValidation}
@@ -356,7 +384,7 @@ const CallDialog = ({ prospectId, prospectName, isOpen, onClose }: CallDialogPro
           </Button>
           <Button 
             onClick={handleMakeCall} 
-            disabled={isCallingLoading || !selectedConfigId}
+            disabled={isCallingLoading || !selectedConfigId || (useElevenLabsAgent && !elevenLabsAgentId)}
           >
             {isCallingLoading ? (
               <>

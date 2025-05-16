@@ -11,6 +11,11 @@ export interface VoiceOption {
   name: string;
 }
 
+export interface AgentOption {
+  id: string;
+  name: string;
+}
+
 export interface ConfigurationStatus {
   twilioSetup: boolean;
   elevenLabsSetup: boolean;

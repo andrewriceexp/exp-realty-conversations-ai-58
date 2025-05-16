@@ -6,5 +6,6 @@ export { default as ConfigurationWarnings } from './ConfigurationWarnings';
 export { default as DevelopmentModeOptions } from './DevelopmentModeOptions';
 export { default as ElevenLabsVoiceSelector } from './ElevenLabsVoiceSelector';
 export { default as ElevenLabsDirectConnect } from './ElevenLabsDirectConnect';
+export { default as ElevenLabsAgentSelector } from './ElevenLabsAgentSelector';
 export * from './types';
 export * from './utils';
