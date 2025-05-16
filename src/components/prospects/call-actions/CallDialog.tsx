@@ -22,6 +22,7 @@ import {
 } from './call-dialog-components';
 import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
 import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 

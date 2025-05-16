@@ -19,7 +19,9 @@ export type ElevenLabsContextType = {
   voices: ElevenLabsVoice[];
   validateApiKey: (apiKey?: string) => Promise<boolean>;
   fetchVoices: () => Promise<void>;
-  getVoices: () => ElevenLabsVoice[]; // Added this method
+  getVoices: () => ElevenLabsVoice[];
+  getSignedUrl: (agentId: string) => Promise<string>;
+  clearError: () => void;
 };
 
 const ElevenLabsContext = createContext<ElevenLabsContextType>({
@@ -30,7 +32,9 @@ const ElevenLabsContext = createContext<ElevenLabsContextType>({
   voices: [],
   validateApiKey: async () => false,
   fetchVoices: async () => {},
-  getVoices: () => [], // Added this method
+  getVoices: () => [],
+  getSignedUrl: async () => '',
+  clearError: () => {},
 });
 
 export function ElevenLabsProvider({ children }: { children: ReactNode }) {
@@ -39,6 +43,42 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
+
+  // Function to clear error state
+  const clearError = () => {
+    setError(null);
+  };
+
+  // Function to get a signed URL for conversation
+  const getSignedUrl = async (agentId: string): Promise<string> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase.functions.invoke('elevenlabs-signed-url', {
+        body: { agent_id: agentId },
+      });
+
+      if (error) {
+        console.error('Error getting signed URL:', error);
+        setError(`Failed to get signed URL: ${error.message}`);
+        return '';
+      }
+
+      if (!data?.signed_url) {
+        setError('No signed URL returned from API');
+        return '';
+      }
+
+      return data.signed_url;
+    } catch (err) {
+      console.error('Error getting signed URL:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      return '';
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Function to validate the API key
   const validateApiKey = async (key?: string): Promise<boolean> => {
@@ -159,7 +199,9 @@ export function ElevenLabsProvider({ children }: { children: ReactNode }) {
         voices,
         validateApiKey,
         fetchVoices,
-        getVoices, // Added this method
+        getVoices,
+        getSignedUrl,
+        clearError,
       }}
     >
       {children}
