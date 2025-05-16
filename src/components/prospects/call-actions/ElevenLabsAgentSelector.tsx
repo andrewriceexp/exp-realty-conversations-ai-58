@@ -104,7 +104,7 @@ const ElevenLabsAgentSelector = ({
     }
   };
 
-  // Load agents on component mount
+  // Load agents on component mount and when API key status changes
   useEffect(() => {
     loadAgents();
   }, [apiKeyStatus]);
