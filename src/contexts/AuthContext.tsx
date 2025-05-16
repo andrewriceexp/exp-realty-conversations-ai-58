@@ -1,7 +1,8 @@
 
-import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
 import { supabase, authChannel } from '@/integrations/supabase/client';
 import { UserProfile, AuthContextType } from '@/types/auth-types';
+import { toast } from '@/hooks/use-toast';
 
 // Improved clean up auth tokens function to prevent authentication limbo states
 export const cleanupAuthState = (forceFullCleanup = false) => {
@@ -13,6 +14,7 @@ export const cleanupAuthState = (forceFullCleanup = false) => {
     // Remove all Supabase auth keys from localStorage - directly
     Object.keys(localStorage).forEach((key) => {
       if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        console.log(`Removing auth key: ${key}`);
         localStorage.removeItem(key);
       }
     });
@@ -78,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const MAX_RETRIES = 3;
 
   // Function to fetch profile safely with retry capability
-  const fetchProfile = async (userId: string): Promise<UserProfile | null> => {
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     console.log(`Fetching user profile for ID: ${userId}`);
     let retries = 0;
     const maxRetries = 2; // Try up to 3 times (initial + 2 retries)
@@ -122,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     return null;
-  };
+  }, []);
 
   // Setup cross-tab synchronization
   useEffect(() => {
@@ -170,10 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       authChannel.removeEventListener('message', handleAuthEvent);
     };
-  }, []);
+  }, [fetchProfile]);
 
   // Cleanup function for setting a loading timeout
-  const setupLoadingTimeout = () => {
+  const setupLoadingTimeout = useCallback(() => {
     // Clear any existing timeout
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
@@ -183,10 +185,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timeout = setTimeout(() => {
       console.warn("Loading timeout reached - forcing loading state to complete");
       setIsLoading(false);
-    }, 10000); // 10 seconds timeout as a fallback
+    }, 5000); // 5 seconds timeout as a fallback
 
     setLoadingTimeout(timeout);
-  };
+  }, [loadingTimeout]);
 
   // Initialize session
   useEffect(() => {
@@ -220,6 +222,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (event === 'SIGNED_OUT') {
               setProfile(null);
               return;
+            }
+            
+            if (event === 'SIGNED_IN') {
+              // Show a toast on successful sign in
+              toast({
+                title: "Signed in successfully",
+                description: "Welcome back!",
+                duration: 3000
+              });
             }
             
             // Fetch profile if we have a user, but use setTimeout to avoid deadlocks
@@ -276,18 +287,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Initialize session
     initializeSession();
-  }, [initComplete]);
+  }, [initComplete, loadingTimeout, setupLoadingTimeout, fetchProfile]);
 
   // Function to refresh the user profile
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user) {
       const profileData = await fetchProfile(user.id);
       setProfile(profileData);
     }
-  };
+  }, [user, fetchProfile]);
 
   // Sign in function with improved error handling and cleanup
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -302,7 +313,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         setError(error.message);
-        throw error;
+        console.error("Sign in error:", error);
+        return { error };
       }
       
       // Successfully signed in - store session and user immediately
@@ -329,14 +341,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error('Error signing in:', error);
       setError(error.message);
-      throw error;
+      return { error };
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchProfile]);
 
   // Sign out function with improved cleanup
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     setLoading(true);
     try {
       console.log("Signing out user...");
@@ -353,8 +365,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) {
         console.error("Error during sign out:", error);
+        toast({
+          title: "Sign out failed",
+          description: error.message,
+          variant: "destructive",
+        });
         throw error;
       }
+      
+      // Show toast notification
+      toast({
+        title: "Signed out successfully",
+        description: "You have been signed out",
+        duration: 3000,
+      });
       
       // Broadcast to other tabs
       if (authChannel) {
@@ -371,10 +395,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Sign up function
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -392,6 +416,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         setError(error.message);
+        toast({
+          title: "Sign up failed",
+          description: error.message,
+          variant: "destructive",
+        });
         throw error;
       }
       
@@ -404,6 +433,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(data.session);
       }
       
+      // Show toast notification
+      toast({
+        title: "Sign up successful",
+        description: "Your account has been created",
+        duration: 3000,
+      });
+      
       return data;
     } catch (error: any) {
       console.error('Error signing up:', error);
@@ -412,10 +448,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Update user function (profile data)
-  const updateUser = async (data: any) => {
+  const updateUser = useCallback(async (data: any) => {
     setLoading(true);
     try {
       console.log("Updating user profile:", data);
@@ -428,12 +464,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('Error updating user:', profileError);
+        toast({
+          title: "Update failed",
+          description: profileError.message,
+          variant: "destructive",
+        });
         throw profileError;
       }
 
       // Update the local profile state
       console.log("Profile updated successfully");
       setProfile(profileData as UserProfile);
+      
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been updated successfully",
+        duration: 3000,
+      });
+      
       return profileData;
     } catch (error) {
       console.error('Error updating user:', error);
@@ -441,21 +489,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
   
   // Alias for updateUser to support ProfileSetup component
   const updateProfile = updateUser;
   
   // Reset password function
-  const resetPassword = async (email: string) => {
+  const resetPassword = useCallback(async (email: string) => {
     setLoading(true);
     setError(null);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email);
       if (error) {
         setError(error.message);
+        toast({
+          title: "Password reset failed",
+          description: error.message,
+          variant: "destructive",
+        });
         throw error;
       }
+      
+      toast({
+        title: "Password reset email sent",
+        description: "Check your email for the password reset link",
+        duration: 5000,
+      });
     } catch (error: any) {
       console.error('Error resetting password:', error);
       setError(error.message);
@@ -463,7 +522,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return (
     <AuthContext.Provider

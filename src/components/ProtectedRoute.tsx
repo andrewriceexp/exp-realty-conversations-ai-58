@@ -40,7 +40,7 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
         clearTimeout(loadingTimeout);
       }
     };
-  }, [isLoading]);
+  }, [isLoading, loadingTimeout]);
 
   // Debug logging
   useEffect(() => {
@@ -75,7 +75,16 @@ const ProtectedRoute = ({ children, redirectPath = '/login' }: ProtectedRoutePro
           Reload Page
         </button>
         <button 
-          onClick={() => window.location.href = '/login'}
+          onClick={() => {
+            // Clear any stuck auth state before redirecting
+            localStorage.removeItem('supabase.auth.token');
+            Object.keys(localStorage).forEach((key) => {
+              if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+                localStorage.removeItem(key);
+              }
+            });
+            window.location.href = '/login';
+          }}
           className="text-primary hover:underline"
         >
           Return to Login
