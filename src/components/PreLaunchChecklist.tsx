@@ -30,7 +30,7 @@ const PreLaunchChecklist = () => {
       try {
         // Check profile setup
         const profileComplete = profile && 
-          profile.full_name && 
+          profile.first_name && 
           profile.twilio_account_sid && 
           profile.twilio_auth_token && 
           profile.twilio_phone_number;

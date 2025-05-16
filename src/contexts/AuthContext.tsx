@@ -1,10 +1,11 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
 // Define the user profile type
 export interface UserProfile {
   id: string;
-  email: string;
+  email: string; 
   first_name: string;
   last_name: string;
   phone_number: string;
@@ -13,12 +14,13 @@ export interface UserProfile {
   avatar_url: string;
   openai_api_key: string;
   elevenlabs_api_key: string;
-  elevenlabs_phone_number_id: string; // Added this field
+  elevenlabs_phone_number_id: string;
   twilio_account_sid: string;
   twilio_auth_token: string;
   twilio_phone_number: string;
   created_at: string;
   updated_at: string;
+  full_name?: string; // Added for compatibility
 }
 
 // Define the authentication context type
@@ -27,11 +29,15 @@ export interface AuthContextType {
   user: any | null;
   profile: UserProfile | null;
   isLoading: boolean;
-  signIn: (options: any) => Promise<any>;
+  loading: boolean; // Added for Login and Signup pages
+  error: string | null; // Added for Login and Signup pages
+  signIn: (email: string, password: string) => Promise<any>; // Updated signature
   signOut: () => Promise<void>;
-  signUp: (options: any) => Promise<any>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<any>; // Updated signature
   updateUser: (data: any) => Promise<any>;
+  updateProfile: (data: any) => Promise<any>; // Added for ProfileSetup
   refreshProfile: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>; // Added for ForgotPassword
 }
 
 // Create the authentication context
@@ -40,11 +46,15 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   isLoading: false,
-  signIn: async () => {},
+  loading: false,
+  error: null,
+  signIn: async () => ({}),
   signOut: async () => {},
-  signUp: async () => {},
-  updateUser: async () => {},
+  signUp: async () => ({}),
+  updateUser: async () => ({}),
+  updateProfile: async () => ({}),
   refreshProfile: async () => {},
+  resetPassword: async () => {},
 });
 
 // Authentication provider component
@@ -53,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // For login/signup operations
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -74,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profileError) {
             console.error('Error fetching user profile:', profileError);
           } else {
-            setProfile(profileData as UserProfile);
+            setProfile(profileData as unknown as UserProfile);
           }
         }
       } catch (error) {
@@ -103,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profileError) {
             console.error('Error fetching user profile:', profileError);
           } else {
-            setProfile(profileData as UserProfile);
+            setProfile(profileData as unknown as UserProfile);
           }
         } else {
           setProfile(null);
@@ -129,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profileError) {
           console.error('Error refreshing user profile:', profileError);
         } else {
-          setProfile(profileData as UserProfile);
+          setProfile(profileData as unknown as UserProfile);
         }
       } catch (error) {
         console.error('Error refreshing user profile:', error);
@@ -138,23 +150,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Sign in function
-  const signIn = async (options: any) => {
-    setIsLoading(true);
+  const signIn = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth(options);
-      if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
+      
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in:', error);
+      setError(error.message);
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Sign out function
   const signOut = async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
@@ -163,28 +185,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Error signing out:', error);
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Sign up function
-  const signUp = async (options: any) => {
-    setIsLoading(true);
+  const signUp = async (email: string, password: string, fullName?: string) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data, error } = await supabase.auth.signUp(options);
-      if (error) throw error;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName }
+        }
+      });
+      
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
+      
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing up:', error);
+      setError(error.message);
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   // Update user function (profile data)
   const updateUser = async (data: any) => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -199,13 +234,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Update the local profile state
-      setProfile(profileData as UserProfile);
+      setProfile(profileData as unknown as UserProfile);
       return profileData;
     } catch (error) {
       console.error('Error updating user:', error);
       throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+  
+  // Alias for updateUser to support ProfileSetup component
+  const updateProfile = updateUser;
+  
+  // Reset password function
+  const resetPassword = async (email: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) {
+        setError(error.message);
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      setError(error.message);
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -216,11 +273,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         isLoading,
+        loading,
+        error,
         signIn,
         signOut,
         signUp,
         updateUser,
+        updateProfile,
         refreshProfile,
+        resetPassword,
       }}
     >
       {children}
