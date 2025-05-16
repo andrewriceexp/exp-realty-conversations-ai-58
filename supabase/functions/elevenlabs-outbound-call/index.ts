@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -10,7 +11,7 @@ interface OutboundCallRequest {
   user_id: string;
   prospect_id?: string;
   agent_config_id?: string;
-  agent_phone_number_id?: string; // Reverted: Expect the ID from ElevenLabs
+  agent_phone_number_id?: string;
   dynamic_variables?: Record<string, any>;
   conversation_config_override?: {
     agent?: {
@@ -40,7 +41,7 @@ serve(async (req) => {
       user_id, 
       prospect_id, 
       agent_config_id,
-      agent_phone_number_id, // Reverted: Destructure the ID
+      agent_phone_number_id,
       dynamic_variables, 
       conversation_config_override 
     } = requestBody as OutboundCallRequest;
@@ -52,7 +53,7 @@ serve(async (req) => {
       user_id,
       prospect_id,
       agent_config_id,
-      agent_phone_number_id: agent_phone_number_id || "not provided", // Log the ID
+      agent_phone_number_id: agent_phone_number_id || "not provided",
       has_dynamic_variables: !!dynamic_variables,
       has_config_override: !!conversation_config_override
     });
@@ -126,8 +127,7 @@ serve(async (req) => {
       });
     }
     
-    // Check for phone number ID - prioritize request parameter, then profile value
-    // This should be the ID assigned by ElevenLabs to your verified phone number.
+    // Get phone number ID - prioritize request parameter, then profile value
     const elPhoneNumberId = agent_phone_number_id || profile.elevenlabs_phone_number_id;
     
     // If no phone number ID is available, return a helpful error
@@ -135,7 +135,7 @@ serve(async (req) => {
       console.error("No ElevenLabs phone number ID provided in request or stored in profile");
       return new Response(JSON.stringify({
         success: false,
-        message: "ElevenLabs Phone Number ID is required. This ID is obtained from your ElevenLabs dashboard for your verified outbound calling number. Please add it in your profile settings or ensure it's sent in the request.",
+        message: "ElevenLabs Phone Number ID is required for outbound calling. Please add it in your profile settings or ensure it's sent in the request.",
         code: "ELEVENLABS_PHONE_NUMBER_ID_MISSING"
       }), {
         status: 400,
@@ -145,11 +145,11 @@ serve(async (req) => {
     
     console.log(`Using ElevenLabs Phone Number ID: ${elPhoneNumberId}`);
     
-    // Prepare the payload for ElevenLabs API - Use the ID
+    // Prepare the payload for ElevenLabs API
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: elPhoneNumberId, // Reverted: Use the ID with the correct field name
+      agent_phone_number_id: elPhoneNumberId,
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -167,7 +167,7 @@ serve(async (req) => {
     // Log configuration (without sensitive data)
     console.log("Call configuration:", {
       agent_id,
-      agent_phone_number_id: elPhoneNumberId, // Log the ID
+      agent_phone_number_id: elPhoneNumberId,
       dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
       voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
       audio_format: "mulaw_8000 (optimized for telephony)"
@@ -218,7 +218,7 @@ serve(async (req) => {
         
         // Handle specific error types with clear messages
         if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
-          throw new Error(`The ElevenLabs Phone Number ID "${elPhoneNumberId}" was not found in your ElevenLabs account. Please verify your phone number ID is correct, obtained from the ElevenLabs dashboard, and registered for outbound calls.`);
+          throw new Error(`The ElevenLabs Phone Number ID "${elPhoneNumberId}" was not found in your ElevenLabs account. Please verify your phone number ID is correct and registered for outbound calls.`);
         }
         
         // For other errors, throw and capture below
@@ -264,7 +264,7 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         metadata: {
           agent_id,
-          agent_phone_number_id: elPhoneNumberId, // Log the ID
+          agent_phone_number_id: elPhoneNumberId,
           dynamic_variables,
           conversation_config_override,
           audio_format: {

@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -47,9 +48,6 @@ export default function ElevenLabsDirectConnect({
       });
       return;
     }
-    
-    // Removed E.164 validation as we expect an ID from ElevenLabs, not an E.164 string.
-    // The ID format is determined by ElevenLabs.
     
     setIsLoading(true);
     
@@ -124,7 +122,7 @@ export default function ElevenLabsDirectConnect({
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Should look like "phnum_01jvbq7pw0f36bx7gyzgt7m1j9"
+                  Should look like "agent_01jvbq7pw0f36bx7gyzgt7m1j9"
                 </p>
               </div>
               
@@ -140,8 +138,8 @@ export default function ElevenLabsDirectConnect({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="max-w-xs">
-                          Enter the Phone Number ID from your ElevenLabs dashboard.
-                          This ID is for a phone number you have registered and verified with ElevenLabs for outbound calls.
+                          Enter the phone number that will be used for outbound calls via ElevenLabs.
+                          This should be in E.164 format (e.g., +12125551234) and must be registered with ElevenLabs.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -152,7 +150,7 @@ export default function ElevenLabsDirectConnect({
                     id="elevenlabs-phone-number-id"
                     value={elevenLabsPhoneNumberId}
                     onChange={(e) => setElevenLabsPhoneNumberId(e.target.value)}
-                    placeholder="Enter ID from ElevenLabs dashboard"
+                    placeholder="Enter phone number (e.g., +12125551234)"
                     className="flex-1"
                   />
                   <button
@@ -164,7 +162,7 @@ export default function ElevenLabsDirectConnect({
                   </button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  This ID is provided by ElevenLabs for your registered outbound phone number.
+                  This must be in E.164 format (e.g., +12125551234) and registered with ElevenLabs.
                 </p>
               </div>
             </div>

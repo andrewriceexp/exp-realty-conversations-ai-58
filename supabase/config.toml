@@ -14,3 +14,6 @@ max_duration = 1800
 
 [functions.elevenlabs-agents-list]
 verify_jwt = false
+
+[functions.elevenlabs-outbound-call]
+verify_jwt = true
