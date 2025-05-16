@@ -40,12 +40,14 @@ const AuthContext = createContext<AuthContextType>({
 
 // Helper function to clean up auth state before operations
 const cleanupAuthState = () => {
+  console.log('[Auth] Cleaning up auth state');
   // Remove standard auth tokens
   localStorage.removeItem('supabase.auth.token');
   
   // Remove all Supabase auth keys from localStorage 
   Object.keys(localStorage).forEach((key) => {
     if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      console.log(`[Auth] Removing localStorage key: ${key}`);
       localStorage.removeItem(key);
     }
   });
@@ -53,6 +55,7 @@ const cleanupAuthState = () => {
   // Remove from sessionStorage if in use
   Object.keys(sessionStorage || {}).forEach((key) => {
     if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+      console.log(`[Auth] Removing sessionStorage key: ${key}`);
       sessionStorage.removeItem(key);
     }
   });
@@ -171,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
       
-      logAuthState('Profile fetched successfully');
+      logAuthState('Profile fetched successfully', profileData);
       setProfile(profileData as unknown as UserProfile);
       return profileData;
     } catch (err) {

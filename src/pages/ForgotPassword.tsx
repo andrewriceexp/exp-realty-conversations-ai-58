@@ -42,29 +42,21 @@ const ForgotPassword = () => {
       setResetSent(true);
       
       // Show success toast
-      try {
-        toast({
-          title: "Reset link sent",
-          description: "If an account exists, you'll receive reset instructions via email."
-        });
-      } catch (toastError) {
-        console.warn("[ForgotPassword] Toast error:", toastError);
-      }
+      toast({
+        title: "Reset link sent",
+        description: "If an account exists, you'll receive reset instructions via email."
+      });
       
     } catch (error: any) {
       console.error('Password reset error:', error);
       setError(error.message || "Failed to send reset email. Please try again.");
       
       // Show error toast
-      try {
-        toast({
-          variant: "destructive",
-          title: "Reset failed",
-          description: error.message || "Failed to send reset email. Please try again."
-        });
-      } catch (toastError) {
-        console.warn("[ForgotPassword] Toast error:", toastError);
-      }
+      toast({
+        variant: "destructive",
+        title: "Reset failed",
+        description: error.message || "Failed to send reset email. Please try again."
+      });
     } finally {
       setIsLoading(false);
     }

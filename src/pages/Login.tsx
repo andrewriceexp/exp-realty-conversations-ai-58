@@ -74,27 +74,19 @@ const Login = () => {
         console.error("[Login] Error:", result.error);
         
         // Use the toast utility
-        try {
-          toast({
-            variant: "destructive",
-            title: "Login failed",
-            description: result.error.message || "Failed to login. Please try again."
-          });
-        } catch (toastError) {
-          console.warn("[Login] Toast error:", toastError);
-        }
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: result.error.message || "Failed to login. Please try again."
+        });
       } else {
         console.log("[Login] Successfully logged in!");
         
-        try {
-          // Show success toast
-          toast({
-            title: "Login successful",
-            description: "Welcome back!"
-          });
-        } catch (toastError) {
-          console.warn("[Login] Toast error:", toastError);
-        }
+        // Show success toast
+        toast({
+          title: "Login successful",
+          description: "Welcome back!"
+        });
         
         console.log("[Login] Redirecting to:", from);
         // Use replace to prevent back button from going back to login
@@ -105,15 +97,11 @@ const Login = () => {
       console.error("[Login] Exception:", errorMessage);
       setError(errorMessage);
       
-      try {
-        toast({
-          variant: "destructive",
-          title: "Login failed",
-          description: errorMessage
-        });
-      } catch (toastError) {
-        console.warn("[Login] Toast error:", toastError);
-      }
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: errorMessage
+      });
     } finally {
       setSubmitting(false);
     }
