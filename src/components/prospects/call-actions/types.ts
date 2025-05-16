@@ -26,4 +26,5 @@ export interface CallOptions {
   echoMode: boolean;
   voiceId?: string;
   useElevenLabsAgent: boolean;
+  elevenLabsAgentId?: string;
 }

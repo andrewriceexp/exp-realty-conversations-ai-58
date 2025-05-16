@@ -11,4 +11,3 @@ verify_jwt = false
 verify_jwt = false
 timeout_seconds = 1800
 max_duration = 1800
-

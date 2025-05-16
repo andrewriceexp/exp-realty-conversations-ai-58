@@ -40,7 +40,7 @@ serve(async (req) => {
       echoMode: echoMode ? "enabled" : "disabled"
     });
 
-    // Validate required parameters
+    // Validate required parameters for non-echo mode
     if (!agentId && !echoMode) {
       console.error("Missing required parameter: agent_id");
       return new Response("Missing required parameter: agent_id", {
@@ -62,7 +62,7 @@ serve(async (req) => {
     console.log("Processing WebSocket connection using WebSocketPair API...");
 
     try {
-      // Use Deno's WebSocketPair API which handles the handshake protocol correctly
+      // Use Deno's upgradeWebSocket function which handles the handshake correctly
       const { socket, response } = Deno.upgradeWebSocket(req);
       
       console.log("WebSocket connection established successfully");
@@ -85,18 +85,25 @@ serve(async (req) => {
         console.log("Running in echo mode - WebSocket will echo back messages");
         
         socket.onmessage = (event) => {
-          console.log(`Echo received: ${typeof event.data === 'string' ? event.data.substring(0, 100) + '...' : '[binary data]'}`);
-          
-          // Send a confirmation message on connection
-          if (typeof event.data === 'string' && event.data.includes("start")) {
-            socket.send(JSON.stringify({ 
-              type: "echo_status", 
-              message: "Echo server connected and working" 
-            }));
+          try {
+            console.log(`Echo received: ${typeof event.data === 'string' ? event.data.substring(0, 100) + '...' : '[binary data]'}`);
+            
+            // Send a confirmation message on connection
+            if (typeof event.data === 'string' && event.data.includes("start")) {
+              const message = JSON.parse(event.data);
+              
+              socket.send(JSON.stringify({ 
+                type: "echo_status", 
+                message: "Echo server connected and working",
+                streamSid: message.start?.streamSid
+              }));
+            }
+            
+            // Echo the message back
+            socket.send(event.data);
+          } catch (error) {
+            console.error("Error in echo handler:", error);
           }
-          
-          // Echo the message back
-          socket.send(event.data);
         };
         
         // Return the WebSocket response

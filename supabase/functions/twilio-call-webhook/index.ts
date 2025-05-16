@@ -20,6 +20,7 @@ serve(async (req) => {
     const userId = url.searchParams.get("user_id");
     const callLogId = url.searchParams.get("call_log_id");
     const debug = url.searchParams.get("debug") === "true";
+    const echoMode = url.searchParams.get("echo") === "true"; // Add echo mode parameter
     
     // CRITICAL FIX: Supply default ElevenLabs agent ID if missing
     const finalAgentId = agentId || Deno.env.get("DEFAULT_AGENT_ID") || "UO1QDRUZh2ti2suBR4cq";
@@ -36,7 +37,8 @@ serve(async (req) => {
       voiceId: voiceId || "default",
       userId: userId || "none",
       callLogId: callLogId || "none",
-      debug: debug || false
+      debug: debug || false,
+      echoMode: echoMode || false
     });
     
     // Get Twilio form data or query parameters
@@ -68,8 +70,13 @@ serve(async (req) => {
     // Get the server hostname - CRITICAL CHANGE: Use the Supabase project ref in the URL
     const supabaseProjectRef = Deno.env.get("SUPABASE_PROJECT_REF") || "uttebgyhijrdcjiczxrg";
     
-    // Create the media stream URL with the full domain - CRITICAL FIX
+    // CRITICAL FIX: Create the proper WebSocket URL (wss://) for the media stream
+    // This is the most important fix - Twilio requires wss:// URLs, not http:// or https://
+    const baseUrl = `${url.protocol}//${url.hostname}`;
     const mediaStreamUrl = `wss://${supabaseProjectRef}.supabase.co/functions/v1/twilio-media-stream`;
+    
+    console.log(`Base URL: ${baseUrl}`);
+    console.log(`Generated media stream URL: ${mediaStreamUrl}`);
     
     // Add query parameters
     const params = new URLSearchParams();
@@ -92,6 +99,11 @@ serve(async (req) => {
     
     if (debug) {
       params.append("debug", "true");
+    }
+    
+    // Add echo mode parameter if true
+    if (echoMode) {
+      params.append("echo", "true");
     }
     
     const mediaStreamUrlWithParams = `${mediaStreamUrl}?${params.toString()}`;
@@ -127,6 +139,7 @@ serve(async (req) => {
                 voice_id: voiceId,
                 agent_id: finalAgentId,
                 debug_mode: debug,
+                echo_mode: echoMode,
                 twilio_params: twilioParams
               }
             };
