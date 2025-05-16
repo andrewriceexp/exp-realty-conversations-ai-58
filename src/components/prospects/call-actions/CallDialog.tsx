@@ -45,13 +45,13 @@ export function CallDialog({
   prospectName = 'Prospect', // Default value for prospectName
 }: CallDialogProps) {
   const [selectedConfigId, setSelectedConfigId] = useState<string>('');
-  const [selectedConfig, setSelectedConfig] = useState<AgentConfig | null>(null);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [callInProgress, setCallInProgress] = useState(false);
   const [callStatus, setCallStatus] = useState<string | null>(null);
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [developmentMode, setDevelopmentMode] = useState(false);
   const [echoMode, setEchoMode] = useState(false); 
+  const [debugMode, setDebugMode] = useState(false);
   const [showDevOptions, setShowDevOptions] = useState(false);
   const [useElevenLabsAgent, setUseElevenLabsAgent] = useState(false);
   const [elevenLabsAgentId, setElevenLabsAgentId] = useState('');
@@ -59,22 +59,6 @@ export function CallDialog({
   const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
   
   const twilioCall = useTwilioCall();
-
-  // Update selectedConfig whenever selectedConfigId changes
-  useEffect(() => {
-    // Logic to fetch the agent config based on ID and set it
-    // This would be added in a future implementation
-    if (selectedConfigId) {
-      // Mock implementation - in a real app, you'd fetch the config
-      setSelectedConfig({
-        id: selectedConfigId,
-        name: 'Selected Config',
-        // Add other required fields based on AgentConfig type
-      } as AgentConfig);
-    } else {
-      setSelectedConfig(null);
-    }
-  }, [selectedConfigId]);
 
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
@@ -120,9 +104,9 @@ export function CallDialog({
       // Set up the call parameters
       const callParams: MakeCallParams = {
         prospectId,
-        agentConfigId: selectedConfigId, // Use selectedConfigId instead of selectedConfig?.id
+        agentConfigId: selectedConfigId,
         bypassValidation: developmentMode,
-        debugMode: developmentMode,
+        debugMode,
         voiceId: selectedVoiceId || undefined,
         echoMode
       };
@@ -271,8 +255,8 @@ export function CallDialog({
             <DevelopmentModeOptions 
               bypassValidation={developmentMode}
               setBypassValidation={setDevelopmentMode}
-              debugMode={echoMode}
-              setDebugMode={setEchoMode}
+              debugMode={debugMode}
+              setDebugMode={setDebugMode}
               useEchoMode={echoMode}
               setUseEchoMode={setEchoMode}
             />

@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileData } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { Voice } from '@/hooks/useElevenLabs';
 
 interface ElevenLabsContextType {
   isApiKeyConfigured: boolean;
@@ -11,10 +12,10 @@ interface ElevenLabsContextType {
   apiKey: string | null;
   voiceId: string | null;
   phoneNumberId: string | null;
-  // Add these missing properties
   isLoading: boolean;
   error: string | null;
   getSignedUrl: (agentId: string) => Promise<string | null>;
+  getVoices: () => Promise<Voice[]>;
   clearError: () => void;
 }
 
@@ -25,17 +26,17 @@ const defaultContext: ElevenLabsContextType = {
   apiKey: null,
   voiceId: null,
   phoneNumberId: null,
-  // Add default values for the missing properties
   isLoading: false,
   error: null,
   getSignedUrl: () => Promise.resolve(null),
+  getVoices: () => Promise.resolve([]),
   clearError: () => {}
 };
 
 export const ElevenLabsContext = createContext<ElevenLabsContextType>(defaultContext);
 
 export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<Omit<ElevenLabsContextType, 'getSignedUrl' | 'clearError'>>({
+  const [state, setState] = useState<Omit<ElevenLabsContextType, 'getSignedUrl' | 'getVoices' | 'clearError'>>({
     ...defaultContext,
     isLoading: true
   });
@@ -100,6 +101,43 @@ export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   };
 
+  // Implement the getVoices method
+  const getVoices = async (): Promise<Voice[]> => {
+    if (!state.apiKey) {
+      setError("ElevenLabs API key is not configured");
+      return [];
+    }
+
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
+        body: {} // No additional parameters needed
+      });
+      
+      if (error) {
+        console.error("Error fetching voices:", error);
+        setError(`Failed to fetch voices: ${error.message}`);
+        return [];
+      }
+      
+      if (!data?.voices || !Array.isArray(data.voices)) {
+        console.error("Invalid response format when fetching voices");
+        setError("Invalid response format when fetching voices");
+        return [];
+      }
+      
+      return data.voices;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error("Unexpected error fetching voices:", errorMessage);
+      setError(`Unexpected error: ${errorMessage}`);
+      return [];
+    } finally {
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  };
+
   // Implement the clearError method
   const clearError = () => {
     setError(null);
@@ -109,6 +147,7 @@ export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     ...state,
     error,
     getSignedUrl,
+    getVoices,
     clearError
   };
 

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { AgentConfig } from '@/types';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +12,7 @@ export const useAgentConfigs = () => {
   const [currentConfig, setCurrentConfig] = useState<AgentConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Default new config template
   const defaultConfig = {
@@ -31,14 +33,17 @@ export const useAgentConfigs = () => {
   const fetchConfigs = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('agent_configs')
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (fetchError) {
+        throw fetchError;
+      }
       
       setConfigs(data || []);
       
@@ -48,6 +53,7 @@ export const useAgentConfigs = () => {
       }
     } catch (error: any) {
       console.error('Error fetching agent configs:', error);
+      setError(error.message || 'Failed to load agent configurations.');
       toast({
         title: 'Error',
         description: 'Failed to load agent configurations.',
@@ -173,7 +179,9 @@ export const useAgentConfigs = () => {
   };
 
   useEffect(() => {
-    fetchConfigs();
+    if (user?.id) {
+      fetchConfigs();
+    }
   }, [user?.id]);
 
   return {
@@ -182,6 +190,7 @@ export const useAgentConfigs = () => {
     setCurrentConfig,
     isLoading,
     isSaving,
+    error,
     createNewConfig,
     handleSave,
     handleDelete,

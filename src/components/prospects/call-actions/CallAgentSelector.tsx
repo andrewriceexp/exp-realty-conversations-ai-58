@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useAgentConfigs } from '@/hooks/useAgentConfigs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,7 +14,7 @@ const CallAgentSelector = ({
   setSelectedConfigId,
   className
 }: CallAgentSelectorProps) => {
-  const { agentConfigs, isLoading, error } = useAgentConfigs();
+  const { configs, isLoading, createNewConfig, handleDelete, handleSave } = useAgentConfigs();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -31,10 +32,12 @@ const CallAgentSelector = ({
       </SelectTrigger>
       <SelectContent>
         {isLoading && <SelectItem value="loading" disabled>Loading...</SelectItem>}
-        {error && <SelectItem value="error" disabled>Error: {error}</SelectItem>}
-        {agentConfigs?.map((config) => (
+        {!isLoading && configs.length === 0 && (
+          <SelectItem value="error" disabled>No agent configurations found</SelectItem>
+        )}
+        {configs?.map((config) => (
           <SelectItem key={config.id} value={config.id}>
-            {config.name}
+            {config.config_name}
           </SelectItem>
         ))}
       </SelectContent>
