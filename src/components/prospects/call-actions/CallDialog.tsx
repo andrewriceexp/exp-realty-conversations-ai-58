@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -23,7 +24,8 @@ import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
-import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
+// Import as named import, not default
+import { ElevenLabsDirectConnect } from './index';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CallDialogProps {

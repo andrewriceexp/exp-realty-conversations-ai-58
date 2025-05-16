@@ -13,9 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import MainLayout from "@/components/MainLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import { ProfileForm } from "@/components/profile/ProfileForm";
-import { TwilioConfiguration } from "@/components/profile/TwilioConfiguration";
-import { ElevenLabsInfo } from "@/components/profile/ElevenLabsInfo";
+// Fixed imports to use default exports
+import ProfileForm from "@/components/profile/ProfileForm";
+import TwilioConfiguration from "@/components/profile/TwilioConfiguration";
+import ElevenLabsInfo from "@/components/profile/ElevenLabsInfo";
 import { Spinner } from "@/components/ui/spinner";
 
 const ProfileSetup = () => {

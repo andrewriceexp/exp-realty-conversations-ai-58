@@ -1,4 +1,3 @@
-
 import { FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,7 +12,7 @@ interface TwilioConfigurationProps {
   hasAuthToken: boolean;
 }
 
-const TwilioConfiguration = ({ form, isLoading, hasAuthToken }: TwilioConfigurationProps) => {
+export default function TwilioConfiguration({ form, isLoading, hasAuthToken }: TwilioConfigurationProps) {
   return (
     <div>
       <h3 className="text-lg font-medium mb-2">Twilio Configuration</h3>
@@ -131,6 +130,4 @@ const TwilioConfiguration = ({ form, isLoading, hasAuthToken }: TwilioConfigurat
       </div>
     </div>
   );
-};
-
-export default TwilioConfiguration;
+}

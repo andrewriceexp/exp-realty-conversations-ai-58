@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Info } from "lucide-react";
 
-export const ElevenLabsDirectConnect = () => {
+// Changed from export const to export default
+export default function ElevenLabsDirectConnect() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -87,4 +88,4 @@ export const ElevenLabsDirectConnect = () => {
       </CardFooter>
     </Card>
   );
-};
+}

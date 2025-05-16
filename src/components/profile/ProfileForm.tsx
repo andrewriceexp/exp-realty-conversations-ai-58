@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,7 +35,7 @@ interface ProfileFormProps {
   onNavigate: () => void;
 }
 
-const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) => {
+export default function ProfileForm({ profile, updateProfile, onNavigate }: ProfileFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [hasAuthToken, setHasAuthToken] = useState(!!profile?.twilio_auth_token);
   const [updateSuccess, setUpdateSuccess] = useState(false);
@@ -215,5 +214,3 @@ const ProfileForm = ({ profile, updateProfile, onNavigate }: ProfileFormProps) =
     </>
   );
 };
-
-export default ProfileForm;
