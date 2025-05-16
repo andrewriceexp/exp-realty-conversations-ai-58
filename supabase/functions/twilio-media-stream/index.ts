@@ -1,4 +1,3 @@
-
 // Import required packages
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -65,6 +64,8 @@ serve(async (req) => {
       // Use Deno's upgradeWebSocket function which handles the handshake correctly
       const { socket, response } = Deno.upgradeWebSocket(req);
       
+      let twilioStreamSid = null; // Variable to store the Twilio streamSid
+
       console.log("WebSocket connection established successfully");
 
       // Set up socket event handlers
@@ -165,9 +166,14 @@ serve(async (req) => {
                   
                 case "audio":
                   if (message.audio_event?.audio_base_64) {
-                    // Forward audio data to Twilio
+                    if (!twilioStreamSid) {
+                      console.warn("Cannot forward ElevenLabs audio to Twilio: twilioStreamSid is not set yet.");
+                      return;
+                    }
+                    // Forward audio data to Twilio, including the streamSid
                     socket.send(JSON.stringify({
                       event: "media",
+                      streamSid: twilioStreamSid, // Include the Twilio streamSid
                       media: {
                         payload: message.audio_event.audio_base_64
                       }
@@ -176,8 +182,12 @@ serve(async (req) => {
                   break;
                   
                 case "interruption":
+                  if (!twilioStreamSid) {
+                    console.warn("Cannot forward ElevenLabs interruption to Twilio: twilioStreamSid is not set yet.");
+                    return;
+                  }
                   // Forward interruption to Twilio to clear the audio queue
-                  socket.send(JSON.stringify({ event: "clear" }));
+                  socket.send(JSON.stringify({ event: "clear", streamSid: twilioStreamSid })); // Include the Twilio streamSid
                   break;
                   
                 case "ping":
@@ -236,7 +246,13 @@ serve(async (req) => {
               // Handle different Twilio events
               switch (data.event) {
                 case "start":
-                  console.log("Twilio stream started");
+                  console.log("Twilio stream started", data.start);
+                  if (data.start && data.start.streamSid) {
+                    twilioStreamSid = data.start.streamSid; // Capture the streamSid
+                    console.log(`Captured Twilio streamSid: ${twilioStreamSid}`);
+                  } else {
+                    console.error("Twilio 'start' event did not contain streamSid an 'start' object with a streamSid property.");
+                  }
                   break;
                   
                 case "media":
