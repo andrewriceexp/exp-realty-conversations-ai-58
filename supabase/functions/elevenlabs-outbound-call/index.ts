@@ -298,7 +298,7 @@ serve(async (req) => {
     // Classify specific error types
     if (error.message?.includes("ElevenLabs API key")) {
       errorCode = "ELEVENLABS_API_KEY_MISSING";
-    } else if (error.message?.includes("phone number ID")) {
+    } else if (error.message?.includes("phone number ID") && error.message?.includes("not found")) {
       errorCode = "ELEVENLABS_PHONE_NUMBER_INVALID";
     } else if (error.message?.includes("timed out")) {
       errorCode = "REQUEST_TIMEOUT";

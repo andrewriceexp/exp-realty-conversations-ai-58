@@ -25,6 +25,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { cn } from "@/lib/utils";
 import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CallDialogProps {
   prospectId: string;
@@ -56,9 +57,18 @@ export function CallDialog({
   const [elevenLabsAgentId, setElevenLabsAgentId] = useState('');
   const [elevenLabsPhoneNumberId, setElevenLabsPhoneNumberId] = useState('');
   const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
+  const [isVerifyingCall, setIsVerifyingCall] = useState(false);
   
   const twilioCall = useTwilioCall();
   const { toast } = useToast();
+  const { profile } = useAuth();
+
+  // Initialize phone number ID from profile if available
+  useEffect(() => {
+    if (profile?.elevenlabs_phone_number_id) {
+      setElevenLabsPhoneNumberId(profile.elevenlabs_phone_number_id);
+    }
+  }, [profile]);
 
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
@@ -98,6 +108,7 @@ export function CallDialog({
   const handleStartCall = async () => {
     setCallStatus('Initiating call...');
     setCallInProgress(true);
+    setIsVerifyingCall(true);
     let callResponse;
 
     try {
@@ -111,13 +122,24 @@ export function CallDialog({
         echoMode
       };
 
-      // Add ElevenLabs specific parameters if using ElevenLabs
-      if (useElevenLabsAgent && elevenLabsAgentId) {
+      // Special validation for ElevenLabs
+      if (useElevenLabsAgent) {
+        if (!elevenLabsAgentId) {
+          throw new Error("Please enter your ElevenLabs Agent ID");
+        }
+
+        if (!elevenLabsPhoneNumberId) {
+          throw new Error("Please enter your ElevenLabs Phone Number ID");
+        }
+
+        // Add ElevenLabs specific parameters
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
         callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId;
         
         console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
+        console.log("Using ElevenLabs phone number ID:", elevenLabsPhoneNumberId);
+        
         callResponse = await twilioCall.makeCall(callParams);
       } else if (selectedConfigId) {
         // Only attempt regular call if a config is selected
@@ -148,9 +170,8 @@ export function CallDialog({
         });
         setCallInProgress(false);
         
-        // Check for specific error codes
-        if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING" || 
-            callResponse.code === "ELEVENLABS_PHONE_NUMBER_INVALID") {
+        // Provide specific guidance based on error codes
+        if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING") {
           toast({
             title: "Phone Number Missing",
             description: "You need to configure your ElevenLabs phone number ID in your profile settings.",
@@ -159,6 +180,19 @@ export function CallDialog({
             action: (
               <ToastAction altText="Go to profile" onClick={() => window.location.href = '/profile-setup'}>
                 Configure
+              </ToastAction>
+            )
+          });
+        } 
+        else if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_INVALID") {
+          toast({
+            title: "Invalid Phone Number ID",
+            description: "The ElevenLabs phone number ID you provided is invalid. Please check your ElevenLabs account for the correct ID.",
+            variant: "destructive",
+            duration: 8000,
+            action: (
+              <ToastAction altText="Configure" onClick={() => {}}>
+                Learn More
               </ToastAction>
             )
           });
@@ -173,6 +207,8 @@ export function CallDialog({
         variant: "destructive",
       });
       setCallInProgress(false);
+    } finally {
+      setIsVerifyingCall(false);
     }
   };
   
@@ -210,7 +246,7 @@ export function CallDialog({
             useElevenLabsAgent={useElevenLabsAgent}
             setUseElevenLabsAgent={setUseElevenLabsAgent}
             elevenLabsAgentId={elevenLabsAgentId}
-            setElevenLabsAgentId={setElevenLabsAgentId} 
+            setElevenLabsAgentId={setElevenLabsAgentId}
             elevenLabsPhoneNumberId={elevenLabsPhoneNumberId}
             setElevenLabsPhoneNumberId={setElevenLabsPhoneNumberId}
           />
@@ -277,7 +313,7 @@ export function CallDialog({
             <CallStatusIndicator 
               status={callStatus || ''} 
               callSid={currentCallId}
-              isVerifyingCall={false} 
+              isVerifyingCall={isVerifyingCall} 
               bypassValidation={developmentMode} 
               useEchoMode={echoMode}
             />
