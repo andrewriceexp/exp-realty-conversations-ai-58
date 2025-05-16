@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -32,7 +33,7 @@ interface CallDialogProps {
   onOpenChange: (open: boolean) => void;
   onCallComplete: () => void;
   reload: () => void;
-  prospectName?: string; // Make this optional to fix compatibility
+  prospectName?: string; // Now this is optional
 }
 
 export function CallDialog({
@@ -41,6 +42,7 @@ export function CallDialog({
   onOpenChange, 
   onCallComplete,
   reload,
+  prospectName = 'Prospect', // Default value for prospectName
 }: CallDialogProps) {
   const [selectedConfigId, setSelectedConfigId] = useState<string>('');
   const [selectedConfig, setSelectedConfig] = useState<AgentConfig | null>(null);
@@ -62,6 +64,16 @@ export function CallDialog({
   useEffect(() => {
     // Logic to fetch the agent config based on ID and set it
     // This would be added in a future implementation
+    if (selectedConfigId) {
+      // Mock implementation - in a real app, you'd fetch the config
+      setSelectedConfig({
+        id: selectedConfigId,
+        name: 'Selected Config',
+        // Add other required fields based on AgentConfig type
+      } as AgentConfig);
+    } else {
+      setSelectedConfig(null);
+    }
   }, [selectedConfigId]);
 
   const handleEndCall = async () => {
@@ -108,7 +120,7 @@ export function CallDialog({
       // Set up the call parameters
       const callParams: MakeCallParams = {
         prospectId,
-        agentConfigId: selectedConfig?.id,
+        agentConfigId: selectedConfigId, // Use selectedConfigId instead of selectedConfig?.id
         bypassValidation: developmentMode,
         debugMode: developmentMode,
         voiceId: selectedVoiceId || undefined,
@@ -194,7 +206,7 @@ export function CallDialog({
           </div>
           
           <ConfigurationWarnings 
-            agentConfig={selectedConfig}
+            agentConfigId={selectedConfigId}
             developmentMode={developmentMode}
             useElevenLabsAgent={useElevenLabsAgent}
           />
@@ -270,7 +282,13 @@ export function CallDialog({
         
         {callInProgress ? (
           <div className="flex flex-col gap-4">
-            <CallStatusIndicator status={callStatus} callSid={currentCallId} isVerifyingCall={false} bypassValidation={developmentMode} useEchoMode={echoMode} />
+            <CallStatusIndicator 
+              status={callStatus || ''} 
+              callSid={currentCallId}
+              isVerifyingCall={false} 
+              bypassValidation={developmentMode} 
+              useEchoMode={echoMode}
+            />
             <Button 
               variant="destructive" 
               onClick={handleEndCall} 

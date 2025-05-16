@@ -1,48 +1,38 @@
+import { Loader2 } from 'lucide-react';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { getStatusDescription } from './utils';
-
-interface CallStatusIndicatorProps {
-  status?: string | null;
-  callStatus?: string | null;
-  callSid?: string | null;
-  isVerifyingCall?: boolean;
+export interface CallStatusIndicatorProps {
+  status: string;
+  callSid: string | null;
+  isVerifyingCall: boolean;
   bypassValidation?: boolean;
   useEchoMode?: boolean;
 }
 
-const CallStatusIndicator = ({ 
-  callStatus, 
+const CallStatusIndicator = ({
   status,
-  callSid, 
-  isVerifyingCall = false, 
-  bypassValidation = false, 
-  useEchoMode = false 
+  callSid,
+  isVerifyingCall,
+  bypassValidation,
+  useEchoMode
 }: CallStatusIndicatorProps) => {
-  // Support both status and callStatus props (status takes precedence)
-  const displayStatus = status || callStatus;
-  
-  if (!displayStatus) return null;
   
   return (
-    <>
-      <Alert variant={displayStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Call status: {displayStatus}
-          {isVerifyingCall && <Loader2 className="ml-2 h-4 w-4 inline animate-spin" />}
-        </AlertDescription>
-      </Alert>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center">
+        {isVerifyingCall ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : null}
+        <span className="text-sm text-muted-foreground">{status}</span>
+      </div>
       
-      {/* Show additional info for development mode */}
-      {bypassValidation && callSid && (
-        <div className="text-xs text-muted-foreground mb-4 p-2 bg-muted rounded">
-          <p>Call SID: {callSid}</p>
-          {useEchoMode && <p className="font-semibold mt-1">Echo Mode: WebSocket test only (no ElevenLabs)</p>}
-        </div>
+      {bypassValidation && (
+        <span className="text-xs text-blue-500">Bypass Validation</span>
       )}
-    </>
+      
+      {useEchoMode && (
+        <span className="text-xs text-green-500">Echo Mode</span>
+      )}
+    </div>
   );
 };
 

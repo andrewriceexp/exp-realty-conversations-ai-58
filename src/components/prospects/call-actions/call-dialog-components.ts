@@ -6,6 +6,7 @@ import ConfigurationWarnings from './ConfigurationWarnings';
 import DevelopmentModeOptions from './DevelopmentModeOptions';
 import ElevenLabsVoiceSelector from './ElevenLabsVoiceSelector';
 
+// Export the components with their proper props types
 export {
   CallAgentSelector,
   CallStatusIndicator,

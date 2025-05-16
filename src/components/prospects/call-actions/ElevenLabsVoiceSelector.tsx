@@ -3,22 +3,22 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Headphones, Loader2 } from 'lucide-react';
-import { useElevenLabs } from '@/hooks/useElevenLabs';
+import { useElevenLabs } from '@/contexts/ElevenLabsContext';
 import { VoiceOption } from './types';
 import { useToast } from '@/hooks/use-toast';
 
-interface ElevenLabsVoiceSelectorProps {
-  useElevenLabsVoice?: boolean;
-  setUseElevenLabsVoice?: (value: boolean) => void;
+export interface ElevenLabsVoiceSelectorProps {
   selectedVoiceId: string | null;
-  setSelectedVoiceId: (id: string) => void;
+  setSelectedVoiceId: (id: string | null) => void;
+  useElevenLabsVoice: boolean;
+  setUseElevenLabsVoice: (use: boolean) => void;
 }
 
-const ElevenLabsVoiceSelector = ({ 
-  useElevenLabsVoice = true, 
-  setUseElevenLabsVoice = () => {}, 
-  selectedVoiceId, 
-  setSelectedVoiceId 
+const ElevenLabsVoiceSelector = ({
+  selectedVoiceId,
+  setSelectedVoiceId,
+  useElevenLabsVoice,
+  setUseElevenLabsVoice
 }: ElevenLabsVoiceSelectorProps) => {
   const { getVoices } = useElevenLabs();
   const { toast } = useToast();

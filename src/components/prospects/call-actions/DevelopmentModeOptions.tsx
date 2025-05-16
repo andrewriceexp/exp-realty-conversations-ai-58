@@ -1,17 +1,15 @@
-
+import { InfoIcon } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Bug } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface DevelopmentModeOptionsProps {
-  bypassValidation?: boolean;
-  setBypassValidation: (value: boolean) => void;
-  debugMode?: boolean;
-  setDebugMode: (value: boolean) => void;
-  useEchoMode?: boolean;
-  setUseEchoMode: (value: boolean) => void;
-  developmentMode?: boolean;
+export interface DevelopmentModeOptionsProps {
+  bypassValidation: boolean;
+  setBypassValidation: (bypass: boolean) => void;
+  debugMode: boolean;
+  setDebugMode: (debug: boolean) => void;
+  useEchoMode: boolean;
+  setUseEchoMode: (echo: boolean) => void;
 }
 
 const DevelopmentModeOptions = ({
@@ -20,8 +18,7 @@ const DevelopmentModeOptions = ({
   debugMode,
   setDebugMode,
   useEchoMode,
-  setUseEchoMode,
-  developmentMode
+  setUseEchoMode
 }: DevelopmentModeOptionsProps) => {
   // Use the developmentMode prop if bypassValidation is not provided
   const isDevelopmentMode = bypassValidation !== undefined ? bypassValidation : developmentMode;
