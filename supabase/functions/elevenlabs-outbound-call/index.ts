@@ -143,13 +143,34 @@ serve(async (req) => {
       });
     }
     
-    console.log(`Using ElevenLabs Phone Number ID: ${elPhoneNumberId}`);
+    // Validate ElevenLabs phone number format
+    let formattedPhoneNumber = elPhoneNumberId.trim();
+    // If it doesn't start with a plus sign, add it
+    if (!formattedPhoneNumber.startsWith("+")) {
+      formattedPhoneNumber = "+" + formattedPhoneNumber;
+    }
+    
+    // Validate with E.164 format
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(formattedPhoneNumber)) {
+      console.error(`Invalid phone number format: ${formattedPhoneNumber}`);
+      return new Response(JSON.stringify({
+        success: false,
+        message: "ElevenLabs phone number must be in E.164 format (e.g., +12125551234)",
+        code: "ELEVENLABS_PHONE_NUMBER_INVALID"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
+    console.log(`Using ElevenLabs Phone Number ID: ${formattedPhoneNumber}`);
     
     // Prepare the payload for ElevenLabs API
     const payload = {
       agent_id,
       to_number,
-      agent_phone_number_id: elPhoneNumberId,
+      agent_phone_number_id: formattedPhoneNumber,
       conversation_initiation_client_data: {
         dynamic_variables: dynamic_variables || {},
         conversation_config_override: {
@@ -167,7 +188,7 @@ serve(async (req) => {
     // Log configuration (without sensitive data)
     console.log("Call configuration:", {
       agent_id,
-      agent_phone_number_id: elPhoneNumberId,
+      agent_phone_number_id: formattedPhoneNumber,
       dynamic_variables: dynamic_variables ? "Provided" : "Not provided",
       voice_override: conversation_config_override?.tts?.voice_id ? "Custom voice provided" : "Using default voice",
       audio_format: "mulaw_8000 (optimized for telephony)"
@@ -211,14 +232,25 @@ serve(async (req) => {
         try {
           errorDetails = await response.json();
           console.error("ElevenLabs API error details:", errorDetails);
+          
+          // Check for specific phone_number_not_found error
+          if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
+            return new Response(JSON.stringify({
+              success: false,
+              message: `The phone number ${formattedPhoneNumber} is not registered with your ElevenLabs account. Please register this number with ElevenLabs or use a different number.`,
+              code: "ELEVENLABS_PHONE_NUMBER_NOT_FOUND",
+              details: {
+                phoneNumber: formattedPhoneNumber,
+                errorType: "phone_number_not_found"
+              }
+            }), {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
         } catch (parseError) {
           console.error("Could not parse error response", parseError);
           errorDetails = { message: await response.text() };
-        }
-        
-        // Handle specific error types with clear messages
-        if (response.status === 404 && errorDetails?.detail?.status === "phone_number_not_found") {
-          throw new Error(`The ElevenLabs Phone Number ID "${elPhoneNumberId}" was not found in your ElevenLabs account. Please verify your phone number ID is correct and registered for outbound calls.`);
         }
         
         // For other errors, throw and capture below
@@ -264,7 +296,7 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         metadata: {
           agent_id,
-          agent_phone_number_id: elPhoneNumberId,
+          agent_phone_number_id: formattedPhoneNumber,
           dynamic_variables,
           conversation_config_override,
           audio_format: {

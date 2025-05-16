@@ -400,8 +400,8 @@ export function useTwilioCall() {
       configOverride.agent.input_format = "mulaw_8000";
       configOverride.agent.output_format = "mulaw_8000";
       
-      // Validate the phone number format (must be E.164)
-      const phoneNumberToUse = params.elevenLabsPhoneNumberId;
+      // Format and validate the phone number
+      let phoneNumberToUse = params.elevenLabsPhoneNumberId || '';
       
       if (!phoneNumberToUse) {
         console.error("[TwilioCall] No ElevenLabs Phone Number ID provided");
@@ -410,6 +410,12 @@ export function useTwilioCall() {
           message: "ElevenLabs Phone Number ID is required",
           code: "ELEVENLABS_PHONE_NUMBER_MISSING"
         };
+      }
+      
+      // Format the phone number (add + if missing)
+      phoneNumberToUse = phoneNumberToUse.trim();
+      if (!phoneNumberToUse.startsWith('+')) {
+        phoneNumberToUse = `+${phoneNumberToUse}`;
       }
       
       const phoneRegex = /^\+[1-9]\d{1,14}$/;
@@ -424,6 +430,16 @@ export function useTwilioCall() {
       
       console.log("[TwilioCall] Using ElevenLabs Phone Number:", phoneNumberToUse);
       
+      // Add more useful dynamic variables for the conversation
+      const dynamicVariables = {
+        prospect_name: prospectData.first_name || 'Prospect',
+        prospect_id: params.prospectId,
+        caller_name: profile?.full_name || 'Agent',
+        call_purpose: "Sales call"
+      };
+      
+      console.log("[TwilioCall] Using dynamic variables:", dynamicVariables);
+      
       // Call the elevenlabs-outbound-call edge function
       const { data, error } = await supabase.functions.invoke('elevenlabs-outbound-call', {
         body: {
@@ -433,10 +449,7 @@ export function useTwilioCall() {
           user_id: userId,
           prospect_id: params.prospectId,
           agent_config_id: params.agentConfigId,
-          dynamic_variables: {
-            prospect_name: prospectData.first_name || 'Prospect',
-            prospect_id: params.prospectId
-          },
+          dynamic_variables: dynamicVariables,
           conversation_config_override: configOverride
         }
       });
@@ -449,6 +462,9 @@ export function useTwilioCall() {
           error: error.message
         };
       }
+      
+      // Log the response in detail for debugging
+      console.log("[TwilioCall] Complete ElevenLabs API response:", data);
       
       if (data?.success) {
         console.log("[TwilioCall] ElevenLabs call initiated successfully, SID:", data.callSid);

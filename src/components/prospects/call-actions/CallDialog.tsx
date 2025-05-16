@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -146,23 +145,38 @@ export function CallDialog({
         }
 
         // Validate phone number format
+        let formattedPhoneNumber = elevenLabsPhoneNumberId.trim();
+        if (!formattedPhoneNumber.startsWith('+')) {
+          formattedPhoneNumber = `+${formattedPhoneNumber}`;
+        }
+        
         const phoneRegex = /^\+[1-9]\d{1,14}$/;
-        if (!phoneRegex.test(elevenLabsPhoneNumberId.trim())) {
+        if (!phoneRegex.test(formattedPhoneNumber)) {
           throw new Error("Phone number must be in E.164 format (e.g., +12125551234)");
         }
 
         // Add ElevenLabs specific parameters
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
-        callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId.trim();
+        callParams.elevenLabsPhoneNumberId = formattedPhoneNumber;
         
         console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
-        console.log("Using ElevenLabs phone number:", elevenLabsPhoneNumberId);
+        console.log("Using ElevenLabs phone number:", formattedPhoneNumber);
         
         // Make the ElevenLabs call with detailed logging
         try {
           callResponse = await twilioCall.makeCall(callParams);
           console.log("ElevenLabs call response:", callResponse);
+          
+          // If the call fails with specific errors, provide helpful guidance
+          if (!callResponse.success) {
+            if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_NOT_FOUND") {
+              throw new Error(`The phone number ${formattedPhoneNumber} is not registered with your ElevenLabs account. Please register this number first.`);
+            } else if (callResponse.code === "ELEVENLABS_API_KEY_MISSING") {
+              throw new Error("ElevenLabs API key is not configured. Please set it up in your profile settings.");
+            }
+            // Let any other errors be caught by the generic handler below
+          }
         } catch (error) {
           console.error("Error making ElevenLabs call:", error);
           throw error;
@@ -234,6 +248,7 @@ export function CallDialog({
         title: "Error",
         description: error.message || "An unexpected error occurred",
         variant: "destructive",
+        duration: 8000
       });
       setCallInProgress(false);
     } finally {
