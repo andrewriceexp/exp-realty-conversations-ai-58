@@ -61,7 +61,7 @@ const ElevenLabsDirectConnect = ({
       
       {isApiKeyValid && useElevenLabsAgent && (
         <div className="space-y-4">
-          <Alert variant="success" className="mt-2 border-green-500 bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
+          <Alert className="mt-2 border-green-500 bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300 dark:border-green-800">
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
               Direct connection will bypass Twilio and use your ElevenLabs API key directly. This is recommended for more reliable voice interactions.

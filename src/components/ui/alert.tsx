@@ -16,6 +16,8 @@ const alertVariants = cva(
           "border-yellow-500/30 bg-yellow-50 text-yellow-800 dark:border-yellow-500/30 dark:bg-yellow-900/30 dark:text-yellow-500 [&>svg]:text-yellow-600",
         info:
           "border-blue-500/30 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-900/30 dark:text-blue-500 [&>svg]:text-blue-600",
+        success:
+          "border-green-500/30 bg-green-50 text-green-800 dark:border-green-500/30 dark:bg-green-900/30 dark:text-green-500 [&>svg]:text-green-600",
       },
     },
     defaultVariants: {
@@ -25,7 +27,7 @@ const alertVariants = cva(
 )
 
 // Define the variant type explicitly to include all variants
-type AlertVariant = "default" | "destructive" | "warning" | "info"
+type AlertVariant = "default" | "destructive" | "warning" | "info" | "success"
 
 const Alert = React.forwardRef<
   HTMLDivElement,

@@ -43,7 +43,7 @@ const ElevenLabsAgentSelector = ({
         
         const formattedAgents = data?.map(agent => ({
           id: agent.agent_id,
-          name: agent.agent_name || agent.agent_id
+          name: agent.name || agent.agent_id
         })) || [];
         
         console.log(`Fetched ${formattedAgents.length} ElevenLabs agents`);
