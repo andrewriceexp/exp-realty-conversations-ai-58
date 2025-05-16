@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
 
 const resetSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -19,6 +20,7 @@ type ResetFormValues = z.infer<typeof resetSchema>;
 
 const ForgotPassword = () => {
   const { resetPassword, loading } = useAuth();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +36,35 @@ const ForgotPassword = () => {
     try {
       setIsLoading(true);
       setError(null);
+      console.log("[ForgotPassword] Requesting password reset for:", values.email);
+      
       await resetPassword(values.email);
       setResetSent(true);
+      
+      // Show success toast
+      try {
+        toast({
+          title: "Reset link sent",
+          description: "If an account exists, you'll receive reset instructions via email."
+        });
+      } catch (toastError) {
+        console.warn("[ForgotPassword] Toast error:", toastError);
+      }
+      
     } catch (error: any) {
       console.error('Password reset error:', error);
       setError(error.message || "Failed to send reset email. Please try again.");
+      
+      // Show error toast
+      try {
+        toast({
+          variant: "destructive",
+          title: "Reset failed",
+          description: error.message || "Failed to send reset email. Please try again."
+        });
+      } catch (toastError) {
+        console.warn("[ForgotPassword] Toast error:", toastError);
+      }
     } finally {
       setIsLoading(false);
     }

@@ -6,19 +6,24 @@ import type { Database } from './types';
 const SUPABASE_URL = "https://uttebgyhijrdcjiczxrg.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0dGViZ3loaWpyZGNqaWN6eHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY0NzQ2MzEsImV4cCI6MjA2MjA1MDYzMX0.8jRBYW1bNmABnLP45sIGd6M_7WQpwfv8munys4NbCAA";
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Create a singleton instance to avoid multiple GoTrueClient warnings
+let supabaseInstance: ReturnType<typeof createClient<Database>> | null = null;
 
-// Use enhanced security and persistence configuration
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'implicit',
-  }
-});
+export const supabase = (() => {
+  if (supabaseInstance) return supabaseInstance;
+  
+  supabaseInstance = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false, // Changed to avoid URL fragment issues
+      flowType: 'pkce', // Changed to PKCE for better security
+    }
+  });
+  
+  return supabaseInstance;
+})();
 
 // Add runtime protection
 (function() {

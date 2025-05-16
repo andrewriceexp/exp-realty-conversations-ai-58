@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 const resetSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -26,6 +26,7 @@ const ResetPassword = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [hash, setHash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<ResetFormValues>({
     resolver: zodResolver(resetSchema),
@@ -36,47 +37,101 @@ const ResetPassword = () => {
   });
 
   useEffect(() => {
-    // Get the hash from the URL
-    const hashParam = new URL(window.location.href).hash.substring(1);
+    console.log("[ResetPassword] Component mounted");
+    
+    // Check if the URL contains a hash parameter (recovery token)
+    const url = new URL(window.location.href);
+    const hashParam = url.hash.substring(1);
+    
+    // Also check for recovery token in query parameters (alternate format)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token');
+    
+    console.log("[ResetPassword] URL params:", { hashParam, tokenParam });
+    
     if (hashParam) {
+      console.log("[ResetPassword] Found hash parameter");
       setHash(hashParam);
+    } else if (tokenParam) {
+      console.log("[ResetPassword] Found token parameter");
+      setHash(tokenParam);
     } else {
-      toast({
-        title: 'Invalid reset link',
-        description: 'The password reset link appears to be invalid or expired.',
-        variant: 'destructive',
-      });
-      navigate('/login', { replace: true });
+      console.log("[ResetPassword] No valid reset token found");
+      setError("Invalid or missing reset token");
+      
+      try {
+        toast({
+          title: 'Invalid reset link',
+          description: 'The password reset link appears to be invalid or expired.',
+          variant: 'destructive',
+        });
+      } catch (toastError) {
+        console.warn("[ResetPassword] Toast error:", toastError);
+      }
+      
+      // Delay redirect to allow user to see the error
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 3000);
     }
   }, [navigate, toast]);
 
   const onSubmit = async (values: ResetFormValues) => {
-    if (!hash) return;
-
+    console.log("[ResetPassword] Submitting password reset");
+    setIsLoading(true);
+    setError(null);
+    
     try {
-      setIsLoading(true);
-      
+      // Update the user's password
       const { error } = await supabase.auth.updateUser({
         password: values.password
       });
       
       if (error) {
-        toast({
-          title: 'Password Reset Failed',
-          description: error.message,
-          variant: 'destructive',
-        });
-        throw error;
+        console.error("[ResetPassword] Error updating password:", error);
+        setError(error.message);
+        
+        try {
+          toast({
+            title: 'Password Reset Failed',
+            description: error.message,
+            variant: 'destructive',
+          });
+        } catch (toastError) {
+          console.warn("[ResetPassword] Toast error:", toastError);
+        }
+        
+        return;
       }
       
-      toast({
-        title: 'Password Reset Successful',
-        description: 'Your password has been updated. You can now log in with your new password.',
-      });
+      console.log("[ResetPassword] Password updated successfully");
       
-      navigate('/login', { replace: true });
-    } catch (error) {
-      console.error('Password update error:', error);
+      try {
+        toast({
+          title: 'Password Reset Successful',
+          description: 'Your password has been updated. You can now log in with your new password.',
+        });
+      } catch (toastError) {
+        console.warn("[ResetPassword] Toast error:", toastError);
+      }
+      
+      // Redirect to login page
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 1500);
+    } catch (error: any) {
+      console.error("[ResetPassword] Exception updating password:", error);
+      setError(error.message || "An error occurred while resetting your password.");
+      
+      try {
+        toast({
+          title: 'Password Reset Failed',
+          description: error.message || "An error occurred while resetting your password.",
+          variant: 'destructive',
+        });
+      } catch (toastError) {
+        console.warn("[ResetPassword] Toast error:", toastError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +155,11 @@ const ResetPassword = () => {
           </CardHeader>
           <CardContent>
             <Form {...form}>
+              {error && (
+                <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
                   control={form.control}
@@ -127,12 +187,26 @@ const ResetPassword = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full exp-gradient" disabled={isLoading}>
+                <Button 
+                  type="submit" 
+                  className="w-full exp-gradient" 
+                  disabled={isLoading || !hash}>
                   {isLoading ? 'Updating Password...' : 'Update Password'}
                 </Button>
               </form>
             </Form>
           </CardContent>
+          <CardFooter className="flex justify-center">
+            <div className="text-sm">
+              <Button
+                variant="link"
+                onClick={() => navigate('/login')}
+                className="p-0 h-auto text-exp-blue hover:underline"
+              >
+                Back to login
+              </Button>
+            </div>
+          </CardFooter>
         </Card>
       </div>
     </div>

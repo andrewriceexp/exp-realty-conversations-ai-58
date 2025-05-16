@@ -1,11 +1,11 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,11 +27,28 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 const Login = () => {
-  const { signIn, loading, error } = useAuth();
+  const { signIn, loading, error: authError, user, session } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(error);
+  const [error, setError] = useState<string | null>(authError);
+
+  // Log key state for debugging
+  useEffect(() => {
+    console.log("[Login] Component mounted");
+    console.log("[Login] Auth State:", { user: !!user, session: !!session });
+    
+    // Redirect if already logged in
+    if (user && session) {
+      console.log("[Login] User already logged in, redirecting to dashboard");
+      navigate('/dashboard', { replace: true });
+    }
+    
+    return () => {
+      console.log("[Login] Component unmounting");
+    };
+  }, [user, session, navigate]);
   
   // Get the return URL from location state or default to '/dashboard'
   const from = location.state?.from?.pathname || '/dashboard';
@@ -45,35 +62,58 @@ const Login = () => {
   });
 
   const onSubmit = async (values: LoginFormValues) => {
-    setAuthError(null);
+    setError(null);
     setSubmitting(true);
+    console.log("[Login] Attempting login...");
     
     try {
       const result = await signIn(values.email, values.password);
-      if (result.error) {
-        setAuthError(result.error.message);
-        toast({
-          variant: "destructive",
-          title: "Login failed",
-          description: result.error.message || "Failed to login. Please try again."
-        });
+      
+      if (result?.error) {
+        setError(result.error.message);
+        console.error("[Login] Error:", result.error);
+        
+        // Use the toast utility
+        try {
+          toast({
+            variant: "destructive",
+            title: "Login failed",
+            description: result.error.message || "Failed to login. Please try again."
+          });
+        } catch (toastError) {
+          console.warn("[Login] Toast error:", toastError);
+        }
       } else {
-        // After successful login, navigate to the from page
-        toast({
-          title: "Login successful",
-          description: "Welcome back!"
-        });
+        console.log("[Login] Successfully logged in!");
+        
+        try {
+          // Show success toast
+          toast({
+            title: "Login successful",
+            description: "Welcome back!"
+          });
+        } catch (toastError) {
+          console.warn("[Login] Toast error:", toastError);
+        }
+        
+        console.log("[Login] Redirecting to:", from);
         // Use replace to prevent back button from going back to login
         navigate(from, { replace: true });
       }
     } catch (err: any) {
       const errorMessage = err.message || "Failed to login";
-      setAuthError(errorMessage);
-      toast({
-        variant: "destructive",
-        title: "Login failed",
-        description: errorMessage
-      });
+      console.error("[Login] Exception:", errorMessage);
+      setError(errorMessage);
+      
+      try {
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: errorMessage
+        });
+      } catch (toastError) {
+        console.warn("[Login] Toast error:", toastError);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -96,9 +136,9 @@ const Login = () => {
           </CardHeader>
           
           <CardContent>
-            {authError && (
+            {error && (
               <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-                {authError}
+                {error}
               </div>
             )}
             
