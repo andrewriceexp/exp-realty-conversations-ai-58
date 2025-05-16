@@ -14,10 +14,12 @@ export const useProspectLists = () => {
   const fetchProspectLists = async () => {
     try {
       setLoading(true);
+      console.log("Fetching prospect lists, user ID:", user?.id);
       
       if (!user?.id) {
         console.log("No user ID available for fetching prospect lists");
         setLists([]);
+        setLoading(false);
         return;
       }
       
@@ -37,7 +39,10 @@ export const useProspectLists = () => {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw error;
+      }
 
       // Transform the data to include the prospect count
       const transformedData = data.map((list) => ({
@@ -110,8 +115,11 @@ export const useProspectLists = () => {
   };
 
   useEffect(() => {
+    console.log("useProspectLists useEffect triggered, user ID:", user?.id);
     if (user?.id) {
       fetchProspectLists();
+    } else {
+      setLoading(false); // End loading if no user is authenticated
     }
   }, [user?.id]);
 

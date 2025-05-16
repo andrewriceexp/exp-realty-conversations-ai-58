@@ -24,11 +24,17 @@ const PreLaunchChecklist = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      console.log("No user available for checklist");
+      setLoading(false);
+      return;
+    }
 
     const fetchData = async () => {
       setLoading(true);
       try {
+        console.log("Fetching checklist data for user:", user.id);
+        
         // Check profile setup
         const profileComplete = profile && 
           profile.full_name && 
@@ -37,16 +43,30 @@ const PreLaunchChecklist = () => {
           profile.twilio_phone_number;
           
         // Check if there's at least one prospect list
-        const { count: prospectCount } = await supabase
+        const { count: prospectCount, error: prospectError } = await supabase
           .from('prospects')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
           
+        if (prospectError) {
+          console.error("Error checking prospect count:", prospectError);
+        }
+          
         // Check if there's at least one agent config
-        const { count: agentCount } = await supabase
+        const { count: agentCount, error: agentError } = await supabase
           .from('agent_configs')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
+          
+        if (agentError) {
+          console.error("Error checking agent count:", agentError);
+        }
+
+        console.log("Checklist data:", { 
+          profileComplete, 
+          prospectCount, 
+          agentCount 
+        });
 
         // Build checklist
         const newChecklist: ChecklistItem[] = [

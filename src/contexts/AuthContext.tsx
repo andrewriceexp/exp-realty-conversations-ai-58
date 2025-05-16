@@ -2,25 +2,30 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// Define the user profile type
+// Define the user profile type based on the actual database schema
 export interface UserProfile {
   id: string;
-  email: string; 
-  first_name: string;
-  last_name: string;
-  phone_number: string;
-  company_name: string;
-  role: string;
-  avatar_url: string;
-  openai_api_key: string;
-  elevenlabs_api_key: string;
-  elevenlabs_phone_number_id: string;
-  twilio_account_sid: string;
-  twilio_auth_token: string;
-  twilio_phone_number: string;
+  email: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  company_name?: string;
+  role?: string;
+  avatar_url?: string;
+  openai_api_key?: string;
+  elevenlabs_api_key?: string;
+  elevenlabs_phone_number_id?: string;
+  twilio_account_sid?: string;
+  twilio_auth_token?: string;
+  twilio_phone_number?: string;
   created_at: string;
   updated_at: string;
-  full_name?: string; // Added for compatibility
+  elevenlabs_phone_number_verified?: boolean;
+  elevenlabs_phone_number_verified_at?: string;
+  elevenlabs_api_key_last_validated?: string;
+  a2p_10dlc_registered?: boolean;
+  exp_realty_id?: string;
 }
 
 // Define the authentication context type
@@ -29,15 +34,15 @@ export interface AuthContextType {
   user: any | null;
   profile: UserProfile | null;
   isLoading: boolean;
-  loading: boolean; // Added for Login and Signup pages
-  error: string | null; // Added for Login and Signup pages
-  signIn: (email: string, password: string) => Promise<any>; // Updated signature
+  loading: boolean; 
+  error: string | null;
+  signIn: (email: string, password: string) => Promise<any>;
   signOut: () => Promise<void>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<any>; // Updated signature
+  signUp: (email: string, password: string, fullName?: string) => Promise<any>;
   updateUser: (data: any) => Promise<any>;
-  updateProfile: (data: any) => Promise<any>; // Added for ProfileSetup
+  updateProfile: (data: any) => Promise<any>;
   refreshProfile: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; // Added for ForgotPassword
+  resetPassword: (email: string) => Promise<void>;
 }
 
 // Create the authentication context
@@ -70,13 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const fetchSession = async () => {
       setIsLoading(true);
       try {
+        console.log("Fetching auth session...");
         const { data: userSession } = await supabase.auth.getSession();
+        console.log("Session fetched:", userSession.session ? "Valid session" : "No session");
 
         setSession(userSession.session);
         setUser(userSession.session?.user || null);
 
         if (userSession.session?.user) {
           // Fetch user profile data
+          console.log("Fetching user profile for ID:", userSession.session.user.id);
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
@@ -86,7 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profileError) {
             console.error('Error fetching user profile:', profileError);
           } else {
-            setProfile(profileData as unknown as UserProfile);
+            console.log("Profile data retrieved:", profileData ? "Found" : "Not found");
+            setProfile(profileData as UserProfile);
           }
         }
       } catch (error) {
@@ -101,11 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, userSession) => {
+        console.log("Auth state changed:", event);
         setSession(userSession);
         setUser(userSession?.user || null);
 
         if (userSession?.user) {
           // Fetch user profile data
+          console.log("Auth change: Fetching profile for ID:", userSession.user.id);
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
@@ -115,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (profileError) {
             console.error('Error fetching user profile:', profileError);
           } else {
-            setProfile(profileData as unknown as UserProfile);
+            console.log("Profile data from auth change:", profileData ? "Found" : "Not found");
+            setProfile(profileData as UserProfile);
           }
         } else {
           setProfile(null);
@@ -132,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = async () => {
     if (user) {
       try {
+        console.log("Refreshing profile for user ID:", user.id);
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -141,7 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profileError) {
           console.error('Error refreshing user profile:', profileError);
         } else {
-          setProfile(profileData as unknown as UserProfile);
+          console.log("Profile refreshed:", profileData ? "Found" : "Not found");
+          setProfile(profileData as UserProfile);
         }
       } catch (error) {
         console.error('Error refreshing user profile:', error);
@@ -154,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      console.log("Signing in user...");
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -194,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      console.log("Signing up new user:", email);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -221,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateUser = async (data: any) => {
     setLoading(true);
     try {
+      console.log("Updating user profile:", data);
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .update(data)
@@ -234,7 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Update the local profile state
-      setProfile(profileData as unknown as UserProfile);
+      console.log("Profile updated successfully");
+      setProfile(profileData as UserProfile);
       return profileData;
     } catch (error) {
       console.error('Error updating user:', error);
