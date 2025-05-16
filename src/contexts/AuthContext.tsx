@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
-interface ProfileData {
+export interface ProfileData {
   id: string;
   email: string;
   full_name: string;
@@ -37,7 +37,7 @@ interface AuthContextType {
   updateProfile: (data: Partial<ProfileData>) => Promise<any>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);

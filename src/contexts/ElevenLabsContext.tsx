@@ -1,134 +1,62 @@
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/use-auth';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { ProfileData } from '@/contexts/AuthContext';
 
 interface ElevenLabsContextType {
-  getSignedUrl: (agentId: string) => Promise<string | null>;
-  isLoading: boolean;
-  error: string | null;
-  clearError: () => void;
+  isApiKeyConfigured: boolean;
+  isVoiceConfigured: boolean;
+  isPhoneNumberConfigured: boolean;
+  apiKey: string | null;
+  voiceId: string | null;
+  phoneNumberId: string | null;
 }
 
-const ElevenLabsContext = createContext<ElevenLabsContextType | undefined>(undefined);
+const defaultContext: ElevenLabsContextType = {
+  isApiKeyConfigured: false,
+  isVoiceConfigured: false,
+  isPhoneNumberConfigured: false,
+  apiKey: null,
+  voiceId: null,
+  phoneNumberId: null
+};
+
+export const ElevenLabsContext = createContext<ElevenLabsContextType>(defaultContext);
 
 export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { session } = useAuth();
-
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
-
-  const getSignedUrl = useCallback(
-    async (agentId: string): Promise<string | null> => {
-      if (!agentId) {
-        setError('Agent ID is required');
-        return null;
-      }
-
-      if (!session) {
-        setError('Authentication required');
-        return null;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-        console.log('[ElevenLabsContext] Getting signed URL for agent:', agentId);
-
-        // Add retries for reliability
-        const maxRetries = 3;
-        let currentRetry = 0;
-        let lastError = null;
-
-        while (currentRetry < maxRetries) {
-          try {
-            const { data, error: functionError } = await supabase.functions.invoke('elevenlabs-signed-url', {
-              body: { agent_id: agentId },
-            });
-
-            if (functionError) {
-              console.error(`[ElevenLabsContext] Function error (attempt ${currentRetry + 1}):`, functionError);
-              lastError = functionError;
-              currentRetry++;
-              if (currentRetry < maxRetries) {
-                // Wait with exponential backoff before retrying
-                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
-                continue;
-              }
-              break;
-            }
-
-            if (!data || !data.signed_url) {
-              console.error(`[ElevenLabsContext] Missing signed URL in response (attempt ${currentRetry + 1}):`, data);
-              lastError = new Error('Invalid response from server');
-              currentRetry++;
-              if (currentRetry < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
-                continue;
-              }
-              break;
-            }
-
-            console.log('[ElevenLabsContext] Successfully obtained signed URL');
-            
-            // Return the signed URL without modifications
-            return data.signed_url;
-          } catch (err) {
-            lastError = err;
-            currentRetry++;
-            if (currentRetry < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, currentRetry - 1)));
-              continue;
-            }
-          }
-        }
-
-        // If we've exhausted retries and still have an error
-        if (lastError) {
-          const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-          console.error('[ElevenLabsContext] Error getting signed URL after retries:', errorMessage);
-          
-          // Check for specific error patterns to provide better error messages
-          if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-            setError('ElevenLabs API rate limit exceeded. Please wait a moment and try again.');
-          } else if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
-            setError('Your ElevenLabs API key appears to be invalid. Please update it in your profile settings.');
-          } else {
-            setError(`Failed to get conversation URL after ${maxRetries} attempts: ${errorMessage}`);
-          }
-        } else {
-          setError(`Failed to get conversation URL after ${maxRetries} attempts`);
-        }
-        return null;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('[ElevenLabsContext] Error getting signed URL:', errorMessage);
-        setError(`Failed to get conversation URL: ${errorMessage}`);
-        return null;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [session]
-  );
-
-  const value = {
-    getSignedUrl,
-    isLoading,
-    error,
-    clearError,
-  };
-
-  return <ElevenLabsContext.Provider value={value}>{children}</ElevenLabsContext.Provider>;
-};
-
-export const useElevenLabs = (): ElevenLabsContextType => {
-  const context = useContext(ElevenLabsContext);
-  if (context === undefined) {
-    throw new Error('useElevenLabs must be used within an ElevenLabsProvider');
+  const [state, setState] = useState<ElevenLabsContextType>(defaultContext);
+  
+  // Use try/catch to safely access the useAuth hook, which must be used within an AuthProvider
+  let profile: ProfileData | null = null;
+  let isLoading: boolean = true;
+  
+  try {
+    const auth = useAuth();
+    profile = auth.profile;
+    isLoading = auth.isLoading;
+  } catch (error) {
+    // If useAuth fails (AuthProvider not yet available), maintain default state
+    console.warn("ElevenLabsProvider: AuthProvider not available yet");
   }
-  return context;
+
+  useEffect(() => {
+    if (!isLoading && profile) {
+      setState({
+        isApiKeyConfigured: !!profile.elevenlabs_api_key,
+        isVoiceConfigured: !!profile.elevenlabs_voice_id,
+        isPhoneNumberConfigured: !!profile.elevenlabs_phone_number_id,
+        apiKey: profile.elevenlabs_api_key || null,
+        voiceId: profile.elevenlabs_voice_id || null,
+        phoneNumberId: profile.elevenlabs_phone_number_id || null
+      });
+    }
+  }, [profile, isLoading]);
+
+  return (
+    <ElevenLabsContext.Provider value={state}>
+      {children}
+    </ElevenLabsContext.Provider>
+  );
 };
+
+export const useElevenLabs = () => useContext(ElevenLabsContext);

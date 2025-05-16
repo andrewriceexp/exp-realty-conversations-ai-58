@@ -34,3 +34,6 @@ export interface CallOptions {
   elevenLabsAgentId?: string;
   elevenLabsPhoneNumberId?: string;
 }
+
+// Explicitly export AgentConfig type for use in components
+export type { AgentConfig };
