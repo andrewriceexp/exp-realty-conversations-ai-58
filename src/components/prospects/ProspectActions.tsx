@@ -322,12 +322,21 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         if (response.callSid) {
           setCallSid(response.callSid);
           setCallStatus('initiated');
+          
+          // Show a special toast message when in echo mode
+          if (useEchoMode) {
+            toast({
+              title: 'Echo Mode Active',
+              description: 'Call initiated in echo mode. This will only test the WebSocket connection.',
+              variant: 'default',
+            });
+          } else {
+            toast({
+              title: 'Call initiated',
+              description: `Call to ${prospectName} initiated successfully. ${bypassValidation ? '(Development Mode)' : ''}`,
+            });
+          }
         }
-        
-        toast({
-          title: 'Call initiated',
-          description: `Call to ${prospectName} initiated successfully. ${bypassValidation ? '(Development Mode)' : ''}`,
-        });
       } else {
         // Store the error code if available
         setErrorCode(response.code || null);
@@ -379,6 +388,17 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
           )
         });
       }
+      
+      // If this is a WebSocket error, provide more specific guidance
+      if (error.message?.includes('WebSocket') || 
+          error.message?.includes('socket') ||
+          error.code === 'WEBSOCKET_ERROR') {
+        toast({
+          title: "WebSocket Connection Error",
+          description: "Unable to establish the audio connection. Try again using Echo Mode to test connectivity.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
@@ -422,6 +442,19 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                 <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
               </Link>
             </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    // Add echo mode description when enabled
+    if (useEchoMode && bypassValidation) {
+      warnings.push(
+        <Alert key="echo-mode-info" variant="info" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Echo Mode Active:</strong> This mode will only test the WebSocket connection without using ElevenLabs AI.
+            Any audio sent will be echoed back to your phone to verify the connection is working properly.
           </AlertDescription>
         </Alert>
       );
@@ -478,6 +511,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
             {bypassValidation && callSid && (
               <div className="text-xs text-muted-foreground mb-4 p-2 bg-muted rounded">
                 <p>Call SID: {callSid}</p>
+                {useEchoMode && <p className="font-semibold mt-1">Echo Mode: WebSocket test only (no ElevenLabs)</p>}
               </div>
             )}
             
@@ -602,7 +636,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                   </div>
                 </div>
 
-                {/* NEW: Echo mode switch for testing WebSocket handshake */}
+                {/* Echo mode switch for testing WebSocket handshake */}
                 <div className="flex items-center space-x-2">
                   <Switch 
                     id="echo-mode" 
