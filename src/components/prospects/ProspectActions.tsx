@@ -21,9 +21,10 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
       
       <CallDialog 
         prospectId={prospectId}
-        prospectName={prospectName}
         isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
+        onOpenChange={setIsDialogOpen}
+        onCallComplete={() => {}}
+        reload={() => {}}
       />
     </>
   );

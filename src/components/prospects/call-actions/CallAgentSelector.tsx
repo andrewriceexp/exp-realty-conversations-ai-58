@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { AgentConfig } from '@/types';
 import { Label } from '@/components/ui/label';
@@ -6,19 +5,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/use-auth';
-import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
 interface CallAgentSelectorProps {
   selectedConfigId: string;
   setSelectedConfigId: (id: string) => void;
+  className?: string;
 }
 
-const CallAgentSelector = ({ selectedConfigId, setSelectedConfigId }: CallAgentSelectorProps) => {
+const CallAgentSelector = ({ selectedConfigId, setSelectedConfigId, className }: CallAgentSelectorProps) => {
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [isLoadingConfigs, setIsLoadingConfigs] = useState(false);
   const { user } = useAuth();
-  const { toast } = useToast();
 
   // Load agent configurations
   useEffect(() => {

@@ -2,50 +2,76 @@
 import { Link } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Settings } from 'lucide-react';
-import { ConfigurationStatus } from './types';
+import { AgentConfig, ConfigurationStatus } from './types';
 
 interface ConfigurationWarningsProps {
-  configurationStatus: ConfigurationStatus;
-  bypassValidation: boolean;
-  useElevenLabsVoice: boolean;
-  useEchoMode: boolean;
+  configurationStatus?: ConfigurationStatus;
+  bypassValidation?: boolean;
+  useElevenLabsVoice?: boolean;
+  useEchoMode?: boolean;
+  agentConfig?: AgentConfig;
+  developmentMode?: boolean;
+  useElevenLabsAgent?: boolean;
 }
 
 const ConfigurationWarnings = ({ 
-  configurationStatus, 
-  bypassValidation, 
-  useElevenLabsVoice, 
-  useEchoMode 
+  configurationStatus,
+  bypassValidation = false, 
+  useElevenLabsVoice = false, 
+  useEchoMode = false,
+  agentConfig,
+  developmentMode = false,
+  useElevenLabsAgent = false
 }: ConfigurationWarningsProps) => {
   const warnings = [];
   
-  // Add Twilio configuration warning
-  if (!configurationStatus.twilioSetup && !bypassValidation) {
-    warnings.push(
-      <Alert key="twilio" variant="warning" className="mb-4">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Twilio credentials are not configured. Calls may fail.
-          <div className="mt-2">
-            <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
-              <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
-            </Link>
-          </div>
-        </AlertDescription>
-      </Alert>
-    );
+  // If we got the legacy configurationStatus prop
+  if (configurationStatus) {
+    // Add Twilio configuration warning
+    if (!configurationStatus.twilioSetup && !bypassValidation) {
+      warnings.push(
+        <Alert key="twilio" variant="warning" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Twilio credentials are not configured. Calls may fail.
+            <div className="mt-2">
+              <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+              </Link>
+            </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    
+    // Add ElevenLabs API key warning
+    if (useElevenLabsVoice && !configurationStatus.elevenLabsSetup && !bypassValidation) {
+      warnings.push(
+        <Alert key="eleven" variant="warning" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            ElevenLabs API key is not configured or invalid. Custom voices may not work.
+            <div className="mt-2">
+              <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
+                <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+              </Link>
+            </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
   }
   
-  // Add ElevenLabs API key warning
-  if (useElevenLabsVoice && !configurationStatus.elevenLabsSetup && !bypassValidation) {
+  // Add a warning for direct connection if needed
+  if (useElevenLabsAgent && !agentConfig && !developmentMode) {
     warnings.push(
-      <Alert key="eleven" variant="warning" className="mb-4">
+      <Alert key="agent-config" variant="warning" className="mb-4">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          ElevenLabs API key is not configured or invalid. Custom voices may not work.
+          You've enabled ElevenLabs direct connect but no agent configuration is selected.
           <div className="mt-2">
-            <Link to="/profile-setup" className="flex items-center text-sm font-medium underline">
-              <Settings className="mr-1 h-4 w-4" /> Go to Profile Setup
+            <Link to="/agent-config" className="flex items-center text-sm font-medium underline">
+              <Settings className="mr-1 h-4 w-4" /> Create Agent Configuration
             </Link>
           </div>
         </AlertDescription>

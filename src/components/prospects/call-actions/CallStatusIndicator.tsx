@@ -4,28 +4,33 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { getStatusDescription } from './utils';
 
 interface CallStatusIndicatorProps {
-  callStatus: string | null;
-  callSid: string | null;
-  isVerifyingCall: boolean;
-  bypassValidation: boolean;
-  useEchoMode: boolean;
+  status?: string | null;
+  callStatus?: string | null;
+  callSid?: string | null;
+  isVerifyingCall?: boolean;
+  bypassValidation?: boolean;
+  useEchoMode?: boolean;
 }
 
 const CallStatusIndicator = ({ 
   callStatus, 
+  status,
   callSid, 
-  isVerifyingCall, 
-  bypassValidation, 
-  useEchoMode 
+  isVerifyingCall = false, 
+  bypassValidation = false, 
+  useEchoMode = false 
 }: CallStatusIndicatorProps) => {
-  if (!callStatus) return null;
+  // Support both status and callStatus props (status takes precedence)
+  const displayStatus = status || callStatus;
+  
+  if (!displayStatus) return null;
   
   return (
     <>
-      <Alert variant={callStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">
+      <Alert variant={displayStatus.toLowerCase() === 'completed' ? 'default' : 'default'} className="mb-4">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Call status: {callStatus}
+          Call status: {displayStatus}
           {isVerifyingCall && <Loader2 className="ml-2 h-4 w-4 inline animate-spin" />}
         </AlertDescription>
       </Alert>

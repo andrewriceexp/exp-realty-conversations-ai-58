@@ -5,12 +5,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Bug } from 'lucide-react';
 
 interface DevelopmentModeOptionsProps {
-  bypassValidation: boolean;
+  bypassValidation?: boolean;
   setBypassValidation: (value: boolean) => void;
-  debugMode: boolean;
+  debugMode?: boolean;
   setDebugMode: (value: boolean) => void;
-  useEchoMode: boolean;
+  useEchoMode?: boolean;
   setUseEchoMode: (value: boolean) => void;
+  developmentMode?: boolean;
 }
 
 const DevelopmentModeOptions = ({
@@ -19,15 +20,19 @@ const DevelopmentModeOptions = ({
   debugMode,
   setDebugMode,
   useEchoMode,
-  setUseEchoMode
+  setUseEchoMode,
+  developmentMode
 }: DevelopmentModeOptionsProps) => {
+  // Use the developmentMode prop if bypassValidation is not provided
+  const isDevelopmentMode = bypassValidation !== undefined ? bypassValidation : developmentMode;
+  
   return (
     <>
       {/* Developer toggle for bypassing validation */}
       <div className="flex items-center space-x-2 pt-4 border-t">
         <Switch 
           id="bypass-validation" 
-          checked={bypassValidation}
+          checked={isDevelopmentMode}
           onCheckedChange={setBypassValidation}
         />
         <div className="grid gap-1.5">
@@ -41,7 +46,7 @@ const DevelopmentModeOptions = ({
       </div>
       
       {/* Debug mode switch - only visible when dev mode is on */}
-      {bypassValidation && (
+      {isDevelopmentMode && (
         <>
           <div className="flex items-center space-x-2">
             <Switch 

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -9,15 +8,15 @@ import { VoiceOption } from './types';
 import { useToast } from '@/hooks/use-toast';
 
 interface ElevenLabsVoiceSelectorProps {
-  useElevenLabsVoice: boolean;
-  setUseElevenLabsVoice: (value: boolean) => void;
-  selectedVoiceId: string;
+  useElevenLabsVoice?: boolean;
+  setUseElevenLabsVoice?: (value: boolean) => void;
+  selectedVoiceId: string | null;
   setSelectedVoiceId: (id: string) => void;
 }
 
 const ElevenLabsVoiceSelector = ({ 
-  useElevenLabsVoice, 
-  setUseElevenLabsVoice, 
+  useElevenLabsVoice = true, 
+  setUseElevenLabsVoice = () => {}, 
   selectedVoiceId, 
   setSelectedVoiceId 
 }: ElevenLabsVoiceSelectorProps) => {
@@ -39,11 +38,11 @@ const ElevenLabsVoiceSelector = ({
     } else {
       // Use the default voices anyway
       setVoices(defaultVoices);
-      if (defaultVoices.length > 0) {
+      if (defaultVoices.length > 0 && !selectedVoiceId) {
         setSelectedVoiceId(defaultVoices[0].id);
       }
     }
-  }, [useElevenLabsVoice]);
+  }, [useElevenLabsVoice, selectedVoiceId]);
 
   const fetchElevenLabsVoices = async () => {
     setIsLoadingVoices(true);
@@ -115,7 +114,7 @@ const ElevenLabsVoiceSelector = ({
             </div>
           ) : (
             <Select
-              value={selectedVoiceId}
+              value={selectedVoiceId || ''}
               onValueChange={setSelectedVoiceId}
               disabled={isLoadingVoices || voices.length === 0}
             >

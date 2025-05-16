@@ -32,4 +32,5 @@ export interface CallOptions {
   voiceId?: string;
   useElevenLabsAgent: boolean;
   elevenLabsAgentId?: string;
+  elevenLabsPhoneNumberId?: string;
 }

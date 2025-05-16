@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +13,11 @@ interface ProfileData {
   twilio_phone_number?: string;
   a2p_10dlc_registered?: boolean;
   elevenlabs_api_key?: string | null;
+  elevenlabs_api_key_last_validated?: string;
+  elevenlabs_voice_id?: string;
+  elevenlabs_phone_number_id?: string;
+  elevenlabs_phone_number_verified?: boolean;
+  elevenlabs_phone_number_verified_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }

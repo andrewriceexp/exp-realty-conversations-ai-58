@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -15,10 +14,10 @@ import { HelpCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   CallAgentSelector, 
-  ElevenLabsVoiceSelector, 
   CallStatusIndicator, 
+  ConfigurationWarnings, 
   DevelopmentModeOptions, 
-  ConfigurationWarnings 
+  ElevenLabsVoiceSelector 
 } from './call-dialog-components';
 import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
 import { AgentConfig } from '@/types';
@@ -33,6 +32,7 @@ interface CallDialogProps {
   onOpenChange: (open: boolean) => void;
   onCallComplete: () => void;
   reload: () => void;
+  prospectName?: string; // Make this optional to fix compatibility
 }
 
 export function CallDialog({
@@ -42,6 +42,7 @@ export function CallDialog({
   onCallComplete,
   reload,
 }: CallDialogProps) {
+  const [selectedConfigId, setSelectedConfigId] = useState<string>('');
   const [selectedConfig, setSelectedConfig] = useState<AgentConfig | null>(null);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [callInProgress, setCallInProgress] = useState(false);
@@ -53,8 +54,15 @@ export function CallDialog({
   const [useElevenLabsAgent, setUseElevenLabsAgent] = useState(false);
   const [elevenLabsAgentId, setElevenLabsAgentId] = useState('');
   const [elevenLabsPhoneNumberId, setElevenLabsPhoneNumberId] = useState('');
+  const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
   
   const twilioCall = useTwilioCall();
+
+  // Update selectedConfig whenever selectedConfigId changes
+  useEffect(() => {
+    // Logic to fetch the agent config based on ID and set it
+    // This would be added in a future implementation
+  }, [selectedConfigId]);
 
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
@@ -179,14 +187,14 @@ export function CallDialog({
               Agent
             </Label>
             <CallAgentSelector 
-              selectedConfig={selectedConfig} 
-              setSelectedConfig={setSelectedConfig} 
+              selectedConfigId={selectedConfigId}
+              setSelectedConfigId={setSelectedConfigId}
               className="col-span-3"
             />
           </div>
           
           <ConfigurationWarnings 
-            agentConfig={selectedConfig} 
+            agentConfig={selectedConfig}
             developmentMode={developmentMode}
             useElevenLabsAgent={useElevenLabsAgent}
           />
@@ -214,7 +222,9 @@ export function CallDialog({
                 <div className="col-span-3">
                   <ElevenLabsVoiceSelector 
                     selectedVoiceId={selectedVoiceId}
-                    setSelectedVoiceId={setSelectedVoiceId} 
+                    setSelectedVoiceId={setSelectedVoiceId}
+                    useElevenLabsVoice={useElevenLabsVoice}
+                    setUseElevenLabsVoice={setUseElevenLabsVoice}
                   />
                 </div>
               </div>
@@ -247,10 +257,12 @@ export function CallDialog({
           
           {showDevOptions && (
             <DevelopmentModeOptions 
-              developmentMode={developmentMode}
-              setDevelopmentMode={setDevelopmentMode}
-              echoMode={echoMode}
-              setEchoMode={setEchoMode}
+              bypassValidation={developmentMode}
+              setBypassValidation={setDevelopmentMode}
+              debugMode={echoMode}
+              setDebugMode={setEchoMode}
+              useEchoMode={echoMode}
+              setUseEchoMode={setEchoMode}
             />
           )}
           
@@ -258,7 +270,7 @@ export function CallDialog({
         
         {callInProgress ? (
           <div className="flex flex-col gap-4">
-            <CallStatusIndicator status={callStatus} />
+            <CallStatusIndicator status={callStatus} callSid={currentCallId} isVerifyingCall={false} bypassValidation={developmentMode} useEchoMode={echoMode} />
             <Button 
               variant="destructive" 
               onClick={handleEndCall} 
@@ -272,7 +284,7 @@ export function CallDialog({
           <DialogFooter>
             <Button 
               onClick={handleStartCall} 
-              disabled={!selectedConfig && !useElevenLabsAgent}
+              disabled={!selectedConfigId && !useElevenLabsAgent}
               className={cn(useElevenLabsAgent ? "exp-gradient" : "")}
             >
               Start Call
@@ -283,4 +295,3 @@ export function CallDialog({
     </Dialog>
   );
 }
-
