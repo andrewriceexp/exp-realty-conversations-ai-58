@@ -72,16 +72,6 @@ export function CallDialog({
     }
   }, [profile]);
 
-  // Validate the phone number format
-  useEffect(() => {
-    if (useElevenLabsAgent && elevenLabsPhoneNumberId) {
-      const phoneRegex = /^\+[1-9]\d{1,14}$/;
-      setHasPhoneNumberError(!phoneRegex.test(elevenLabsPhoneNumberId.trim()));
-    } else {
-      setHasPhoneNumberError(false);
-    }
-  }, [useElevenLabsAgent, elevenLabsPhoneNumberId]);
-
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
     try {
@@ -140,28 +130,18 @@ export function CallDialog({
           throw new Error("Please enter your ElevenLabs Agent ID");
         }
 
-        if (!elevenLabsPhoneNumberId) {
-          throw new Error("Please enter your ElevenLabs Phone Number");
-        }
-
-        // Validate phone number format
-        let formattedPhoneNumber = elevenLabsPhoneNumberId.trim();
-        if (!formattedPhoneNumber.startsWith('+')) {
-          formattedPhoneNumber = `+${formattedPhoneNumber}`;
-        }
-        
-        const phoneRegex = /^\+[1-9]\d{1,14}$/;
-        if (!phoneRegex.test(formattedPhoneNumber)) {
-          throw new Error("Phone number must be in E.164 format (e.g., +12125551234)");
+        const currentPhoneNumberId = elevenLabsPhoneNumberId.trim();
+        if (!currentPhoneNumberId) {
+          throw new Error("Please enter your ElevenLabs Phone Number ID (provided by ElevenLabs for your registered outbound number)");
         }
 
         // Add ElevenLabs specific parameters
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
-        callParams.elevenLabsPhoneNumberId = formattedPhoneNumber;
+        callParams.elevenLabsPhoneNumberId = currentPhoneNumberId;
         
         console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
-        console.log("Using ElevenLabs phone number:", formattedPhoneNumber);
+        console.log("Using ElevenLabs phone number ID:", currentPhoneNumberId);
         
         // Make the ElevenLabs call with detailed logging
         try {
@@ -171,7 +151,7 @@ export function CallDialog({
           // If the call fails with specific errors, provide helpful guidance
           if (!callResponse.success) {
             if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_NOT_FOUND") {
-              throw new Error(`The phone number ${formattedPhoneNumber} is not registered with your ElevenLabs account. Please register this number first.`);
+              throw new Error(`The ElevenLabs Phone Number ID "${currentPhoneNumberId}" was not found in your ElevenLabs account. Please verify the ID is correct and the number is registered with ElevenLabs.`);
             } else if (callResponse.code === "ELEVENLABS_API_KEY_MISSING") {
               throw new Error("ElevenLabs API key is not configured. Please set it up in your profile settings.");
             }
@@ -213,29 +193,29 @@ export function CallDialog({
         // Provide specific guidance based on error codes
         if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_NOT_FOUND") {
           toast({
-            title: "Phone Number Not Found",
-            description: "The phone number you provided is not recognized by ElevenLabs. Please verify that the number is correctly registered with ElevenLabs.",
+            title: "Phone Number ID Not Found",
+            description: "The ElevenLabs Phone Number ID you provided was not found in your ElevenLabs account. Please verify the ID and ensure the associated number is registered with ElevenLabs.",
             variant: "destructive",
             duration: 8000,
           });
         }
         else if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_MISSING") {
           toast({
-            title: "Phone Number Missing",
-            description: "You need to configure your ElevenLabs phone number in your profile settings.",
+            title: "Phone Number ID Missing",
+            description: "You need to provide your ElevenLabs Phone Number ID. This is available in your ElevenLabs dashboard for your registered outbound phone number.",
             variant: "destructive",
             duration: 8000,
             action: (
               <ToastAction altText="Go to profile" onClick={() => window.location.href = '/profile-setup'}>
-                Configure
+                Configure in Profile
               </ToastAction>
             )
           });
         } 
         else if (callResponse.code === "ELEVENLABS_PHONE_NUMBER_INVALID") {
           toast({
-            title: "Invalid Phone Number",
-            description: "The ElevenLabs phone number you provided is invalid. Please use the actual phone number in E.164 format (e.g., +12125551234).",
+            title: "Invalid Phone Number ID",
+            description: "The ElevenLabs Phone Number ID provided appears to be invalid. Please ensure you are using the correct ID from your ElevenLabs account.",
             variant: "destructive",
             duration: 8000
           });
