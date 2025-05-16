@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle, Circle, Settings, Users, Bot, Phone } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { Spinner } from '@/components/ui/spinner';
 
 interface ChecklistItem {
   id: string;
@@ -30,7 +31,7 @@ const PreLaunchChecklist = () => {
       try {
         // Check profile setup
         const profileComplete = profile && 
-          profile.first_name && 
+          profile.full_name && 
           profile.twilio_account_sid && 
           profile.twilio_auth_token && 
           profile.twilio_phone_number;
@@ -54,7 +55,7 @@ const PreLaunchChecklist = () => {
             title: 'Complete Profile Setup',
             description: 'Add your name and configure your Twilio credentials',
             completed: !!profileComplete,
-            route: '/profile',
+            route: '/profile-setup',
             icon: <Settings className="h-5 w-5" />
           },
           {
@@ -95,8 +96,11 @@ const PreLaunchChecklist = () => {
       <Card>
         <CardHeader>
           <CardTitle>Launch Checklist</CardTitle>
-          <CardDescription>Loading checklist...</CardDescription>
+          <CardDescription>Loading your checklist...</CardDescription>
         </CardHeader>
+        <CardContent className="flex justify-center py-8">
+          <Spinner className="h-8 w-8 text-primary" />
+        </CardContent>
       </Card>
     );
   }
