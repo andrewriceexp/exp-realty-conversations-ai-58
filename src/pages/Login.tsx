@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { XCircle } from "lucide-react";
-import { useAuth, cleanupAuthState } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/use-auth";
+import { cleanupAuthState } from "@/contexts/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 
 const loginSchema = z.object({
@@ -19,8 +20,9 @@ const loginSchema = z.object({
 });
 
 const Login = () => {
-  const { signIn, loading, error, user } = useAuth();
+  const { signIn, loading, error, user, session, isLoading } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -31,17 +33,22 @@ const Login = () => {
   useEffect(() => {
     // Non-aggressive cleanup that preserves valid sessions
     cleanupAuthState(false);
-    
     console.log("Login component mounted, auth state cleaned");
   }, []);
 
-  // Redirect if already logged in
+  // Redirect if already logged in, but prevent infinite loops
   useEffect(() => {
-    if (user) {
+    if (user && session && !isLoading && !isRedirecting) {
       console.log("User already logged in, redirecting to:", from);
-      navigate(from, { replace: true });
+      setIsRedirecting(true);
+      // Use a slight delay to prevent rapid state changes
+      const redirectTimeout = setTimeout(() => {
+        navigate(from, { replace: true });
+      }, 100);
+      
+      return () => clearTimeout(redirectTimeout);
     }
-  }, [user, navigate, from]);
+  }, [user, session, isLoading, navigate, from, isRedirecting]);
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -116,7 +123,7 @@ const Login = () => {
               />
 
               <div className="pt-2">
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className="w-full" disabled={loading || isRedirecting}>
                   {loading ? <Spinner className="mr-2 h-4 w-4" /> : null}
                   Sign In
                 </Button>
