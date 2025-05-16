@@ -63,48 +63,29 @@ serve(async (req) => {
       },
     });
     
-    // Handle specific case for your personal agent ID if API doesn't return it
-    const personalAgentId = '6Optf6WRTzp3rEyj2aiL';
     let agentsData;
     
     if (!response.ok) {
       console.error(`[elevenlabs-agents-list] ElevenLabs API error: ${response.status}`);
       
-      // Even if API call fails, try to add the personal agent
+      // If API call fails, return an empty list - we won't force add any agents
+      // This allows users to add their own agents manually if needed
       agentsData = {
-        agents: [{
-          id: personalAgentId,
-          name: "My ElevenLabs Agent",
-          description: "Manually added agent"
-        }]
+        agents: []
       };
     } else {
       agentsData = await response.json();
       
-      // Check if personalAgentId exists in the list, if not add it
-      if (agentsData.agents && Array.isArray(agentsData.agents)) {
-        const hasPersonalAgent = agentsData.agents.some(agent => agent.id === personalAgentId);
-        
-        if (!hasPersonalAgent) {
-          agentsData.agents.push({
-            id: personalAgentId,
-            name: "My ElevenLabs Agent",
-            description: "Manually added agent"
-          });
-        }
-      } else {
-        // If no agents were returned, create an array with the personal agent
-        agentsData.agents = [{
-          id: personalAgentId,
-          name: "My ElevenLabs Agent", 
-          description: "Manually added agent"
-        }];
+      // Ensure we have an array of agents, even if empty
+      if (!agentsData.agents || !Array.isArray(agentsData.agents)) {
+        agentsData.agents = [];
       }
     }
     
     console.log(`[elevenlabs-agents-list] Found ${agentsData.agents?.length || 0} agents`);
     
-    if (!agentsData.agents || !Array.isArray(agentsData.agents)) {
+    if (agentsData.agents.length === 0) {
+      console.log('[elevenlabs-agents-list] No agents found from API, returning empty list');
       return new Response(
         JSON.stringify({
           success: true,
