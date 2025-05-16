@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { supabase, authChannel } from '@/integrations/supabase/client';
 
 // Improved clean up auth tokens function to prevent authentication limbo states

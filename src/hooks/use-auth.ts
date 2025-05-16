@@ -1,7 +1,3 @@
 
-import { useAuth } from '@/contexts/AuthContext';
-
-export { useAuth };
-
-// Add cross-tab authentication sync functionality
-export { authChannel } from '@/integrations/supabase/client';
+// Import and re-export from the proper implementation
+export { useAuth, authChannel } from './use-auth.tsx';
