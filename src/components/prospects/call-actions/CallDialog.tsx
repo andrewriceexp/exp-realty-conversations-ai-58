@@ -132,6 +132,12 @@ export function CallDialog({
           throw new Error("Please enter your ElevenLabs Phone Number");
         }
 
+        // Validate phone number format
+        const phoneRegex = /^\+[1-9]\d{1,14}$/;
+        if (!phoneRegex.test(elevenLabsPhoneNumberId)) {
+          throw new Error("Phone number must be in E.164 format (e.g., +12125551234)");
+        }
+
         // Add ElevenLabs specific parameters
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
@@ -213,6 +219,11 @@ export function CallDialog({
       setIsVerifyingCall(false);
     }
   };
+  
+  // Determine if Start Call button should be disabled
+  const isStartCallDisabled = 
+    (!selectedConfigId && !useElevenLabsAgent) || 
+    (useElevenLabsAgent && (!elevenLabsAgentId || !elevenLabsPhoneNumberId));
   
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -332,8 +343,9 @@ export function CallDialog({
           <DialogFooter>
             <Button 
               onClick={handleStartCall} 
-              disabled={(!selectedConfigId && !useElevenLabsAgent) || (useElevenLabsAgent && !elevenLabsAgentId)}
+              disabled={isStartCallDisabled}
               className={cn(useElevenLabsAgent ? "exp-gradient" : "")}
+              type="button"
             >
               Start Call
             </Button>

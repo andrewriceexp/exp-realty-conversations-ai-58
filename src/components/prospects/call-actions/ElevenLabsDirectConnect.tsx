@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
 interface ElevenLabsDirectConnectProps {
   useElevenLabsAgent: boolean;
@@ -27,7 +28,7 @@ export default function ElevenLabsDirectConnect({
   setElevenLabsPhoneNumberId
 }: ElevenLabsDirectConnectProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { toast } = useToast();
   
   useEffect(() => {
@@ -48,15 +49,30 @@ export default function ElevenLabsDirectConnect({
       });
       return;
     }
+
+    // Validate phone number format (must be E.164 format)
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(currentId)) {
+      toast({
+        title: "Invalid Phone Number Format",
+        description: "Phone number must be in E.164 format (e.g., +12125551234)",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsLoading(true);
     
     try {
+      if (!user) {
+        throw new Error("You must be logged in to save settings");
+      }
+
       // Save the phone number ID to the user's profile
       const { error } = await supabase
         .from('profiles')
         .update({ elevenlabs_phone_number_id: elevenLabsPhoneNumberId })
-        .eq('id', profile?.id);
+        .eq('id', user.id);
         
       if (error) {
         throw error;
@@ -129,7 +145,7 @@ export default function ElevenLabsDirectConnect({
               <div>
                 <div className="flex justify-between items-center">
                   <Label htmlFor="elevenlabs-phone-number-id" className="text-sm">
-                    ElevenLabs Phone Number ID
+                    ElevenLabs Phone Number
                   </Label>
                   <TooltipProvider>
                     <Tooltip>
@@ -153,13 +169,15 @@ export default function ElevenLabsDirectConnect({
                     placeholder="Enter phone number (e.g., +12125551234)"
                     className="flex-1"
                   />
-                  <button
+                  <Button
                     onClick={handleSavePhoneNumberId}
                     disabled={isLoading}
-                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
+                    variant="accent"
+                    size="xs"
+                    type="button"
                   >
                     {isLoading ? "Saving..." : "Save"}
-                  </button>
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   This must be in E.164 format (e.g., +12125551234) and registered with ElevenLabs.
