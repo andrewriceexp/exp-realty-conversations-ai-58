@@ -21,6 +21,7 @@ const ForgotPassword = () => {
   const { resetPassword, loading } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<ResetFormValues>({
     resolver: zodResolver(resetSchema),
@@ -32,10 +33,12 @@ const ForgotPassword = () => {
   const onSubmit = async (values: ResetFormValues) => {
     try {
       setIsLoading(true);
+      setError(null);
       await resetPassword(values.email);
       setResetSent(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Password reset error:', error);
+      setError(error.message || "Failed to send reset email. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -66,6 +69,11 @@ const ForgotPassword = () => {
               </Alert>
             ) : (
               <Form {...form}>
+                {error && (
+                  <Alert className="mb-4 bg-red-50 border-red-200 text-red-800">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                   <FormField
                     control={form.control}

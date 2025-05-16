@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,10 +30,11 @@ const Login = () => {
   const { signIn, loading, error } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(error);
   
-  // Get the return URL from location state or default to '/'
-  const from = location.state?.from?.pathname || '/';
+  // Get the return URL from location state or default to '/dashboard'
+  const from = location.state?.from?.pathname || '/dashboard';
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -44,13 +46,36 @@ const Login = () => {
 
   const onSubmit = async (values: LoginFormValues) => {
     setAuthError(null);
+    setSubmitting(true);
+    
     try {
-      await signIn(values.email, values.password);
-      // After successful login, navigate to the from page
-      navigate(from, { replace: true });
+      const result = await signIn(values.email, values.password);
+      if (result.error) {
+        setAuthError(result.error.message);
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: result.error.message || "Failed to login. Please try again."
+        });
+      } else {
+        // After successful login, navigate to the from page
+        toast({
+          title: "Login successful",
+          description: "Welcome back!"
+        });
+        // Use replace to prevent back button from going back to login
+        navigate(from, { replace: true });
+      }
     } catch (err: any) {
-      // Error is handled by the AuthContext, but we still set local state
-      setAuthError(err.message || "Failed to login");
+      const errorMessage = err.message || "Failed to login";
+      setAuthError(errorMessage);
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: errorMessage
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -71,9 +96,9 @@ const Login = () => {
           </CardHeader>
           
           <CardContent>
-            {(authError || error) && (
+            {authError && (
               <div className="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
-                {authError || error}
+                {authError}
               </div>
             )}
             
@@ -90,7 +115,7 @@ const Login = () => {
                           type="email"
                           placeholder="your@email.com"
                           autoComplete="email"
-                          disabled={loading}
+                          disabled={submitting || loading}
                           {...field}
                         />
                       </FormControl>
@@ -110,7 +135,7 @@ const Login = () => {
                           type="password"
                           placeholder="••••••••"
                           autoComplete="current-password"
-                          disabled={loading}
+                          disabled={submitting || loading}
                           {...field}
                         />
                       </FormControl>
@@ -122,9 +147,9 @@ const Login = () => {
                 <Button
                   type="submit"
                   className="w-full exp-gradient"
-                  disabled={loading}
+                  disabled={submitting || loading}
                 >
-                  {loading ? 'Signing in...' : 'Sign in'}
+                  {submitting || loading ? 'Signing in...' : 'Sign in'}
                 </Button>
               </form>
             </Form>

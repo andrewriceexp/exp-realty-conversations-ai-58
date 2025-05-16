@@ -2,11 +2,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile } from '@/types';
+import { Session, User } from '@supabase/supabase-js';
 
 // Define the authentication context type
 export interface AuthContextType {
-  session: any | null;
-  user: any | null;
+  session: Session | null;
+  user: User | null;
   profile: UserProfile | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<any>;
@@ -57,76 +58,83 @@ const cleanupAuthState = () => {
 
 // Authentication provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<any | null>(null);
-  const [user, setUser] = useState<any | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchSession = async () => {
+    const setupAuth = async () => {
       setIsLoading(true);
       try {
-        const { data: userSession } = await supabase.auth.getSession();
+        // Set up auth state listener FIRST to prevent missing events
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
+            console.log("Auth state changed:", event, !!newSession);
+            setSession(newSession);
+            setUser(newSession?.user || null);
 
-        setSession(userSession.session);
-        setUser(userSession.session?.user || null);
+            if (newSession?.user) {
+              // Use setTimeout to prevent potential deadlocks
+              setTimeout(async () => {
+                try {
+                  // Fetch user profile data
+                  const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', newSession.user!.id)
+                    .single();
 
-        if (userSession.session?.user) {
-          // Fetch user profile data
+                  if (profileError) {
+                    console.error('Error fetching user profile:', profileError);
+                  } else {
+                    // Type assertion to UserProfile
+                    setProfile(profileData as unknown as UserProfile);
+                  }
+                } catch (err) {
+                  console.error("Error in auth state change handler:", err);
+                }
+              }, 0);
+            } else {
+              setProfile(null);
+            }
+          }
+        );
+
+        // THEN check for existing session
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        setSession(initialSession);
+        setUser(initialSession?.user || null);
+
+        if (initialSession?.user) {
+          // Fetch initial user profile data
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', userSession.session.user.id)
+            .eq('id', initialSession.user.id)
             .single();
 
           if (profileError) {
-            console.error('Error fetching user profile:', profileError);
+            console.error('Error fetching initial user profile:', profileError);
           } else {
-            setProfile(profileData as UserProfile);
+            // Type assertion to UserProfile
+            setProfile(profileData as unknown as UserProfile);
           }
         }
-      } catch (error) {
-        console.error('Error fetching session:', error);
+
+        return () => {
+          subscription?.unsubscribe();
+        };
+      } catch (err) {
+        console.error("Auth setup error:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchSession();
-
-    // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, userSession) => {
-        setSession(userSession);
-        setUser(userSession?.user || null);
-
-        if (userSession?.user) {
-          // Defer profile fetching to prevent potential deadlocks
-          setTimeout(async () => {
-            // Fetch user profile data
-            const { data: profileData, error: profileError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', userSession.user!.id)
-              .single();
-
-            if (profileError) {
-              console.error('Error fetching user profile:', profileError);
-            } else {
-              setProfile(profileData as UserProfile);
-            }
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-      }
-    );
-
-    return () => {
-      subscription?.unsubscribe();
-    };
+    setupAuth();
   }, []);
 
   // Function to refresh the user profile
@@ -142,7 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profileError) {
           console.error('Error refreshing user profile:', profileError);
         } else {
-          setProfile(profileData as UserProfile);
+          // Type assertion to UserProfile
+          setProfile(profileData as unknown as UserProfile);
         }
       } catch (error) {
         console.error('Error refreshing user profile:', error);
@@ -173,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         setError(error.message);
-        throw error;
+        return { error };
       }
       
       // Force refresh auth state and profile data
@@ -191,7 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profileError) {
           console.error('Error fetching profile after login:', profileError);
         } else {
-          setProfile(profileData as UserProfile);
+          // Type assertion to UserProfile
+          setProfile(profileData as unknown as UserProfile);
         }
       }
       
@@ -199,7 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error('Error signing in:', error);
       setError(error.message || 'An error occurred while signing in');
-      throw error;
+      return { error };
     } finally {
       setLoading(false);
     }
@@ -249,13 +259,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (error) {
         setError(error.message);
-        throw error;
+        return { error };
       }
       return data;
     } catch (error: any) {
       console.error('Error signing up:', error);
       setError(error.message || 'An error occurred while signing up');
-      throw error;
+      return { error };
     } finally {
       setLoading(false);
     }
@@ -300,7 +310,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Update the local profile state
-      setProfile(profileData as UserProfile);
+      // Type assertion to UserProfile
+      setProfile(profileData as unknown as UserProfile);
       return profileData;
     } catch (error: any) {
       console.error('Error updating user:', error);
