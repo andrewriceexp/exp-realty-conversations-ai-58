@@ -14,6 +14,7 @@ export interface MakeCallParams {
   voiceId?: string;
   useElevenLabsAgent?: boolean;
   elevenLabsAgentId?: string;
+  echoMode?: boolean;  // Added echo mode for testing
 }
 
 export interface CallResponse {
@@ -203,6 +204,7 @@ export function useTwilioCall() {
           user_id: String(userId),
           bypass_validation: params.bypassValidation || false,
           debug_mode: params.debugMode || false,
+          echo_mode: params.echoMode || false, // Pass through new echo mode parameter
           voice_id: params.voiceId ? params.voiceId.substring(0, 10) + "..." : undefined,
           use_webhook_proxy: true
         });
@@ -215,6 +217,7 @@ export function useTwilioCall() {
             user_id: String(userId), // Always use the resolved userId as string
             bypass_validation: params.bypassValidation || false,
             debug_mode: params.debugMode || true, // Enable debug mode for better logging
+            echo_mode: params.echoMode || false, // Add echo mode for testing WebSockets
             voice_id: params.voiceId,
             use_webhook_proxy: true // Always use the webhook proxy
           }
@@ -505,6 +508,7 @@ export function useTwilioCall() {
           user_id: String(userId),
           bypass_validation: true,
           debug_mode: true,
+          echo_mode: params.echoMode || false,
           voice_id: params.voiceId?.substring(0, 10) + "...",
           use_webhook_proxy: true
         });
@@ -517,6 +521,7 @@ export function useTwilioCall() {
             user_id: String(userId), // Always convert to string
             bypass_validation: true,
             debug_mode: true, // For development calls, always set debug mode
+            echo_mode: params.echoMode || false, // Add echo mode for testing
             voice_id: params.voiceId,
             use_webhook_proxy: true // CRITICAL: Always use the webhook proxy
           }

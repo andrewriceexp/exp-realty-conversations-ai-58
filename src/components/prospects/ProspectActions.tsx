@@ -42,6 +42,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
   const [callSid, setCallSid] = useState<string | null>(null);
   const [isVerifyingCall, setIsVerifyingCall] = useState(false);
   const [callStatus, setCallStatus] = useState<string | null>(null);
+  const [useEchoMode, setUseEchoMode] = useState(false);
   
   const { makeCall, makeDevelopmentCall, verifyCallStatus, isLoading: isCallingLoading } = useTwilioCall();
   const { getVoices } = useElevenLabs();
@@ -283,6 +284,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         userId: user.id, // Always ensure user ID is passed
         bypassValidation,
         debugMode,
+        echoMode: useEchoMode,
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined
       });
       
@@ -305,6 +307,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
         userId: user.id, // Always ensure user ID is passed
         bypassValidation,
         debugMode,
+        echoMode: useEchoMode,
         voiceId: useElevenLabsVoice ? selectedVoiceId : undefined,
         // Make sure we explicitly set useElevenLabsAgent to false if not specified
         useElevenLabsAgent: false
@@ -582,21 +585,40 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
             
             {/* Debug mode switch - only visible when dev mode is on */}
             {bypassValidation && (
-              <div className="flex items-center space-x-2">
-                <Switch 
-                  id="debug-mode" 
-                  checked={debugMode}
-                  onCheckedChange={setDebugMode}
-                />
-                <div className="grid gap-1.5">
-                  <Label htmlFor="debug-mode" className="text-sm flex items-center">
-                    <Bug className="h-3 w-3 mr-1" /> Debug TwiML
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Enable verbose TwiML debug output on call
-                  </p>
+              <>
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="debug-mode" 
+                    checked={debugMode}
+                    onCheckedChange={setDebugMode}
+                  />
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="debug-mode" className="text-sm flex items-center">
+                      <Bug className="h-3 w-3 mr-1" /> Debug TwiML
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Enable verbose TwiML debug output on call
+                    </p>
+                  </div>
                 </div>
-              </div>
+
+                {/* NEW: Echo mode switch for testing WebSocket handshake */}
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="echo-mode" 
+                    checked={useEchoMode}
+                    onCheckedChange={setUseEchoMode}
+                  />
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="echo-mode" className="text-sm flex items-center">
+                      <Bug className="h-3 w-3 mr-1" /> Echo Mode
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Test WebSocket handshake using simple echo server (no ElevenLabs)
+                    </p>
+                  </div>
+                </div>
+              </>
             )}
             
             {bypassValidation && (
@@ -604,6 +626,7 @@ const ProspectActions = ({ prospectId, prospectName }: ProspectActionsProps) => 
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   Development mode is active. If you're using a Twilio trial account, this simplified mode may help overcome trial account limitations.
+                  {useEchoMode && <p className="mt-1 font-semibold">Echo mode enabled: This will only test the WebSocket connection without connecting to ElevenLabs.</p>}
                 </AlertDescription>
               </Alert>
             )}
