@@ -1,161 +1,178 @@
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { ProfileData } from '@/contexts/AuthContext';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Voice } from '@/hooks/useElevenLabs';
 
-interface ElevenLabsContextType {
-  isApiKeyConfigured: boolean;
-  isVoiceConfigured: boolean;
-  isPhoneNumberConfigured: boolean;
-  apiKey: string | null;
-  voiceId: string | null;
-  phoneNumberId: string | null;
-  isLoading: boolean;
-  error: string | null;
-  getSignedUrl: (agentId: string) => Promise<string | null>;
-  getVoices: () => Promise<Voice[]>;
-  clearError: () => void;
-}
-
-const defaultContext: ElevenLabsContextType = {
-  isApiKeyConfigured: false,
-  isVoiceConfigured: false,
-  isPhoneNumberConfigured: false,
-  apiKey: null,
-  voiceId: null,
-  phoneNumberId: null,
-  isLoading: false,
-  error: null,
-  getSignedUrl: () => Promise.resolve(null),
-  getVoices: () => Promise.resolve([]),
-  clearError: () => {}
+// Define types for the ElevenLabs context
+export type ElevenLabsVoice = {
+  voice_id: string;
+  name: string;
+  preview_url?: string;
+  category?: string;
+  labels?: Record<string, string>;
 };
 
-export const ElevenLabsContext = createContext<ElevenLabsContextType>(defaultContext);
+export type ElevenLabsContextType = {
+  apiKey: string | null;
+  isApiKeyValid: boolean;
+  isLoading: boolean;
+  error: string | null;
+  voices: ElevenLabsVoice[];
+  validateApiKey: (apiKey?: string) => Promise<boolean>;
+  fetchVoices: () => Promise<void>;
+  getVoices: () => ElevenLabsVoice[]; // Added this method
+};
 
-export const ElevenLabsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<Omit<ElevenLabsContextType, 'getSignedUrl' | 'getVoices' | 'clearError'>>({
-    ...defaultContext,
-    isLoading: true
-  });
+const ElevenLabsContext = createContext<ElevenLabsContextType>({
+  apiKey: null,
+  isApiKeyValid: false,
+  isLoading: false,
+  error: null,
+  voices: [],
+  validateApiKey: async () => false,
+  fetchVoices: async () => {},
+  getVoices: () => [], // Added this method
+});
+
+export function ElevenLabsProvider({ children }: { children: ReactNode }) {
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [isApiKeyValid, setIsApiKeyValid] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Use try/catch to safely access the useAuth hook, which must be used within an AuthProvider
-  let profile: ProfileData | null = null;
-  let isLoading: boolean = true;
-  
-  try {
-    const auth = useAuth();
-    profile = auth.profile;
-    isLoading = auth.isLoading;
-  } catch (error) {
-    // If useAuth fails (AuthProvider not yet available), maintain default state
-    console.warn("ElevenLabsProvider: AuthProvider not available yet");
-  }
+  const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
 
-  useEffect(() => {
-    if (!isLoading && profile) {
-      setState({
-        isApiKeyConfigured: !!profile.elevenlabs_api_key,
-        isVoiceConfigured: !!profile.elevenlabs_voice_id,
-        isPhoneNumberConfigured: !!profile.elevenlabs_phone_number_id,
-        apiKey: profile.elevenlabs_api_key || null,
-        voiceId: profile.elevenlabs_voice_id || null,
-        phoneNumberId: profile.elevenlabs_phone_number_id || null,
-        isLoading: false,
-        error: null
-      });
-    }
-  }, [profile, isLoading]);
-
-  // Implement the getSignedUrl method
-  const getSignedUrl = async (agentId: string): Promise<string | null> => {
-    if (!state.apiKey) {
-      setError("ElevenLabs API key is not configured");
-      return null;
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+  // Function to validate the API key
+  const validateApiKey = async (key?: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.functions.invoke('elevenlabs-signed-url', {
-        body: { agent_id: agentId }
-      });
+      setIsLoading(true);
+      setError(null);
       
-      if (error) {
-        console.error("Error getting signed URL:", error);
-        setError(`Failed to get signed URL: ${error.message}`);
-        return null;
-      }
-      
-      return data?.signed_url || null;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error("Unexpected error getting signed URL:", errorMessage);
-      setError(`Unexpected error: ${errorMessage}`);
-      return null;
-    } finally {
-      setState(prev => ({ ...prev, isLoading: false }));
-    }
-  };
-
-  // Implement the getVoices method
-  const getVoices = async (): Promise<Voice[]> => {
-    if (!state.apiKey) {
-      setError("ElevenLabs API key is not configured");
-      return [];
-    }
-
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
-    try {
       const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
-        body: {} // No additional parameters needed
+        body: { validate_only: true, api_key: key || apiKey },
       });
-      
+
       if (error) {
-        console.error("Error fetching voices:", error);
-        setError(`Failed to fetch voices: ${error.message}`);
-        return [];
+        console.error('Error validating ElevenLabs API key:', error);
+        setError(`Failed to validate API key: ${error.message}`);
+        setIsApiKeyValid(false);
+        return false;
       }
-      
-      if (!data?.voices || !Array.isArray(data.voices)) {
-        console.error("Invalid response format when fetching voices");
-        setError("Invalid response format when fetching voices");
-        return [];
-      }
-      
-      return data.voices;
+
+      setIsApiKeyValid(data.success === true);
+      return data.success === true;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error("Unexpected error fetching voices:", errorMessage);
-      setError(`Unexpected error: ${errorMessage}`);
-      return [];
+      console.error('Error validating ElevenLabs API key:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      setIsApiKeyValid(false);
+      return false;
     } finally {
-      setState(prev => ({ ...prev, isLoading: false }));
+      setIsLoading(false);
     }
   };
 
-  // Implement the clearError method
-  const clearError = () => {
-    setError(null);
+  // Function to fetch voices from the ElevenLabs API
+  const fetchVoices = async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!apiKey && !isApiKeyValid) {
+        setError('API key is not set or not validated');
+        setVoices([]);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('elevenlabs-voices', {
+        body: { api_key: apiKey },
+      });
+
+      if (error) {
+        console.error('Error fetching ElevenLabs voices:', error);
+        setError(`Failed to fetch voices: ${error.message}`);
+        setVoices([]);
+        return;
+      }
+
+      setVoices(data.voices || []);
+    } catch (err) {
+      console.error('Error fetching ElevenLabs voices:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      setVoices([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Function to get voices (simple getter for the voices state)
+  const getVoices = (): ElevenLabsVoice[] => {
+    return voices;
   };
 
-  const contextValue = {
-    ...state,
-    error,
-    getSignedUrl,
-    getVoices,
-    clearError
-  };
+  // Fetch the user's API key from their profile
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      try {
+        setIsLoading(true);
+
+        const { data: userSession } = await supabase.auth.getSession();
+        
+        if (userSession?.session?.user?.id) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('elevenlabs_api_key')
+            .eq('id', userSession.session.user.id)
+            .single();
+
+          if (profileError) {
+            console.error('Error fetching user profile:', profileError);
+            setError(`Failed to fetch profile: ${profileError.message}`);
+            return;
+          }
+
+          if (profileData?.elevenlabs_api_key) {
+            setApiKey(profileData.elevenlabs_api_key);
+            // Validate the API key after setting it
+            const isValid = await validateApiKey(profileData.elevenlabs_api_key);
+            if (isValid) {
+              // Fetch voices if the API key is valid
+              fetchVoices();
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error in ElevenLabsProvider:', err);
+        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchApiKey();
+  }, []);
 
   return (
-    <ElevenLabsContext.Provider value={contextValue}>
+    <ElevenLabsContext.Provider
+      value={{
+        apiKey,
+        isApiKeyValid,
+        isLoading,
+        error,
+        voices,
+        validateApiKey,
+        fetchVoices,
+        getVoices, // Added this method
+      }}
+    >
       {children}
     </ElevenLabsContext.Provider>
   );
-};
+}
 
-export const useElevenLabs = () => useContext(ElevenLabsContext);
+export function useElevenLabs() {
+  const context = useContext(ElevenLabsContext);
+  if (context === undefined) {
+    throw new Error('useElevenLabs must be used within an ElevenLabsProvider');
+  }
+  return context;
+}
+
+export default ElevenLabsContext;

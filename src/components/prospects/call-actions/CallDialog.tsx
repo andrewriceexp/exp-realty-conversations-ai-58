@@ -21,9 +21,7 @@ import {
   ElevenLabsVoiceSelector 
 } from './call-dialog-components';
 import { useTwilioCall, MakeCallParams } from '@/hooks/useTwilioCall';
-import { AgentConfig } from '@/types';
-import { toast } from '@/hooks/use-toast';
-import { ToastAction } from "@/components/ui/toast"
+import { useToast } from '@/components/ui/use-toast';
 import { cn } from "@/lib/utils";
 import ElevenLabsDirectConnect from './ElevenLabsDirectConnect';
 
@@ -33,7 +31,7 @@ interface CallDialogProps {
   onOpenChange: (open: boolean) => void;
   onCallComplete: () => void;
   reload: () => void;
-  prospectName?: string; // Now this is optional
+  prospectName?: string;
 }
 
 export function CallDialog({
@@ -42,7 +40,7 @@ export function CallDialog({
   onOpenChange, 
   onCallComplete,
   reload,
-  prospectName = 'Prospect', // Default value for prospectName
+  prospectName = 'Prospect',
 }: CallDialogProps) {
   const [selectedConfigId, setSelectedConfigId] = useState<string>('');
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
@@ -59,6 +57,7 @@ export function CallDialog({
   const [useElevenLabsVoice, setUseElevenLabsVoice] = useState(false);
   
   const twilioCall = useTwilioCall();
+  const { toast } = useToast();
 
   const handleEndCall = async () => {
     setCallStatus('Ending call...');
@@ -116,22 +115,30 @@ export function CallDialog({
         callParams.useElevenLabsAgent = true;
         callParams.elevenLabsAgentId = elevenLabsAgentId;
         callParams.elevenLabsPhoneNumberId = elevenLabsPhoneNumberId;
-      }
-      
-      if (developmentMode) {
-        callResponse = await twilioCall.makeDevelopmentCall(callParams);
-      } else {
+        
+        console.log("Using ElevenLabs with agent ID:", elevenLabsAgentId);
         callResponse = await twilioCall.makeCall(callParams);
+      } else if (selectedConfigId) {
+        // Only attempt regular call if a config is selected
+        console.log("Using regular Twilio call with agent config ID:", selectedConfigId);
+        
+        if (developmentMode) {
+          callResponse = await twilioCall.makeDevelopmentCall(callParams);
+        } else {
+          callResponse = await twilioCall.makeCall(callParams);
+        }
+      } else {
+        throw new Error("Please select an agent configuration or use ElevenLabs direct connection");
       }
 
-      if (callResponse.success) {
+      if (callResponse && callResponse.success) {
         setCallStatus('Call connected');
         setCurrentCallId(callResponse.callSid || null);
         toast({
           title: "Call Initiated",
           description: "Your call has been successfully initiated.",
         });
-      } else {
+      } else if (callResponse) {
         setCallStatus(`Call failed: ${callResponse.message}`);
         toast({
           title: "Call Failed",
@@ -286,7 +293,7 @@ export function CallDialog({
           <DialogFooter>
             <Button 
               onClick={handleStartCall} 
-              disabled={!selectedConfigId && !useElevenLabsAgent}
+              disabled={(!selectedConfigId && !useElevenLabsAgent) || (useElevenLabsAgent && !elevenLabsAgentId)}
               className={cn(useElevenLabsAgent ? "exp-gradient" : "")}
             >
               Start Call

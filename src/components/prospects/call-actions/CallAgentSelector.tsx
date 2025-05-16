@@ -14,7 +14,7 @@ const CallAgentSelector = ({
   setSelectedConfigId,
   className
 }: CallAgentSelectorProps) => {
-  const { configs, isLoading, createNewConfig, handleDelete, handleSave } = useAgentConfigs();
+  const { configs, isLoading, error } = useAgentConfigs();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ const CallAgentSelector = ({
       </SelectTrigger>
       <SelectContent>
         {isLoading && <SelectItem value="loading" disabled>Loading...</SelectItem>}
-        {!isLoading && configs.length === 0 && (
+        {!isLoading && (configs.length === 0 || error) && (
           <SelectItem value="error" disabled>No agent configurations found</SelectItem>
         )}
         {configs?.map((config) => (
